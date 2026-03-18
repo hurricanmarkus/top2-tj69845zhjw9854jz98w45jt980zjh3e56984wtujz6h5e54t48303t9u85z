@@ -1,13 +1,22 @@
 {
-  "version": "1.0.5",
-  "buildId": "20260318-2",
+  "version": "1.0.6",
+  "buildId": "20260318-3",
   "releaseDate": "2026-03-18",
-  "releaseTime": "08:49",
+  "releaseTime": "09:18",
   "timezone": "Europe/Vienna",
-  "note": "Footer-Trennzeichen wieder auf ❖ gesetzt; Scanner erkennt jetzt auch Code-Treffer inkl. maskierter Varianten und Mehrfachauswahl.",
-  "commitId": "2e7eec5",
+  "note": "Einloese-ID Feld markiert jetzt vorhandenen Text; Scan/Masken-UX fuer Code, PIN und Seriennummer erweitert.",
+  "commitId": "13a55dd",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.0.6",
+      "buildId": "20260318-3",
+      "releaseDate": "2026-03-18",
+      "releaseTime": "09:18",
+      "note": "Einloese-ID Feld markiert jetzt vorhandenen Text; Scan/Masken-UX fuer Code, PIN und Seriennummer erweitert.",
+      "commitId": "13a55dd",
+      "obligation": "false"
+    },
     {
       "version": "1.0.5",
       "buildId": "20260318-2",

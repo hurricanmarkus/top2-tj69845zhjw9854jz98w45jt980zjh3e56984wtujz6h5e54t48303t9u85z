@@ -241,6 +241,21 @@ function setupEventListeners() {
         statusSelect.dataset.listenerAttached = 'true';
     }
 
+    const sensitiveFieldConfigs = [
+        { inputId: 'wgCode', hintId: 'wgCodeMaskHint', label: 'Code' },
+        { inputId: 'wgPin', hintId: 'wgPinMaskHint', label: 'PIN' },
+        { inputId: 'wgSeriennummer', hintId: 'wgSeriennummerMaskHint', label: 'Seriennummer' }
+    ];
+    sensitiveFieldConfigs.forEach(({ inputId, hintId, label }) => {
+        const input = document.getElementById(inputId);
+        if (!input || input.dataset.maskListenerAttached === 'true') return;
+        const refreshMaskState = () => updateSensitiveFieldMaskHint(inputId, hintId, label);
+        input.addEventListener('input', refreshMaskState);
+        input.addEventListener('change', refreshMaskState);
+        input.dataset.maskListenerAttached = 'true';
+        refreshMaskState();
+    });
+
     const wertUnlockBtn = document.getElementById('wgWertUnlockBtn');
     if (wertUnlockBtn && !wertUnlockBtn.dataset.listenerAttached) {
         wertUnlockBtn.addEventListener('click', openWertBetragUnlockPanel);
@@ -432,6 +447,17 @@ function setupEventListeners() {
                 window.selectEinloeseWertguthaben(firstSuggestion.id);
             }
         });
+        einloeseInput.addEventListener('focus', () => {
+            selectEinloeseInputTextIfPresent(einloeseInput);
+        });
+        einloeseInput.addEventListener('mouseup', (event) => {
+            if (!String(einloeseInput.value || '').trim()) return;
+            event.preventDefault();
+            selectEinloeseInputTextIfPresent(einloeseInput);
+        });
+        einloeseInput.addEventListener('touchend', () => {
+            selectEinloeseInputTextIfPresent(einloeseInput);
+        });
         einloeseInput.dataset.listenerAttached = 'true';
     }
 
@@ -613,6 +639,78 @@ function findEinloeseEntryByIdText(rawValue, options = {}) {
     return entries.find((entry) => getWertguthabenDisplayId(entry).toUpperCase().includes(normalized)) || null;
 }
 
+function selectEinloeseInputTextIfPresent(inputEl) {
+    if (!inputEl) return;
+    if (!String(inputEl.value || '').trim()) return;
+    window.setTimeout(() => {
+        try {
+            inputEl.select();
+            inputEl.setSelectionRange(0, String(inputEl.value || '').length);
+        } catch (error) {
+            console.warn('Einloese-Input konnte nicht selektiert werden:', error);
+        }
+    }, 0);
+}
+
+function formatMaskedSensitiveDisplayHtml(rawValue, options = {}) {
+    const value = String(rawValue ?? '').trim();
+    const fallback = options.emptyFallback || '-';
+    if (!value) {
+        return `<span class="font-mono text-gray-500">${escapeHtml(fallback)}</span>`;
+    }
+
+    const safeValue = escapeHtml(value);
+    if (!safeValue.includes('*')) {
+        return `<span class="font-mono break-all">${safeValue}</span>`;
+    }
+
+    const maskDecorated = safeValue.replace(/\*+/g, (stars) => `<span class="inline-flex items-center px-1 rounded bg-amber-100 text-amber-700 font-black">${stars}</span>`);
+    const badge = options.showMaskBadge === false
+        ? ''
+        : '<span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold uppercase tracking-wide">maskiert</span>';
+
+    return `<span class="font-mono break-all">${maskDecorated}</span>${badge}`;
+}
+
+function buildSensitiveCopyFieldHtml(label, value) {
+    const normalized = String(value ?? '').trim();
+    if (!normalized) return '';
+
+    const encodedValue = encodeURIComponent(normalized);
+    return `
+        <div>
+            <p class="text-sm font-bold text-gray-600">${escapeHtml(label)}</p>
+            <div class="flex items-center gap-2">
+                <p class="bg-gray-100 p-2 rounded flex-1">${formatMaskedSensitiveDisplayHtml(normalized)}</p>
+                <button onclick="window.copyToClipboard(decodeURIComponent('${encodedValue}'))" class="p-2 text-blue-500 hover:bg-blue-50 rounded-lg" title="Kopieren">📋</button>
+            </div>
+        </div>
+    `;
+}
+
+function updateSensitiveFieldMaskHint(inputId, hintId, label) {
+    const input = document.getElementById(inputId);
+    const hint = document.getElementById(hintId);
+    if (!input || !hint) return;
+
+    const value = String(input.value || '').trim();
+    const hasMask = /\*+/.test(value);
+    hint.classList.toggle('hidden', !hasMask);
+    if (hasMask) {
+        hint.textContent = `Maskierter ${label}-Wert erkannt (Scanner nutzt * als Platzhalter).`;
+    }
+
+    input.classList.toggle('ring-1', hasMask);
+    input.classList.toggle('ring-amber-300', hasMask);
+    input.classList.toggle('bg-amber-50', hasMask);
+}
+
+function updateSensitiveMaskHints() {
+    updateSensitiveFieldMaskHint('wgCode', 'wgCodeMaskHint', 'Code');
+    updateSensitiveFieldMaskHint('wgPin', 'wgPinMaskHint', 'PIN');
+    updateSensitiveFieldMaskHint('wgSeriennummer', 'wgSeriennummerMaskHint', 'Seriennummer');
+}
+
 function normalizeEinloeseCodeInput(rawValue) {
     return String(rawValue || '')
         .trim()
@@ -766,7 +864,11 @@ function renderEinloeseEntrySuggestions(entries, options = {}) {
         const displayId = getWertguthabenDisplayId(entry);
         const restwert = entry.restwert !== undefined ? Number(entry.restwert || 0) : Number(entry.wert || 0);
         const codeSnippet = String(entry.code || '').trim();
-        const detailLine = `${entry.name || '-'} · ${entry.unternehmen || '-'}${showCodeLabel && codeSnippet ? ` · Code: ${codeSnippet}` : ''}`;
+        const namePart = escapeHtml(entry.name || '-');
+        const companyPart = escapeHtml(entry.unternehmen || '-');
+        const codePart = showCodeLabel && codeSnippet
+            ? `<span class="text-gray-500"> · Code:</span> ${formatMaskedSensitiveDisplayHtml(codeSnippet, { showMaskBadge: false })}`
+            : '';
 
         return `
             <li>
@@ -775,7 +877,7 @@ function renderEinloeseEntrySuggestions(entries, options = {}) {
                         <span class="font-mono font-bold text-emerald-700">#${escapeHtml(displayId)}</span>
                         <span class="text-sm font-semibold text-gray-700">${restwert.toFixed(2)} €</span>
                     </div>
-                    <div class="text-xs text-gray-500 mt-1 break-all">${escapeHtml(detailLine)}</div>
+                    <div class="text-xs text-gray-500 mt-1 break-all"><span>${namePart}</span> · <span>${companyPart}</span>${codePart}</div>
                 </button>
             </li>
         `;
@@ -1056,24 +1158,24 @@ function renderEinloeseEntry(entry) {
     const restzeit = entry.typ === 'aktionscode' ? calculateRestzeit(entry.gueltigBis) : calculateRestzeit(entry.einloesefrist);
 
     const detailItems = [
-        ['Eigentümer', eigentuemer],
-        ['Status', `${status.icon} ${status.label}`],
-        ['Unternehmen', entry.unternehmen || '-'],
-        ['Name', entry.name || '-'],
-        ['Ursprungswert', `${Number(entry.wert || 0).toFixed(2)} €`],
-        ['Restzeit', restzeit.replace(/<[^>]+>/g, '')],
-        ['Einlösefrist', entry.einloesefrist ? new Date(entry.einloesefrist).toLocaleDateString('de-DE') : 'Unbegrenzt'],
-        ['Code', entry.code || '-'],
-        ['PIN', entry.pin || '-'],
-        ['Seriennummer', entry.seriennummer || '-']
+        { label: 'Eigentümer', valueHtml: escapeHtml(eigentuemer) },
+        { label: 'Status', valueHtml: escapeHtml(`${status.icon} ${status.label}`) },
+        { label: 'Unternehmen', valueHtml: escapeHtml(entry.unternehmen || '-') },
+        { label: 'Name', valueHtml: escapeHtml(entry.name || '-') },
+        { label: 'Ursprungswert', valueHtml: escapeHtml(`${Number(entry.wert || 0).toFixed(2)} €`) },
+        { label: 'Restzeit', valueHtml: escapeHtml(restzeit.replace(/<[^>]+>/g, '')) },
+        { label: 'Einlösefrist', valueHtml: escapeHtml(entry.einloesefrist ? new Date(entry.einloesefrist).toLocaleDateString('de-DE') : 'Unbegrenzt') },
+        { label: 'Code', valueHtml: formatMaskedSensitiveDisplayHtml(entry.code || '-', { showMaskBadge: true }) },
+        { label: 'PIN', valueHtml: formatMaskedSensitiveDisplayHtml(entry.pin || '-', { showMaskBadge: true }) },
+        { label: 'Seriennummer', valueHtml: formatMaskedSensitiveDisplayHtml(entry.seriennummer || '-', { showMaskBadge: true }) }
     ];
 
     const details = document.getElementById('wg-einloese-details');
     if (details) {
-        details.innerHTML = detailItems.map(([label, value]) => `
+        details.innerHTML = detailItems.map((item) => `
             <div class="p-3 rounded-lg border border-gray-200 bg-gray-50">
-                <p class="text-xs font-bold text-gray-500 uppercase tracking-wide">${escapeHtml(label)}</p>
-                <p class="text-base font-semibold text-gray-800 break-words">${escapeHtml(String(value))}</p>
+                <p class="text-xs font-bold text-gray-500 uppercase tracking-wide">${escapeHtml(item.label)}</p>
+                <p class="text-base font-semibold text-gray-800 break-words">${item.valueHtml}</p>
             </div>
         `).join('');
     }
@@ -2230,6 +2332,7 @@ function resetForm() {
     document.getElementById('wgKategorien').value = '';
     document.getElementById('wgAusnahmen').value = '';
     document.getElementById('wgQuelle').value = '';
+    updateSensitiveMaskHints();
 
     wertguthabenFormState.isWertUnlocked = false;
     wertguthabenFormState.lockedEditEntryId = '';
@@ -2299,6 +2402,7 @@ function populateWertguthabenFormFromEntry(wg, options = {}) {
     document.getElementById('wgKategorien').value = wg.kategorien || '';
     document.getElementById('wgAusnahmen').value = wg.ausnahmen || '';
     document.getElementById('wgQuelle').value = wg.quelle || '';
+    updateSensitiveMaskHints();
 
     const currentTyp = wg.typ || 'gutschein';
     const currentWertSnapshot = normalizeWertSnapshotValue(wg.wert);
@@ -3551,9 +3655,9 @@ window.openWertguthabenDetails = async function(id) {
                 <p class="text-sm font-bold text-gray-600">Einlösefrist</p>
                 <p>${wg.einloesefrist ? new Date(wg.einloesefrist).toLocaleDateString('de-DE') : 'Unbegrenzt'}</p>
             </div>` : ''}
-            ${wg.code ? `<div><p class="text-sm font-bold text-gray-600">Code</p><div class="flex items-center gap-2"><p class="font-mono bg-gray-100 p-2 rounded flex-1">${wg.code}</p><button onclick="window.copyToClipboard('${wg.code}')" class="p-2 text-blue-500 hover:bg-blue-50 rounded-lg" title="Kopieren">📋</button></div></div>` : ''}
-            ${wg.pin ? `<div><p class="text-sm font-bold text-gray-600">PIN</p><div class="flex items-center gap-2"><p class="font-mono bg-gray-100 p-2 rounded flex-1">${wg.pin}</p><button onclick="window.copyToClipboard('${wg.pin}')" class="p-2 text-blue-500 hover:bg-blue-50 rounded-lg" title="Kopieren">📋</button></div></div>` : ''}
-            ${wg.seriennummer ? `<div><p class="text-sm font-bold text-gray-600">Seriennummer</p><div class="flex items-center gap-2"><p class="font-mono bg-gray-100 p-2 rounded flex-1">${wg.seriennummer}</p><button onclick="window.copyToClipboard('${wg.seriennummer}')" class="p-2 text-blue-500 hover:bg-blue-50 rounded-lg" title="Kopieren">📋</button></div></div>` : ''}
+            ${buildSensitiveCopyFieldHtml('Code', wg.code)}
+            ${buildSensitiveCopyFieldHtml('PIN', wg.pin)}
+            ${buildSensitiveCopyFieldHtml('Seriennummer', wg.seriennummer)}
             ${wg.warnung ? `<div><p class="text-sm font-bold text-gray-600">Warnung</p><p>${wg.warnung} Tage vor Ablauf</p></div>` : ''}
         </div>
         

@@ -24,8 +24,8 @@
     <meta name="application-name" content="TOP 2 App">
     <meta name="apple-mobile-web-app-title" content="TOP 2">
     <meta name="theme-color" content="#4f46e5" />
-    <meta name="top2-app-version" content="1.0.5" />
-    <meta name="top2-build-id" content="20260318-2" />
+    <meta name="top2-app-version" content="1.0.6" />
+    <meta name="top2-build-id" content="20260318-3" />
     <meta name="msapplication-navbutton-color" content="#4f46e5">
     <meta name="apple-mobile-app-status-bar-style" content="black-translucent">
     <link rel="icon" type="image/png" sizes="192x192" href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
@@ -2065,19 +2065,20 @@
                         </div>
 
                         <div class="max-w-3xl mx-auto relative">
-                            <label class="block text-center text-sm font-semibold text-gray-600 mb-2">ID eingeben</label>
-                            <input id="wg-einloese-id-input" type="text" placeholder="#AB12"
-                                class="w-full text-center font-mono text-3xl sm:text-5xl tracking-widest px-4 py-6 border-2 border-emerald-300 rounded-2xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200" autocomplete="off">
+                            <label class="block text-center text-sm font-semibold text-gray-600 mb-2">ID eingeben oder ID/Code Scan</label>
+                            <div class="relative">
+                                <button id="wg-einloese-open-scanner-btn" type="button"
+                                    class="absolute left-1 top-1 bottom-1 w-20 rounded-xl bg-gray-900 text-white hover:bg-gray-800 transition whitespace-nowrap inline-flex items-center justify-center gap-1 text-xs sm:text-sm font-bold z-10"
+                                    title="Kamera öffnen und ID/Code scannen">
+                                    <span class="text-sm leading-none">📷</span>
+                                    <span>Scan</span>
+                                </button>
+                                <input id="wg-einloese-id-input" type="text" placeholder="#AB12"
+                                    class="w-full text-center font-mono text-3xl sm:text-5xl tracking-widest pl-24 pr-4 py-6 border-2 border-emerald-300 rounded-2xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200" autocomplete="off">
+                            </div>
                             <div id="wg-einloese-suggestions-box" class="hidden absolute z-40 left-0 right-0 mt-2 bg-white border-2 border-emerald-300 rounded-xl shadow-xl max-h-72 overflow-y-auto">
                                 <ul id="wg-einloese-suggestions-list"></ul>
                             </div>
-                        </div>
-
-                        <div class="flex justify-center mt-3">
-                            <button id="wg-einloese-open-scanner-btn" type="button"
-                                class="px-4 py-2 text-sm font-bold rounded-lg bg-gray-900 text-white hover:bg-gray-800 transition whitespace-nowrap">
-                                📷 Kamera scannen
-                            </button>
                         </div>
 
                         <div id="wg-einloese-scanner-panel" class="hidden mt-4 max-w-sm mx-auto">
@@ -7945,17 +7946,20 @@
                         <div>
                             <label class="block text-sm font-bold text-gray-700 mb-2">Code</label>
                             <input type="text" id="wgCode" placeholder="Gutscheincode"
-                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-emerald-500">
+                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-emerald-500 font-mono tracking-wide">
+                            <p id="wgCodeMaskHint" class="hidden mt-1 text-[11px] font-semibold text-amber-700">Maskierter Code erkannt.</p>
                         </div>
                         <div>
                             <label class="block text-sm font-bold text-gray-700 mb-2">PIN</label>
                             <input type="text" id="wgPin" placeholder="PIN"
-                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-emerald-500">
+                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-emerald-500 font-mono tracking-wide">
+                            <p id="wgPinMaskHint" class="hidden mt-1 text-[11px] font-semibold text-amber-700">Maskierte PIN erkannt.</p>
                         </div>
                         <div>
                             <label class="block text-sm font-bold text-gray-700 mb-2">Seriennummer</label>
                             <input type="text" id="wgSeriennummer" placeholder="Seriennr."
-                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-emerald-500">
+                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-emerald-500 font-mono tracking-wide">
+                            <p id="wgSeriennummerMaskHint" class="hidden mt-1 text-[11px] font-semibold text-amber-700">Maskierte Seriennummer erkannt.</p>
                         </div>
                     </div>
 
