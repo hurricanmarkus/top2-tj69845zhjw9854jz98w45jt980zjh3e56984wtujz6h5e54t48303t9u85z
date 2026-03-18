@@ -470,6 +470,7 @@ const UPDATE_DEFERRED_STORAGE_KEY = 'top2_update_deferred_version';
 
 let appUpdateCheckTimer = null;
 let appUpdateVisibilityListenerBound = false;
+let versionInstallProgressTimer = null;
 let appVersionState = {
     latestInfo: null,
     updateAvailable: false,
@@ -738,11 +739,90 @@ function getVersionInfoModalElements() {
         releaseNote: document.getElementById('versionInfoReleaseNote'),
         history: document.getElementById('versionInfoHistory'),
         details: document.getElementById('versionHistoryDetails'),
+        installProgressPanel: document.getElementById('versionInfoInstallProgress'),
+        installProgressPercent: document.getElementById('versionInfoInstallPercent'),
         laterBtn: document.getElementById('versionInfoLaterBtn'),
         installBtn: document.getElementById('versionInfoInstallBtn'),
+        installBtnText: document.getElementById('versionInfoInstallBtnText'),
+        installBtnPercent: document.getElementById('versionInfoInstallBtnPercent'),
+        installBtnSpinner: document.getElementById('versionInfoInstallBtnSpinner'),
         closeBtn: document.getElementById('versionInfoCloseBtn'),
         closeHeaderBtn: document.getElementById('versionInfoCloseHeaderBtn')
     };
+}
+
+function stopVersionInstallProgressSimulation() {
+    if (versionInstallProgressTimer) {
+        window.clearInterval(versionInstallProgressTimer);
+        versionInstallProgressTimer = null;
+    }
+}
+
+function setVersionInstallProgressUi(options = {}) {
+    const {
+        installProgressPanel,
+        installProgressPercent,
+        installBtnText,
+        installBtnPercent,
+        installBtnSpinner
+    } = getVersionInfoModalElements();
+
+    const visible = !!options.visible;
+    const installing = !!options.installing;
+    const baseLabel = String(options.baseLabel || 'Update jetzt');
+    const percentRaw = Number(options.percent);
+    const percent = Number.isFinite(percentRaw)
+        ? Math.max(0, Math.min(100, Math.round(percentRaw)))
+        : 0;
+    const percentText = `${percent}%`;
+
+    if (installProgressPanel) {
+        installProgressPanel.classList.toggle('hidden', !visible);
+    }
+    if (installProgressPercent) {
+        installProgressPercent.textContent = percentText;
+    }
+    if (installBtnText) {
+        installBtnText.textContent = baseLabel;
+        installBtnText.classList.toggle('hidden', installing);
+    }
+    if (installBtnPercent) {
+        installBtnPercent.textContent = percentText;
+        installBtnPercent.classList.toggle('hidden', !installing);
+    }
+    if (installBtnSpinner) {
+        installBtnSpinner.classList.toggle('hidden', !installing);
+    }
+}
+
+function startVersionInstallProgressSimulation(baseLabel) {
+    stopVersionInstallProgressSimulation();
+    let progress = 0;
+
+    setVersionInstallProgressUi({
+        visible: true,
+        installing: true,
+        percent: progress,
+        baseLabel
+    });
+
+    versionInstallProgressTimer = window.setInterval(() => {
+        if (progress >= 94) return;
+        if (progress < 70) {
+            progress += 7;
+        } else if (progress < 85) {
+            progress += 3;
+        } else {
+            progress += 1;
+        }
+        progress = Math.min(progress, 94);
+        setVersionInstallProgressUi({
+            visible: true,
+            installing: true,
+            percent: progress,
+            baseLabel
+        });
+    }, 180);
 }
 
 function getFooterVersionElements() {
@@ -755,6 +835,7 @@ function getFooterVersionElements() {
 function closeVersionInfoModal() {
     const { modal } = getVersionInfoModalElements();
     if (modal && !appVersionState.mandatoryUpdate) {
+        stopVersionInstallProgressSimulation();
         modal.classList.add('hidden');
     }
 }
@@ -894,13 +975,17 @@ function openVersionInfoModal(versionInfoOverride = null, options = {}) {
         releaseTime,
         releaseNote,
         details,
+        installProgressPanel,
         laterBtn,
         installBtn,
+        installBtnText,
+        installBtnPercent,
+        installBtnSpinner,
         closeBtn,
         closeHeaderBtn
     } = getVersionInfoModalElements();
 
-    if (!modal || !title || !summary || !currentVersion || !currentBuild || !latestVersion || !latestBuild || !releaseDate || !releaseTime || !releaseNote || !details || !laterBtn || !installBtn || !closeBtn || !closeHeaderBtn) {
+    if (!modal || !title || !summary || !currentVersion || !currentBuild || !latestVersion || !latestBuild || !releaseDate || !releaseTime || !releaseNote || !details || !installProgressPanel || !laterBtn || !installBtn || !installBtnText || !installBtnPercent || !installBtnSpinner || !closeBtn || !closeHeaderBtn) {
         return;
     }
 
@@ -920,8 +1005,10 @@ function openVersionInfoModal(versionInfoOverride = null, options = {}) {
 
     renderVersionHistory(info.history);
     details.open = false;
+    stopVersionInstallProgressSimulation();
 
     if (hasUpdate) {
+        const installButtonLabel = isMandatoryUpdate ? 'Starten' : 'Update jetzt';
         if (isMandatoryUpdate) {
             title.textContent = 'Pflicht-Update erforderlich';
             summary.textContent = `Diese Version ist verpflichtend. Bitte "Starten" ausfuehren (${CURRENT_APP_VERSION} -> ${info.version || CURRENT_APP_VERSION}).`; 
@@ -929,18 +1016,22 @@ function openVersionInfoModal(versionInfoOverride = null, options = {}) {
             closeBtn.classList.add('hidden');
             closeHeaderBtn.classList.add('hidden');
             installBtn.classList.remove('hidden');
-            installBtn.textContent = 'Starten';
         } else {
             title.textContent = 'Update verfuegbar';
             summary.textContent = `Neue Version erkannt: ${CURRENT_APP_VERSION} -> ${info.version || CURRENT_APP_VERSION}.`; 
             laterBtn.classList.remove('hidden');
             closeHeaderBtn.classList.remove('hidden');
             installBtn.classList.remove('hidden');
-            installBtn.textContent = 'Update jetzt';
             closeBtn.classList.add('hidden');
         }
 
         installBtn.classList.remove('hidden');
+        setVersionInstallProgressUi({
+            visible: false,
+            installing: false,
+            percent: 0,
+            baseLabel: installButtonLabel
+        });
 
         laterBtn.disabled = false;
         installBtn.disabled = false;
@@ -955,26 +1046,45 @@ function openVersionInfoModal(versionInfoOverride = null, options = {}) {
         }
 
         installBtn.onclick = async () => {
-            const originalInstallText = installBtn.textContent;
             installBtn.disabled = true;
             if (!isMandatoryUpdate) laterBtn.disabled = true;
-            installBtn.textContent = 'Installiere...';
             summary.textContent = isMandatoryUpdate ? 'Pflicht-Update wird gestartet...' : 'Update wird installiert...';
+            startVersionInstallProgressSimulation(installButtonLabel);
 
             try {
                 await installPendingAppUpdate(appVersionState.registration);
+                stopVersionInstallProgressSimulation();
+                setVersionInstallProgressUi({
+                    visible: true,
+                    installing: true,
+                    percent: 100,
+                    baseLabel: installButtonLabel
+                });
+                summary.textContent = 'Update wird abgeschlossen...';
             } catch (error) {
                 console.error('Update-Installation fehlgeschlagen:', error);
+                stopVersionInstallProgressSimulation();
+                setVersionInstallProgressUi({
+                    visible: false,
+                    installing: false,
+                    percent: 0,
+                    baseLabel: installButtonLabel
+                });
                 summary.textContent = 'Update fehlgeschlagen. Bitte erneut versuchen.';
                 installBtn.disabled = false;
                 if (!isMandatoryUpdate) laterBtn.disabled = false;
-                installBtn.textContent = originalInstallText;
             }
         };
     } else {
         applyVersionModalTheme(false);
         title.textContent = 'Versionsinformationen';
         summary.textContent = 'Diese App ist auf dem aktuellen Stand.';
+        setVersionInstallProgressUi({
+            visible: false,
+            installing: false,
+            percent: 0,
+            baseLabel: 'Update jetzt'
+        });
         laterBtn.classList.add('hidden');
         installBtn.classList.add('hidden');
         closeBtn.classList.remove('hidden');

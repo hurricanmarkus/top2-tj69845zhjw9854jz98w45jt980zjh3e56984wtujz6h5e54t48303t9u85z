@@ -1,13 +1,22 @@
 {
-  "version": "1.0.6",
-  "buildId": "20260318-3",
+  "version": "1.0.7",
+  "buildId": "20260318-4",
   "releaseDate": "2026-03-18",
-  "releaseTime": "09:18",
+  "releaseTime": "10:17",
   "timezone": "Europe/Vienna",
-  "note": "Einloese-ID Feld markiert jetzt vorhandenen Text; Scan/Masken-UX fuer Code, PIN und Seriennummer erweitert.",
-  "commitId": "13a55dd",
+  "note": "Neue Buchungen/Loeschungen setzen Verifizierungsstatus von Transaktionen und Restwert zurueck; Update-Installation zeigt grosse Prozentanzeige und Spinner.",
+  "commitId": "173aee8",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.0.7",
+      "buildId": "20260318-4",
+      "releaseDate": "2026-03-18",
+      "releaseTime": "10:17",
+      "note": "Neue Buchungen/Loeschungen setzen Verifizierungsstatus von Transaktionen und Restwert zurueck; Update-Installation zeigt grosse Prozentanzeige und Spinner.",
+      "commitId": "173aee8",
+      "obligation": "false"
+    },
     {
       "version": "1.0.6",
       "buildId": "20260318-3",

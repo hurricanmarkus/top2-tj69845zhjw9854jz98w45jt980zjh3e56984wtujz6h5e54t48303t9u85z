@@ -3333,6 +3333,32 @@ function closeTransaktionModal() {
     setTransaktionDetailsExpanded(false);
 }
 
+async function clearTransaktionVerificationStatuses(wertguthabenId) {
+    if (!wertguthabenId) return;
+
+    const transaktionenRef = collection(db, 'artifacts', appId, 'public', 'data', 'wertguthaben', wertguthabenId, 'transaktionen');
+    const snapshot = await getDocs(transaktionenRef);
+    const resetPromises = [];
+
+    snapshot.forEach((docSnap) => {
+        const data = docSnap.data() || {};
+        const hasVerificationMeta = !!data.betragVerifiziert || !!data.betragVerifiziertAm || !!data.betragVerifiziertVon;
+        if (!hasVerificationMeta) return;
+
+        resetPromises.push(updateDoc(docSnap.ref, {
+            betragVerifiziert: false,
+            betragVerifiziertAm: null,
+            betragVerifiziertVon: null,
+            updatedAt: serverTimestamp(),
+            updatedBy: currentUser.mode
+        }));
+    });
+
+    if (resetPromises.length > 0) {
+        await Promise.all(resetPromises);
+    }
+}
+
 // Transaktion speichern
 async function saveTransaktion() {
     const wertguthabenId = document.getElementById('transaktionWertguthabenId').value;
@@ -3426,10 +3452,15 @@ async function saveTransaktion() {
                 createdBy: currentUser.mode
             });
 
+            await clearTransaktionVerificationStatuses(wertguthabenId);
+
             const neueEinloesungen = bereitsEingeloest + 1;
             const wertguthabenRef = doc(wertguthabenCollection, wertguthabenId);
             const updateData = {
                 bereitsEingeloest: neueEinloesungen,
+                restwertVerifiziert: false,
+                restwertVerifiziertAm: null,
+                restwertVerifiziertVon: null,
                 updatedAt: serverTimestamp(),
                 updatedBy: currentUser.mode
             };
@@ -3475,13 +3506,6 @@ async function saveTransaktion() {
 
     try {
         const transaktionenRef = collection(db, 'artifacts', appId, 'public', 'data', 'wertguthaben', wertguthabenId, 'transaktionen');
-        const verificationData = needsNewVerification
-            ? {
-                betragVerifiziert: true,
-                betragVerifiziertAm: serverTimestamp(),
-                betragVerifiziertVon: currentUser.mode
-            }
-            : {};
 
         if (editTransaktionId) {
             const transaktionRef = doc(db, 'artifacts', appId, 'public', 'data', 'wertguthaben', wertguthabenId, 'transaktionen', editTransaktionId);
@@ -3492,8 +3516,7 @@ async function saveTransaktion() {
                 rechnungsnr,
                 beschreibung,
                 updatedAt: serverTimestamp(),
-                updatedBy: currentUser.mode,
-                ...verificationData
+                updatedBy: currentUser.mode
             });
         } else {
             await addDoc(transaktionenRef, {
@@ -3507,21 +3530,21 @@ async function saveTransaktion() {
                 createdAt: serverTimestamp(),
                 createdBy: currentUser.mode
             });
+
+            await clearTransaktionVerificationStatuses(wertguthabenId);
         }
 
         const wertguthabenRef = doc(wertguthabenCollection, wertguthabenId);
         const wgUpdateData = {
             restwert: neuerRestwert,
+            restwertVerifiziert: false,
+            restwertVerifiziertAm: null,
+            restwertVerifiziertVon: null,
             updatedAt: serverTimestamp(),
             updatedBy: currentUser.mode
         };
         if (wg.typ !== 'aktionscode' && shouldAutoSetStatusToEingeloest(wg.typ, neuerRestwert, Number(wg.maxEinloesungen || 0), Number(wg.bereitsEingeloest || 0))) {
             wgUpdateData.status = 'eingeloest';
-        }
-        if (needsNewVerification) {
-            wgUpdateData.restwertVerifiziert = true;
-            wgUpdateData.restwertVerifiziertAm = serverTimestamp();
-            wgUpdateData.restwertVerifiziertVon = currentUser.mode;
         }
         await updateDoc(wertguthabenRef, wgUpdateData);
 
@@ -3970,6 +3993,9 @@ window.deleteTransaktion = async function(wertguthabenId, transaktionId) {
         // Wertguthaben-Daten anpassen
         const wertguthabenRef = doc(wertguthabenCollection, wertguthabenId);
         const updateData = {
+            restwertVerifiziert: false,
+            restwertVerifiziertAm: null,
+            restwertVerifiziertVon: null,
             updatedAt: serverTimestamp(),
             updatedBy: currentUser.mode
         };
@@ -4001,6 +4027,7 @@ window.deleteTransaktion = async function(wertguthabenId, transaktionId) {
             }
         }
 
+        await clearTransaktionVerificationStatuses(wertguthabenId);
         await updateDoc(wertguthabenRef, updateData);
 
         alertUser('Transaktion erfolgreich gelöscht!', 'success');
