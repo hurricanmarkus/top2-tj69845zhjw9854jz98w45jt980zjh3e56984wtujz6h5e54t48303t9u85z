@@ -43,6 +43,10 @@ let wertguthabenSearchJoinMode = 'and';
 let pendingKategorieNormalizations = new Set();
 let pendingFixedIdAssignments = new Set();
 let currentEinloeseWertguthabenId = '';
+let wgEinloeseScannerStream = null;
+let wgEinloeseScannerInterval = null;
+let wgEinloeseScannerBusy = false;
+let wgEinloeseBarcodeDetector = null;
 const wertguthabenFormState = {
     isCopyMode: false,
     copySourceId: '',
@@ -408,19 +412,41 @@ function setupEventListeners() {
                 hideEinloeseSuggestions();
                 return;
             }
+
+            const normalizedTerm = normalizeEinloeseIdInput(term);
+            if (normalizedTerm.length >= WG_SHORT_ID_LENGTH) {
+                const exactEntry = findEinloeseEntryByIdText(normalizedTerm, { exactOnly: true });
+                if (exactEntry) {
+                    window.selectEinloeseWertguthaben(exactEntry.id);
+                    return;
+                }
+            }
+
             updateEinloeseSuggestions(term);
         });
         einloeseInput.addEventListener('keydown', (e) => {
             if (e.key !== 'Enter') return;
             e.preventDefault();
-            const firstSuggestion = Object.values(WERTGUTHABEN)
-                .filter((entry) => entry.typ !== 'aktionscode')
-                .find((entry) => getWertguthabenDisplayId(entry).toLowerCase().includes(String(einloeseInput.value || '').replace('#', '').trim().toLowerCase()));
+            const firstSuggestion = findEinloeseEntryByIdText(einloeseInput.value, { exactOnly: false });
             if (firstSuggestion) {
                 window.selectEinloeseWertguthaben(firstSuggestion.id);
             }
         });
         einloeseInput.dataset.listenerAttached = 'true';
+    }
+
+    const openScannerBtn = document.getElementById('wg-einloese-open-scanner-btn');
+    if (openScannerBtn && !openScannerBtn.dataset.listenerAttached) {
+        openScannerBtn.addEventListener('click', startEinloeseScanner);
+        openScannerBtn.dataset.listenerAttached = 'true';
+    }
+
+    const closeScannerBtn = document.getElementById('wg-einloese-close-scanner-btn');
+    if (closeScannerBtn && !closeScannerBtn.dataset.listenerAttached) {
+        closeScannerBtn.addEventListener('click', () => {
+            stopEinloeseScanner({ hidePanel: true, clearStatus: true });
+        });
+        closeScannerBtn.dataset.listenerAttached = 'true';
     }
 
     const einloeseBookingBtn = document.getElementById('wg-einloese-open-booking');
@@ -538,10 +564,12 @@ function addWertguthabenFilterFromUi(options = {}) {
 function openEinloeseSystemView() {
     document.getElementById('wertguthabenDashboardSection')?.classList.add('hidden');
     document.getElementById('wertguthabenEinloeseSection')?.classList.remove('hidden');
+    stopEinloeseScanner({ hidePanel: true, clearStatus: true });
     resetEinloeseSystemForm(true);
 }
 
 function closeEinloeseSystemView() {
+    stopEinloeseScanner({ hidePanel: true, clearStatus: true });
     document.getElementById('wertguthabenEinloeseSection')?.classList.add('hidden');
     document.getElementById('wertguthabenDashboardSection')?.classList.remove('hidden');
     hideEinloeseSuggestions();
@@ -558,8 +586,180 @@ function resetEinloeseSystemForm(focusInput = false) {
     if (input) input.value = '';
     resetEinloeseResult();
     hideEinloeseSuggestions();
+    stopEinloeseScanner({ hidePanel: true, clearStatus: true });
     if (focusInput && input) {
         setTimeout(() => input.focus(), 0);
+    }
+}
+
+function normalizeEinloeseIdInput(rawValue) {
+    return String(rawValue || '')
+        .replace('#', '')
+        .replace(/[^a-zA-Z0-9]/g, '')
+        .trim()
+        .toUpperCase();
+}
+
+function findEinloeseEntryByIdText(rawValue, options = {}) {
+    const normalized = normalizeEinloeseIdInput(rawValue);
+    if (!normalized) return null;
+
+    const exactOnly = !!options.exactOnly;
+    const entries = Object.values(WERTGUTHABEN).filter((entry) => entry.typ !== 'aktionscode');
+
+    const exact = entries.find((entry) => getWertguthabenDisplayId(entry).toUpperCase() === normalized);
+    if (exact || exactOnly) return exact || null;
+
+    return entries.find((entry) => getWertguthabenDisplayId(entry).toUpperCase().includes(normalized)) || null;
+}
+
+function setEinloeseScannerStatus(message, isError = false) {
+    const statusEl = document.getElementById('wg-einloese-scanner-status');
+    if (!statusEl) return;
+    statusEl.textContent = message;
+    statusEl.classList.toggle('text-red-600', !!isError);
+    statusEl.classList.toggle('text-gray-600', !isError);
+}
+
+function stopEinloeseScanner(options = {}) {
+    const hidePanel = options.hidePanel !== false;
+    const clearStatus = options.clearStatus !== false;
+
+    if (wgEinloeseScannerInterval) {
+        window.clearInterval(wgEinloeseScannerInterval);
+        wgEinloeseScannerInterval = null;
+    }
+    wgEinloeseScannerBusy = false;
+
+    if (wgEinloeseScannerStream) {
+        wgEinloeseScannerStream.getTracks().forEach((track) => {
+            try {
+                track.stop();
+            } catch (error) {
+                console.warn('Scanner-Track konnte nicht gestoppt werden:', error);
+            }
+        });
+        wgEinloeseScannerStream = null;
+    }
+
+    const video = document.getElementById('wg-einloese-scanner-video');
+    if (video) {
+        try {
+            video.pause();
+        } catch (error) {
+            console.warn('Scanner-Video konnte nicht pausiert werden:', error);
+        }
+        video.srcObject = null;
+    }
+
+    if (hidePanel) {
+        document.getElementById('wg-einloese-scanner-panel')?.classList.add('hidden');
+    }
+
+    if (clearStatus) {
+        setEinloeseScannerStatus('Kamera gestoppt.');
+    }
+}
+
+function extractEinloeseIdFromScannedText(rawText) {
+    const text = String(rawText || '').trim();
+    if (!text) return '';
+
+    const prefixedMatch = text.match(/#\s*([A-Za-z0-9]{4})/);
+    if (prefixedMatch?.[1]) {
+        return prefixedMatch[1].toUpperCase();
+    }
+
+    const normalized = normalizeEinloeseIdInput(text);
+    if (normalized.length === WG_SHORT_ID_LENGTH) {
+        return normalized;
+    }
+
+    return '';
+}
+
+async function scanEinloeseFrame() {
+    if (!wgEinloeseBarcodeDetector || !wgEinloeseScannerStream || wgEinloeseScannerBusy) return;
+
+    const video = document.getElementById('wg-einloese-scanner-video');
+    if (!video || video.readyState < 2) return;
+
+    wgEinloeseScannerBusy = true;
+    try {
+        const detections = await wgEinloeseBarcodeDetector.detect(video);
+        if (!Array.isArray(detections) || detections.length === 0) return;
+
+        const rawValue = String(detections[0]?.rawValue || '').trim();
+        const scannedId = extractEinloeseIdFromScannedText(rawValue);
+        if (!scannedId) {
+            setEinloeseScannerStatus('Code erkannt, aber keine gültige #XXXX-ID gefunden.', true);
+            return;
+        }
+
+        const match = findEinloeseEntryByIdText(scannedId, { exactOnly: true });
+        if (!match) {
+            setEinloeseScannerStatus(`ID #${scannedId} ist nicht vorhanden.`, true);
+            return;
+        }
+
+        window.selectEinloeseWertguthaben(match.id);
+        setEinloeseScannerStatus(`Treffer: #${getWertguthabenDisplayId(match)}`);
+        stopEinloeseScanner({ hidePanel: true, clearStatus: true });
+    } catch (error) {
+        console.warn('Scanner-Analyse fehlgeschlagen:', error);
+    } finally {
+        wgEinloeseScannerBusy = false;
+    }
+}
+
+async function startEinloeseScanner() {
+    const panel = document.getElementById('wg-einloese-scanner-panel');
+    const video = document.getElementById('wg-einloese-scanner-video');
+    if (!panel || !video) return;
+
+    if (!navigator?.mediaDevices?.getUserMedia) {
+        alertUser('Kamera wird auf diesem Gerät/Browser nicht unterstützt.', 'error');
+        return;
+    }
+
+    if (!('BarcodeDetector' in window)) {
+        alertUser('Barcode/QR-Scanner wird in diesem Browser nicht unterstützt.', 'warning');
+        return;
+    }
+
+    try {
+        wgEinloeseBarcodeDetector = new window.BarcodeDetector({
+            formats: ['qr_code', 'code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'itf', 'codabar']
+        });
+    } catch (error) {
+        console.error('BarcodeDetector konnte nicht initialisiert werden:', error);
+        alertUser('Scanner konnte nicht gestartet werden.', 'error');
+        return;
+    }
+
+    stopEinloeseScanner({ hidePanel: false, clearStatus: false });
+    panel.classList.remove('hidden');
+    setEinloeseScannerStatus('Kamera startet...');
+
+    try {
+        wgEinloeseScannerStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                facingMode: { ideal: 'environment' },
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            },
+            audio: false
+        });
+
+        video.srcObject = wgEinloeseScannerStream;
+        await video.play();
+
+        setEinloeseScannerStatus('Code in den roten Bereich halten...');
+        wgEinloeseScannerInterval = window.setInterval(scanEinloeseFrame, 220);
+    } catch (error) {
+        console.error('Kamera konnte nicht geöffnet werden:', error);
+        stopEinloeseScanner({ hidePanel: true, clearStatus: true });
+        alertUser('Kamera-Zugriff fehlgeschlagen. Bitte Berechtigung prüfen.', 'error');
     }
 }
 
@@ -572,7 +772,7 @@ function updateEinloeseSuggestions(term) {
     const list = document.getElementById('wg-einloese-suggestions-list');
     if (!box || !list) return;
 
-    const normalized = String(term || '').replace('#', '').trim().toLowerCase();
+    const normalized = normalizeEinloeseIdInput(term).toLowerCase();
     if (!normalized) {
         list.innerHTML = '';
         box.classList.add('hidden');
@@ -977,6 +1177,8 @@ function confirmWertBetragUnlock() {
 // FIREBASE LISTENER
 // ========================================
 export function stopWertguthabenListener() {
+    stopEinloeseScanner({ hidePanel: true, clearStatus: true });
+
     if (unsubscribeWertguthaben) {
         unsubscribeWertguthaben();
         unsubscribeWertguthaben = null;

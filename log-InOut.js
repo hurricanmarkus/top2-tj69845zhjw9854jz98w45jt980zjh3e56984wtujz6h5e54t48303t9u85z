@@ -392,7 +392,7 @@ export async function checkCurrentUserValidity() {
 }
 
 // In log-InOut.js
-export function switchToGuestMode(showNotification = true, message = "Abgemeldet. Modus ist nun 'Gast'.", type = 'success') {
+export function switchToGuestMode(showNotification = true, message = "Sie wurden ausgeloggt.", type = 'info') { 
     console.log("🚪 LOGOUT: switchToGuestMode wird ausgeführt...");
     
     // NEU: Stoppe den Spion für "An mich zugewiesen", da wir jetzt Gast sind
@@ -415,8 +415,51 @@ export function switchToGuestMode(showNotification = true, message = "Abgemeldet
     if (showNotification) alertUser(message, type);
 }
 
+let footerResizeRefreshTimer = null;
+
+function ensureFooterResizeSyncListener() {
+    if (document.body?.dataset.footerResizeListenerAttached === 'true') return;
+    window.addEventListener('resize', () => {
+        if (footerResizeRefreshTimer) {
+            window.clearTimeout(footerResizeRefreshTimer);
+        }
+        footerResizeRefreshTimer = window.setTimeout(() => {
+            updateUIForMode();
+        }, 120);
+    });
+    if (document.body) {
+        document.body.dataset.footerResizeListenerAttached = 'true';
+    }
+}
+
+function formatFooterRealName(realName) {
+    const normalized = String(realName || '').trim().replace(/\s+/g, ' ');
+    if (!normalized) return { displayName: '', abbreviated: false };
+
+    const parts = normalized.split(' ');
+    if (parts.length < 2) {
+        return { displayName: normalized, abbreviated: false };
+    }
+
+    const isNarrowViewport = window.matchMedia ? window.matchMedia('(max-width: 640px)').matches : window.innerWidth <= 640;
+    const shouldAbbreviate = isNarrowViewport && normalized.length > 14;
+    if (!shouldAbbreviate) {
+        return { displayName: normalized, abbreviated: false };
+    }
+
+    const firstName = parts[0];
+    const surname = parts.slice(1).join(' ');
+    const shortSurname = `${surname.slice(0, 3)}...`;
+    return {
+        displayName: `${firstName} ${shortSurname}`,
+        abbreviated: true
+    };
+}
+
 // In log-InOut.js
 export function updateUIForMode() {
+    ensureFooterResizeSyncListener();
+
     const homeLoadingSpinner = document.getElementById('homeLoadingSpinner');
     if (homeLoadingSpinner) homeLoadingSpinner.style.display = 'none';
 
@@ -724,10 +767,14 @@ if (user) {
             else roleColor = 'text-gray-300';
         }
 
-        const realNamePart = user?.realName ? `<span class="text-gray-400 italic text-xs ml-1">(${(typeof escapeHtml === 'function' ? escapeHtml(user.realName) : user.realName)})</span>` : '';
+        const realNameInfo = formatFooterRealName(user?.realName);
+        const escapedRealName = (typeof escapeHtml === 'function' ? escapeHtml(realNameInfo.displayName) : realNameInfo.displayName);
+        const escapedFullRealName = (typeof escapeHtml === 'function' ? escapeHtml(String(user?.realName || '')) : String(user?.realName || ''));
+        const titleAttr = realNameInfo.abbreviated && escapedFullRealName ? ` title="${escapedFullRealName}"` : '';
+        const realNamePart = realNameInfo.displayName ? `<span class="text-gray-400 italic text-[10px] sm:text-xs ml-1 whitespace-nowrap"${titleAttr}>(${escapedRealName})</span>` : '';
         const displayName = (typeof escapeHtml === 'function' ? escapeHtml(currentUser.displayName || currentUser.mode) : (currentUser.displayName || currentUser.mode));
-        const roleDisplay = roleNameToDisplay ? ` <span class="mx-1 text-gray-400">❖</span> <span class="${roleColor} italic">(${(typeof escapeHtml === 'function' ? escapeHtml(roleNameToDisplay) : roleNameToDisplay)})</span>` : '';
-        footerUser.innerHTML = `${displayName} ${realNamePart}${roleDisplay}`;
+        const roleDisplay = roleNameToDisplay ? `<span class="mx-1 text-gray-400">*</span><span class="${roleColor} italic whitespace-nowrap">(${(typeof escapeHtml === 'function' ? escapeHtml(roleNameToDisplay) : roleNameToDisplay)})</span>` : '';
+        footerUser.innerHTML = `${displayName}${realNamePart ? ` ${realNamePart}` : ''}${roleDisplay ? ` ${roleDisplay}` : ''}`;
 
         const logoutButton = document.createElement('button');
         logoutButton.id = 'logoutButton';

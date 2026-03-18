@@ -1,13 +1,22 @@
 {
-  "version": "1.0.3",
-  "buildId": "20260317-4",
-  "releaseDate": "2026-03-17",
-  "releaseTime": "19:56",
+  "version": "1.0.4",
+  "buildId": "20260318-1",
+  "releaseDate": "2026-03-18",
+  "releaseTime": "08:22",
   "timezone": "Europe/Vienna",
-  "note": "Wertguthaben-Status beim Speichern bewertet jetzt den aktuellen Restwert statt Eingabewert.",
-  "commitId": "e083202",
+  "note": "Einloese-Scanner stoppt jetzt verlässlich beim Verlassen der Ansicht; Browser-Hinweistext korrigiert.",
+  "commitId": "507a08e",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.0.4",
+      "buildId": "20260318-1",
+      "releaseDate": "2026-03-18",
+      "releaseTime": "08:22",
+      "note": "Einloese-Scanner stoppt jetzt verlässlich beim Verlassen der Ansicht; Browser-Hinweistext korrigiert.",
+      "commitId": "507a08e",
+      "obligation": "false"
+    },
     {
       "version": "1.0.3",
       "buildId": "20260317-4",
