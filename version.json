@@ -1,13 +1,40 @@
 {
   "version": "1.1.0",
-  "buildId": "20260319-2",
+  "buildId": "20260319-5",
   "releaseDate": "2026-03-19",
-  "releaseTime": "17:45",
+  "releaseTime": "18:00",
   "timezone": "Europe/Vienna",
-  "note": "Login- und Claim-Handshake fuer Einkaufsliste gehaertet: appUserId wird jetzt vor Modulzugriff verbindlich geprueft.",
-  "commitId": "6d01e4b",
+  "note": "Einkaufsliste-Listener erhielten Fehlerhandler und Listen-Laden faellt jetzt bei Bedarf auf owner-only zurueck.",
+  "commitId": "dd766b1",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.1.0",
+      "buildId": "20260319-5",
+      "releaseDate": "2026-03-19",
+      "releaseTime": "18:00",
+      "note": "Einkaufsliste-Listener erhielten Fehlerhandler und Listen-Laden faellt jetzt bei Bedarf auf owner-only zurueck.",
+      "commitId": "dd766b1",
+      "obligation": "false"
+    },
+    {
+      "version": "1.1.0",
+      "buildId": "20260319-4",
+      "releaseDate": "2026-03-19",
+      "releaseTime": "17:57",
+      "note": "Einkaufsliste-Initialisierung liefert jetzt den exakten fehlschlagenden Schritt, damit Permission-Probleme gezielt behoben werden koennen.",
+      "commitId": "dd766b1",
+      "obligation": "false"
+    },
+    {
+      "version": "1.1.0",
+      "buildId": "20260319-3",
+      "releaseDate": "2026-03-19",
+      "releaseTime": "17:56",
+      "note": "Einkaufsliste-Listenqueries auf ownerId/Privatliste und ownerId-oder-memberIds umgestellt, um Berechtigungsfehler beim Laden zu vermeiden.",
+      "commitId": "dd766b1",
+      "obligation": "false"
+    },
     {
       "version": "1.1.0",
       "buildId": "20260319-2",

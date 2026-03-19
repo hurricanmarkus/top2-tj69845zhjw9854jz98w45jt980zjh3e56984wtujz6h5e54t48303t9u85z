@@ -1,6 +1,6 @@
 import { alertUser, appId, auth, currentUser, db, escapeHtml, GUEST_MODE, USERS } from './haupteingang.js';
 import { getUserSetting, saveUserSetting } from './log-InOut.js';
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp, setDoc, Timestamp, updateDoc, where } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, or, query, runTransaction, serverTimestamp, setDoc, Timestamp, updateDoc, where } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
 const MODES = [{ id: 'add', label: 'Hinzufügemodus' }, { id: 'shop', label: 'Einkaufsmodus' }, { id: 'manage', label: 'Verwaltung' }];
 const MANAGE = [{ id: 'general', label: 'Allgemein' }, { id: 'stores', label: 'Geschäftewartung' }, { id: 'articles', label: 'Artikelwartung' }, { id: 'categories', label: 'Kategorienwartung' }, { id: 'remarks', label: 'Anmerkungswartung' }, { id: 'notes', label: 'Notizwartung' }];
@@ -130,9 +130,9 @@ async function seedDefaults() {
 }
 
 async function ensurePrivateList() {
-    const q = query(listsRef(), where('memberIds', 'array-contains', uid()));
+    const q = query(listsRef(), where('ownerId', '==', uid()), where('isPrivateSystemList', '==', true), limit(1));
     const snap = await getDocs(q);
-    const ownPrivate = snap.docs.find((d) => d.data()?.ownerId === uid() && d.data()?.isPrivateSystemList === true);
+    const ownPrivate = snap.docs[0] || null;
     if (ownPrivate) return;
     const ref = doc(listsRef());
     await setDoc(ref, { name: 'Einkaufsliste Privat', ownerId: uid(), ownerName: uname(), isPrivateSystemList: true, active: true, memberIds: [uid()], storeOrder: [], storeNotes: {}, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() });
@@ -164,6 +164,53 @@ function stopScanner() {
     scanStream = null;
 }
 
+async function runInitStep(label, fn) {
+    try {
+        return await fn();
+    } catch (error) {
+        console.error(`Einkaufsliste Schritt fehlgeschlagen (${label}):`, error);
+        throw new Error(label);
+    }
+}
+
+function reportListenerError(label, error) {
+    console.error(`Einkaufsliste Listener fehlgeschlagen (${label}):`, error);
+}
+
+function showInlineError(message) {
+    const main = root?.querySelector('#el-main');
+    if (main) main.innerHTML = `<div class="elc text-sm text-red-700">${escapeHtml(message)}</div>`;
+}
+
+function applyListSnapshot(snap) {
+    state.lists = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (Number(toDate(b.updatedAt)?.getTime() || 0) - Number(toDate(a.updatedAt)?.getTime() || 0)) || String(a.name).localeCompare(String(b.name), 'de'));
+    if (!state.listId || !state.lists.some((x) => x.id === state.listId)) state.listId = getUserSetting(EL_LIST_KEY, state.lists[0]?.id || null);
+    if (!state.listId || !state.lists.some((x) => x.id === state.listId)) state.listId = state.lists[0]?.id || null;
+    if (state.listId) saveUserSetting(EL_LIST_KEY, state.listId);
+    listenActiveList();
+    render();
+}
+
+function subscribeLists(ownerOnly = false) {
+    if (listUnsub) listUnsub();
+    const listQuery = ownerOnly ? query(listsRef(), where('ownerId', '==', uid())) : query(listsRef(), or(where('ownerId', '==', uid()), where('memberIds', 'array-contains', uid())));
+    listUnsub = onSnapshot(listQuery, (snap) => {
+        applyListSnapshot(snap);
+    }, (error) => {
+        reportListenerError(ownerOnly ? 'listenLists:ownerOnly' : 'listenLists', error);
+        if (!ownerOnly) {
+            subscribeLists(true);
+            return;
+        }
+        state.lists = [];
+        state.listId = null;
+        stopActive();
+        showInlineError('Einkaufsliste konnte nicht geladen werden (listenLists). Bitte neu anmelden.');
+        alertUser('Einkaufsliste konnte nicht geladen werden (listenLists). Bitte neu anmelden.', 'error');
+        render();
+    });
+}
+
 export function stopEinkaufslisteListeners() {
     if (listUnsub) listUnsub();
     listUnsub = null;
@@ -190,15 +237,17 @@ export async function initializeEinkaufsliste() {
             alertUser('Einkaufsliste konnte nicht geladen werden: appUserId-Claim fehlt. Bitte neu anmelden.', 'error');
             return;
         }
-        await seedDefaults();
-        await ensurePrivateList();
-        listenMasters();
-        listenLists();
+        await runInitStep('seedDefaults', () => seedDefaults());
+        await runInitStep('ensurePrivateList', () => ensurePrivateList());
+        await runInitStep('listenMasters', async () => { listenMasters(); });
+        await runInitStep('listenLists', async () => { listenLists(); });
         render();
     } catch (error) {
         console.error('Einkaufsliste Initialisierung fehlgeschlagen:', error);
-        root.innerHTML = '<div class="elc text-sm text-red-700">Einkaufsliste konnte wegen fehlender Berechtigung nicht geladen werden. Bitte neu anmelden.</div>';
-        alertUser('Einkaufsliste konnte nicht geladen werden. Bitte neu anmelden.', 'error');
+        const step = String(error?.message || '').trim();
+        const suffix = step ? ` (${step})` : '';
+        root.innerHTML = `<div class="elc text-sm text-red-700">Einkaufsliste konnte wegen fehlender Berechtigung nicht geladen werden${escapeHtml(suffix)}. Bitte neu anmelden.</div>`;
+        alertUser(`Einkaufsliste konnte nicht geladen werden${suffix}. Bitte neu anmelden.`, 'error');
     }
 }
 
@@ -211,34 +260,26 @@ function listenMasters() {
     if (masterUnsubs.length) return;
     if (root.dataset.masters === 'true') return;
     root.dataset.masters = 'true';
-    masterUnsubs.push(onSnapshot(query(master('categories'), where('createdBy', '==', uid())), (s) => { state.categories = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'de')); render(); }));
-    masterUnsubs.push(onSnapshot(query(master('stores'), where('createdBy', '==', uid())), (s) => { state.stores = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'de')); render(); }));
-    masterUnsubs.push(onSnapshot(query(master('articles'), where('createdBy', '==', uid())), (s) => { state.articles = s.docs.map((d) => ({ id: d.id, ...d.data(), eanCodes: d.data().eanCodes || [], variants: d.data().variants || [], persistentNotes: d.data().persistentNotes || [], storeIds: d.data().storeIds || [] })).sort((a, b) => String(a.title).localeCompare(String(b.title), 'de')); render(); }));
-    masterUnsubs.push(onSnapshot(query(master('notes'), where('createdBy', '==', uid())), (s) => { state.remarks = s.docs.map((d) => ({ id: d.id, ...d.data() })); render(); }));
-    masterUnsubs.push(onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_master_notizen'), where('createdBy', '==', uid())), (s) => { state.notes = s.docs.map((d) => ({ id: d.id, ...d.data() })); render(); }));
+    masterUnsubs.push(onSnapshot(query(master('categories'), where('createdBy', '==', uid())), (s) => { state.categories = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'de')); render(); }, (error) => reportListenerError('listenMasters:categories', error)));
+    masterUnsubs.push(onSnapshot(query(master('stores'), where('createdBy', '==', uid())), (s) => { state.stores = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'de')); render(); }, (error) => reportListenerError('listenMasters:stores', error)));
+    masterUnsubs.push(onSnapshot(query(master('articles'), where('createdBy', '==', uid())), (s) => { state.articles = s.docs.map((d) => ({ id: d.id, ...d.data(), eanCodes: d.data().eanCodes || [], variants: d.data().variants || [], persistentNotes: d.data().persistentNotes || [], storeIds: d.data().storeIds || [] })).sort((a, b) => String(a.title).localeCompare(String(b.title), 'de')); render(); }, (error) => reportListenerError('listenMasters:articles', error)));
+    masterUnsubs.push(onSnapshot(query(master('notes'), where('createdBy', '==', uid())), (s) => { state.remarks = s.docs.map((d) => ({ id: d.id, ...d.data() })); render(); }, (error) => reportListenerError('listenMasters:notes', error)));
+    masterUnsubs.push(onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_master_notizen'), where('createdBy', '==', uid())), (s) => { state.notes = s.docs.map((d) => ({ id: d.id, ...d.data() })); render(); }, (error) => reportListenerError('listenMasters:notizen', error)));
 }
 
 function listenLists() {
-    if (listUnsub) listUnsub();
-    listUnsub = onSnapshot(query(listsRef(), where('memberIds', 'array-contains', uid())), (snap) => {
-        state.lists = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (Number(toDate(b.updatedAt)?.getTime() || 0) - Number(toDate(a.updatedAt)?.getTime() || 0)) || String(a.name).localeCompare(String(b.name), 'de'));
-        if (!state.listId || !state.lists.some((x) => x.id === state.listId)) state.listId = getUserSetting(EL_LIST_KEY, state.lists[0]?.id || null);
-        if (!state.listId || !state.lists.some((x) => x.id === state.listId)) state.listId = state.lists[0]?.id || null;
-        if (state.listId) saveUserSetting(EL_LIST_KEY, state.listId);
-        listenActiveList();
-        render();
-    });
+    subscribeLists(false);
 }
 
 function listenActiveList() {
     stopActive();
     const list = activeList();
     if (!list) return;
-    activeUnsubs.push(onSnapshot(sub(list.id, 'permissions'), (s) => { Array.from(state.perms.keys()).filter((k) => k.startsWith(`${list.id}:`)).forEach((k) => state.perms.delete(k)); s.docs.forEach((d) => state.perms.set(`${list.id}:${d.id}`, { listId: list.id, userId: d.id, ...d.data() })); render(); }));
-    activeUnsubs.push(onSnapshot(query(sub(list.id, 'items'), orderBy('createdAt', 'desc')), (s) => { state.items = s.docs.map((d) => ({ id: d.id, ...d.data(), storeIds: d.data().storeIds || [], eanCodes: d.data().eanCodes || [] })); render(); }));
-    activeUnsubs.push(onSnapshot(query(sub(list.id, 'presence'), orderBy('lastSeen', 'desc')), (s) => { state.presence = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((x) => Date.now() - (toDate(x.lastSeen)?.getTime() || 0) <= PRESENCE_MS); render(); }));
-    activeUnsubs.push(onSnapshot(query(sub(list.id, 'activity'), orderBy('createdAt', 'desc'), limit(1)), (s) => { state.activity = s.docs[0] ? { id: s.docs[0].id, ...s.docs[0].data() } : null; render(); }));
-    activeUnsubs.push(onSnapshot(sub(list.id, 'locks'), (s) => { state.locks.clear(); s.docs.forEach((d) => state.locks.set(d.id, { id: d.id, ...d.data() })); render(); }));
+    activeUnsubs.push(onSnapshot(sub(list.id, 'permissions'), (s) => { Array.from(state.perms.keys()).filter((k) => k.startsWith(`${list.id}:`)).forEach((k) => state.perms.delete(k)); s.docs.forEach((d) => state.perms.set(`${list.id}:${d.id}`, { listId: list.id, userId: d.id, ...d.data() })); render(); }, (error) => reportListenerError('listenActiveList:permissions', error)));
+    activeUnsubs.push(onSnapshot(query(sub(list.id, 'items'), orderBy('createdAt', 'desc')), (s) => { state.items = s.docs.map((d) => ({ id: d.id, ...d.data(), storeIds: d.data().storeIds || [], eanCodes: d.data().eanCodes || [] })); render(); }, (error) => reportListenerError('listenActiveList:items', error)));
+    activeUnsubs.push(onSnapshot(query(sub(list.id, 'presence'), orderBy('lastSeen', 'desc')), (s) => { state.presence = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((x) => Date.now() - (toDate(x.lastSeen)?.getTime() || 0) <= PRESENCE_MS); render(); }, (error) => reportListenerError('listenActiveList:presence', error)));
+    activeUnsubs.push(onSnapshot(query(sub(list.id, 'activity'), orderBy('createdAt', 'desc'), limit(1)), (s) => { state.activity = s.docs[0] ? { id: s.docs[0].id, ...s.docs[0].data() } : null; render(); }, (error) => reportListenerError('listenActiveList:activity', error)));
+    activeUnsubs.push(onSnapshot(sub(list.id, 'locks'), (s) => { state.locks.clear(); s.docs.forEach((d) => state.locks.set(d.id, { id: d.id, ...d.data() })); render(); }, (error) => reportListenerError('listenActiveList:locks', error)));
     touchPresence();
     presenceTimer = setInterval(touchPresence, 30000);
 }
