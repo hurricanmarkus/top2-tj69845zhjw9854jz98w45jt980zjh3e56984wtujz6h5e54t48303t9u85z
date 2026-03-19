@@ -1,13 +1,22 @@
 {
-  "version": "1.2.2",
-  "buildId": "20260319-9",
+  "version": "1.2.3",
+  "buildId": "20260319-10",
   "releaseDate": "2026-03-19",
-  "releaseTime": "19:04",
+  "releaseTime": "19:18",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste-Feinschliff: Listen-Minibox reduziert, Mengetastatur neu aufgebaut und Kategorie im Eintragsdialog editierbar gemacht.",
-  "commitId": "1a35b66",
+  "note": "Einkaufsliste-Fixes: Listen-Listener ohne OR-Query gehaertet, letzte Liste persistiert und Mengenmodal auf 4 Zeilen finalisiert.",
+  "commitId": "ce93fdd",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.2.3",
+      "buildId": "20260319-10",
+      "releaseDate": "2026-03-19",
+      "releaseTime": "19:18",
+      "note": "Einkaufsliste-Fixes: Listen-Listener ohne OR-Query gehaertet, letzte Liste persistiert und Mengenmodal auf 4 Zeilen finalisiert.",
+      "commitId": "ce93fdd",
+      "obligation": "false"
+    },
     {
       "version": "1.2.2",
       "buildId": "20260319-9",

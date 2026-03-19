@@ -87,6 +87,8 @@ const isSettingTrue = (key, fallback = false) => { const value = getUserSetting(
 const chip = (t, cls = 'bg-slate-100 text-slate-700') => `<span class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold ${cls}">${t}</span>`;
 const ell = (s, n = 34) => String(s || '').length > n ? `${String(s || '').slice(0, n - 1)}…` : String(s || '');
 const activeList = () => state.lists.find((x) => x.id === state.listId) || null;
+const storedListId = () => { const value = String(getUserSetting(EL_LIST_KEY, '') || '').trim(); return value || null; };
+const persistListId = () => saveUserSetting(EL_LIST_KEY, state.listId || '');
 const perm = (listId = state.listId, userId = uid()) => state.perms.get(`${listId}:${userId}`) || null;
 const permActive = (p) => { if (!p || p.paused) return false; const now = Date.now(); const a = toDate(p.accessFrom)?.getTime?.() || 0; const b = toDate(p.accessUntil)?.getTime?.() || Infinity; return now >= a && now <= b; };
 const canRead = (l = activeList()) => !!l && (l.ownerId === uid() || perm(l.id)?.canRead);
@@ -190,38 +192,52 @@ function showInlineError(message) {
     if (main) main.innerHTML = `<div class="elc text-sm text-red-700">${escapeHtml(message)}</div>`;
 }
 
-function applyListSnapshot(snap) {
-    state.lists = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (Number(toDate(b.updatedAt)?.getTime() || 0) - Number(toDate(a.updatedAt)?.getTime() || 0)) || String(a.name).localeCompare(String(b.name), 'de'));
-    if (!state.listId || !state.lists.some((x) => x.id === state.listId)) state.listId = getUserSetting(EL_LIST_KEY, state.lists[0]?.id || null);
+function applyListDocs(docs) {
+    const merged = new Map();
+    docs.forEach((d) => merged.set(d.id, { id: d.id, ...d.data() }));
+    state.lists = Array.from(merged.values()).sort((a, b) => (Number(toDate(b.updatedAt)?.getTime() || 0) - Number(toDate(a.updatedAt)?.getTime() || 0)) || String(a.name).localeCompare(String(b.name), 'de'));
+    const preferredListId = state.listId || storedListId();
+    if (preferredListId && state.lists.some((x) => x.id === preferredListId)) state.listId = preferredListId;
     if (!state.listId || !state.lists.some((x) => x.id === state.listId)) state.listId = state.lists[0]?.id || null;
-    if (state.listId) saveUserSetting(EL_LIST_KEY, state.listId);
+    persistListId();
     listenActiveList();
     render();
 }
 
-function subscribeLists(ownerOnly = false) {
+function subscribeLists() {
     if (listUnsub) listUnsub();
-    const listQuery = ownerOnly ? query(listsRef(), where('ownerId', '==', uid())) : query(listsRef(), or(where('ownerId', '==', uid()), where('memberIds', 'array-contains', uid())));
-    listUnsub = onSnapshot(listQuery, (snap) => {
-        applyListSnapshot(snap);
+    ownListDocs = [];
+    sharedListDocs = [];
+    const unsubs = [];
+    unsubs.push(onSnapshot(query(listsRef(), where('ownerId', '==', uid())), (snap) => {
+        ownListDocs = snap.docs;
+        applyListDocs([...ownListDocs, ...sharedListDocs]);
     }, (error) => {
-        reportListenerError(ownerOnly ? 'listenLists:ownerOnly' : 'listenLists', error);
-        if (!ownerOnly) {
-            subscribeLists(true);
-            return;
-        }
+        reportListenerError('listenLists:owner', error);
         state.lists = [];
         state.listId = null;
+        persistListId();
         stopActive();
         showInlineError('Einkaufsliste konnte nicht geladen werden (listenLists). Bitte neu anmelden.');
         alertUser('Einkaufsliste konnte nicht geladen werden (listenLists). Bitte neu anmelden.', 'error');
         render();
-    });
+    }));
+    unsubs.push(onSnapshot(query(listsRef(), where('memberIds', 'array-contains', uid())), (snap) => {
+        sharedListDocs = snap.docs.filter((d) => d.data()?.ownerId !== uid());
+        applyListDocs([...ownListDocs, ...sharedListDocs]);
+    }, (error) => {
+        reportListenerError('listenLists:shared', error);
+        sharedListDocs = [];
+        applyListDocs([...ownListDocs]);
+    }));
+    listUnsub = () => unsubs.forEach((fn) => typeof fn === 'function' && fn());
 }
 
 export function stopEinkaufslisteListeners() {
     if (listUnsub) listUnsub();
     listUnsub = null;
+    ownListDocs = [];
+    sharedListDocs = [];
     stopMasters();
     stopActive();
     stopScanner();
@@ -278,7 +294,7 @@ function listenMasters() {
 }
 
 function listenLists() {
-    subscribeLists(false);
+    subscribeLists();
 }
 
 function listenActiveList() {
@@ -358,7 +374,7 @@ function renderDetailRows(list) {
 function renderHeader(list) {
     const listBoxClass = list ? (list.ownerId === uid() ? 'border-indigo-500 text-indigo-700 bg-indigo-50' : 'border-emerald-500 text-emerald-700 bg-emerald-50') : 'border-slate-300 text-slate-500 bg-slate-50';
     const listBoxText = list?.name || 'Keine Liste';
-    return `<div class="space-y-3"><div class="elc"><div class="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 items-center"><button class="elb bg-gray-100 text-gray-700" data-a="back-home">&lt; zurück</button><div class="flex justify-center"><button class="elb a w-full max-w-xs" data-a="open-mode-picker">${escapeHtml(currentModeDef().label)}</button></div><div class="flex justify-end"><span class="elb opacity-0 pointer-events-none">Platzhalter</span></div></div></div><div class="elc"><div class="flex flex-wrap gap-2 items-center">${state.mode === 'shop' ? `<div class="min-w-0 flex-1 grid grid-cols-[minmax(0,1fr)_auto] gap-2"><input id="el-search" class="eli" placeholder="Suchen oder scannen..." value="${escapeHtml(state.search)}"><button class="elb a" data-a="open-scan">📷</button></div>` : '<div class="flex-1"></div>'}<button class="elb bg-gray-100 text-gray-700 ml-auto" data-a="toggle-details">Details ${state.detailsOpen ? '▴' : '▾'}</button></div></div>${state.detailsOpen ? `<div class="elc">${renderDetailRows(list)}</div>` : ''}<div class="flex items-start"><div class="inline-flex max-w-full items-center rounded-2xl border-2 px-3 text-sm font-bold shadow-sm ${listBoxClass}">${escapeHtml(listBoxText)}</div></div></div>`;
+    return `<div class="space-y-3"><div class="elc"><div class="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 items-center"><button class="elb bg-gray-100 text-gray-700" data-a="back-home">&lt; zurück</button><div class="flex justify-center"><button class="elb a w-full max-w-xs" data-a="open-mode-picker">${escapeHtml(currentModeDef().label)}</button></div><div class="flex justify-end"><span class="elb opacity-0 pointer-events-none">Platzhalter</span></div></div></div><div class="elc"><div class="flex flex-wrap gap-2 items-center">${state.mode === 'shop' ? `<div class="min-w-0 flex-1 grid grid-cols-[minmax(0,1fr)_auto] gap-2"><input id="el-search" class="eli" placeholder="Suchen oder scannen..." value="${escapeHtml(state.search)}"><button class="elb a" data-a="open-scan">📷</button></div>` : '<div class="flex-1"></div>'}<button class="elb bg-gray-100 text-gray-700 ml-auto" data-a="toggle-details">Details ${state.detailsOpen ? '▴' : '▾'}</button></div></div>${state.detailsOpen ? `<div class="elc">${renderDetailRows(list)}</div>` : ''}<div class="flex justify-center"><div class="inline-flex max-w-full items-center rounded-full border-2 px-4 py-1.5 text-sm font-bold shadow-sm ${listBoxClass}">${escapeHtml(listBoxText)}</div></div></div>`;
 }
 
 function renderManageSections() {
@@ -373,7 +389,7 @@ function selectList(nextId) {
         return;
     }
     state.listId = nextId;
-    saveUserSetting(EL_LIST_KEY, state.listId);
+    persistListId();
     listenActiveList();
     render();
 }
@@ -449,7 +465,9 @@ function renderPurchase() {
     el.className = `elmodal ${p ? 'o' : ''}`;
     if (!p) { el.innerHTML = ''; return; }
     const delta = Number((Number(p.quantity || 0) - Number(p.target || 0)).toFixed(2));
-    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="text-xl font-black text-gray-900">${escapeHtml(p.title)}</div><div class="text-sm text-gray-500">${p.kind === 'scan' ? 'Scan-Erfassung' : 'Mengenübernahme'}</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-purchase">Abbruch</button></div><div class="elc space-y-3 bg-slate-50"><div class="text-xs font-bold uppercase text-gray-500 text-center">Menge</div><div class="elpdisplay"><div class="text-5xl font-black leading-none text-indigo-700">${purchaseDisplayValue(p)}</div><div class="mt-2 text-sm font-bold text-slate-500">${escapeHtml(p.unit)}</div></div>${p.target ? `<div class="text-sm text-center text-gray-600">Soll lt. Liste: ${fmtQty(p.target)} ${escapeHtml(p.unit)}</div>` : ''}${delta !== 0 ? `<div class="rounded-xl border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-bold text-orange-800 text-center">${delta > 0 ? `Achtung +${fmtQty(delta)} – übernehmen?` : `Achtung ${fmtQty(delta)} – übernehmen?`}</div>` : ''}</div><div class="elkey"><button data-a="digit" data-v="7">7</button><button data-a="digit" data-v="8">8</button><button data-a="digit" data-v="9">9</button><button data-a="full" class="bg-indigo-50 text-indigo-700">SOLL</button><button data-a="digit" data-v="4">4</button><button data-a="digit" data-v="5">5</button><button data-a="digit" data-v="6">6</button><button data-a="clear" class="bg-orange-50 text-orange-700">C</button><button data-a="digit" data-v="1">1</button><button data-a="digit" data-v="2">2</button><button data-a="digit" data-v="3">3</button><button data-a="back">⌫</button><button data-a="digit" data-v="0">0</button><button data-a="digit" data-v=",">,</button><span></span><span></span></div><div class="flex flex-wrap justify-between gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="close-purchase">Abbruch</button><button class="elb bg-emerald-600 text-white" data-a="confirm-purchase">Übernehmen</button></div></div>`;
+    const keyBtn = 'rounded-2xl min-h-[3.25rem] border border-slate-300 bg-white text-lg font-black text-slate-800';
+    const keyAccent = 'rounded-2xl min-h-[3.25rem] border text-base font-black';
+    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="space-y-1 text-center"><div class="text-xl font-black text-gray-900">${escapeHtml(p.title)}</div><div class="text-sm text-gray-500">${p.kind === 'scan' ? 'Scan-Erfassung' : 'Mengenübernahme'}</div></div><div class="elc space-y-3 bg-slate-50"><div class="text-xs font-bold uppercase text-gray-500 text-center">Menge</div><div class="flex min-h-[6.5rem] flex-col items-center justify-center text-center"><div class="text-5xl font-black leading-none text-indigo-700">${purchaseDisplayValue(p)}</div><div class="mt-2 text-base font-bold text-slate-500">${escapeHtml(p.unit)}</div></div>${p.target ? `<div class="text-sm text-center text-gray-600">Soll lt. Liste: ${fmtQty(p.target)} ${escapeHtml(p.unit)}</div>` : ''}${delta !== 0 ? `<div class="rounded-xl border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-bold text-orange-800 text-center">${delta > 0 ? `Achtung +${fmtQty(delta)} – übernehmen?` : `Achtung ${fmtQty(delta)} – übernehmen?`}</div>` : ''}</div><div class="space-y-2"><div class="grid grid-cols-4 gap-2"><button class="${keyBtn}" data-a="digit" data-v="7">7</button><button class="${keyBtn}" data-a="digit" data-v="8">8</button><button class="${keyBtn}" data-a="digit" data-v="9">9</button><button class="${keyAccent} border-indigo-200 bg-indigo-50 text-indigo-700" data-a="full">SOLL</button></div><div class="grid grid-cols-4 gap-2"><button class="${keyBtn}" data-a="digit" data-v="4">4</button><button class="${keyBtn}" data-a="digit" data-v="5">5</button><button class="${keyBtn}" data-a="digit" data-v="6">6</button><button class="${keyAccent} border-orange-200 bg-orange-50 text-orange-700" data-a="clear">C</button></div><div class="grid grid-cols-4 gap-2"><button class="${keyBtn}" data-a="digit" data-v="1">1</button><button class="${keyBtn}" data-a="digit" data-v="2">2</button><button class="${keyBtn}" data-a="digit" data-v="3">3</button><button class="${keyBtn}" data-a="back">⌫</button></div><div class="grid grid-cols-3 gap-2"><button class="${keyAccent} border-slate-300 bg-slate-100 text-slate-700" data-a="close-purchase">Abbruch</button><button class="${keyBtn}" data-a="digit" data-v=",">,</button><button class="${keyAccent} border-emerald-600 bg-emerald-600 text-white" data-a="confirm-purchase">Übernehmen</button></div></div></div>`;
 }
 
 function renderDetail() {
@@ -632,7 +650,7 @@ async function onClick(e) {
     if (a === 'save-list') { await saveList(); return; }
     if (a === 'delete-list') { await deleteList(btn.dataset.id); return; }
     if (a === 'save-collab') { await saveCollaborator(); return; }
-    if (a === 'del-collab') { await deleteDoc(doc(sub(state.listId, 'permissions'), btn.dataset.id)); await logActivity('Mitbearbeiter entfernt', { userId: btn.dataset.id }); return; }
+    if (a === 'del-collab') { await deleteCollaborator(btn.dataset.id); return; }
     if (a === 'save-detail') { await saveDetailItem(); return; }
     if (a === 'move-detail') { await moveDetailItem(); return; }
     if (a === 'delete-detail-item') { await deleteDetailItem(); return; }
@@ -844,7 +862,7 @@ async function toggleStoreCategory(storeId, catId, checked) {
 
 async function createList() {
     const name = prompt('Name der neuen Einkaufsliste:'); if (!String(name || '').trim()) return;
-    const ref = doc(listsRef()); await setDoc(ref, { name: String(name).trim(), ownerId: uid(), ownerName: uname(), isPrivateSystemList: false, active: true, memberIds: [uid()], storeOrder: state.stores.map((s) => s.id), storeNotes: {}, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() }); state.listId = ref.id; await logActivity('Liste erstellt', { listId: ref.id, name: String(name).trim() });
+    const ref = doc(listsRef()); await setDoc(ref, { name: String(name).trim(), ownerId: uid(), ownerName: uname(), isPrivateSystemList: false, active: true, memberIds: [uid()], storeOrder: state.stores.map((s) => s.id), storeNotes: {}, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() }); state.listId = ref.id; persistListId(); await logActivity('Liste erstellt', { listId: ref.id, name: String(name).trim() });
 }
 
 async function saveList() {
@@ -852,8 +870,17 @@ async function saveList() {
 }
 
 async function deleteList(id) {
-    const list = state.lists.find((x) => x.id === id); if (!list || list.ownerId !== uid() || list.isPrivateSystemList) return; if (!confirm(`Liste "${list.name}" löschen?`)) return; await deleteDoc(listDoc(id)); if (state.listId === id) state.listId = null; }
+    const list = state.lists.find((x) => x.id === id); if (!list || list.ownerId !== uid() || list.isPrivateSystemList) return; if (!confirm(`Liste "${list.name}" löschen?`)) return; await deleteDoc(listDoc(id)); if (state.listId === id) state.listId = null; persistListId(); }
 
 async function saveCollaborator() {
     const list = activeList(); if (!list || list.ownerId !== uid() || list.isPrivateSystemList) return; const c = state.collab; if (!c.userId) return alertUser('Bitte Person auswählen.', 'error'); await setDoc(doc(sub(list.id, 'permissions'), c.userId), { listId: list.id, userId: c.userId, userName: USERS[c.userId]?.name || c.userId, accessFrom: fromLocal(c.accessFrom || dtLocal(new Date())), accessUntil: fromLocal(c.accessUntil || ''), canRead: !!c.canRead, canAdd: !!c.canAdd, canShop: !!c.canShop, canManage: !!c.canManage, canManageWrite: !!c.canManageWrite, paused: list.active === false, updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() }); await updateDoc(listDoc(list.id), { memberIds: Array.from(new Set([...(list.memberIds || []), c.userId])), updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() }); await logActivity('Mitbearbeiter gespeichert', { userId: c.userId });
+}
+
+async function deleteCollaborator(userId) {
+    const list = activeList();
+    if (!list || list.ownerId !== uid() || !userId) return;
+    await deleteDoc(doc(sub(list.id, 'permissions'), userId));
+    const memberIds = Array.from(new Set([...(list.memberIds || []).filter((id) => id !== userId), uid()]));
+    await updateDoc(listDoc(list.id), { memberIds, updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() });
+    await logActivity('Mitbearbeiter entfernt', { userId });
 }
