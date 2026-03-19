@@ -21,6 +21,8 @@ const AUTO_SCAN_MS = 5000;
 let root = null;
 let inited = false;
 let listUnsub = null;
+let ownListDocs = [];
+let sharedListDocs = [];
 let masterUnsubs = [];
 let activeUnsubs = [];
 let presenceTimer = null;
@@ -110,9 +112,12 @@ function ensureStyle() {
 
 function ensureRoot() {
     root = document.getElementById('einkaufsliste-root');
-    if (!root || root.dataset.ready === 'true') return;
+    if (!root) return;
+    if (!root.querySelector('#el-main')) {
+        root.innerHTML = '<div id="el-main" class="space-y-3"></div><div id="el-modepicker" class="elmodal"></div><div id="el-settings" class="elmodal"></div><div id="el-purchase" class="elmodal"></div><div id="el-detail" class="elmodal"></div><div id="el-article" class="elmodal"></div><div id="el-scanner" class="elmodal"></div><div id="el-unknown" class="elmodal"></div>';
+    }
+    if (root.dataset.ready === 'true') return;
     root.dataset.ready = 'true';
-    root.innerHTML = '<div id="el-main" class="space-y-3"></div><div id="el-modepicker" class="elmodal"></div><div id="el-settings" class="elmodal"></div><div id="el-purchase" class="elmodal"></div><div id="el-detail" class="elmodal"></div><div id="el-article" class="elmodal"></div><div id="el-scanner" class="elmodal"></div><div id="el-unknown" class="elmodal"></div>';
     root.addEventListener('click', onClick);
     root.addEventListener('input', onInput);
     root.addEventListener('change', onChange);
@@ -395,10 +400,13 @@ function selectList(nextId) {
 }
 
 function render() {
+    ensureRoot();
     if (!root) return;
+    const main = root.querySelector('#el-main');
+    if (!main) return;
     const list = activeList();
     const blocked = list && !canNow(list);
-    document.getElementById('el-main').innerHTML = `
+    main.innerHTML = `
         ${renderHeader(list)}
         ${state.mode === 'manage' ? renderManageSections() : ''}
         ${blocked ? '<div class="elc text-sm font-bold text-red-700 bg-red-50 border-red-200">Diese Liste ist sichtbar, aber außerhalb deiner Zugriffszeit aktuell gesperrt.</div>' : renderBody()}

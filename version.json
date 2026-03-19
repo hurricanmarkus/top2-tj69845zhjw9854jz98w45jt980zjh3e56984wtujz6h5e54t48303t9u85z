@@ -1,13 +1,22 @@
 {
-  "version": "1.2.3",
-  "buildId": "20260319-10",
+  "version": "1.2.4",
+  "buildId": "20260319-11",
   "releaseDate": "2026-03-19",
-  "releaseTime": "19:18",
+  "releaseTime": "19:35",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste-Fixes: Listen-Listener ohne OR-Query gehaertet, letzte Liste persistiert und Mengenmodal auf 4 Zeilen finalisiert.",
-  "commitId": "ce93fdd",
+  "note": "Einkaufsliste-Stabilitaet: Listener-State sauber definiert, Root-Wiederaufbau ergaenzt und render() gegen Nullzugriffe gehaertet.",
+  "commitId": "bb1e735",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.2.4",
+      "buildId": "20260319-11",
+      "releaseDate": "2026-03-19",
+      "releaseTime": "19:35",
+      "note": "Einkaufsliste-Stabilitaet: Listener-State sauber definiert, Root-Wiederaufbau ergaenzt und render() gegen Nullzugriffe gehaertet.",
+      "commitId": "bb1e735",
+      "obligation": "false"
+    },
     {
       "version": "1.2.3",
       "buildId": "20260319-10",
