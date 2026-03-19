@@ -1,6 +1,6 @@
 import { alertUser, appId, auth, currentUser, db, escapeHtml, GUEST_MODE, navigate, USERS } from './haupteingang.js';
 import { getUserSetting, saveUserSetting } from './log-InOut.js';
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, or, query, runTransaction, serverTimestamp, setDoc, Timestamp, updateDoc, where } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+import { addDoc, collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, or, query, runTransaction, serverTimestamp, setDoc, Timestamp, updateDoc, where } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
 const MODES = [{ id: 'add', label: 'Hinzufügemodus' }, { id: 'shop', label: 'Einkaufsmodus' }, { id: 'manage', label: 'Verwaltung' }];
 const MANAGE = [{ id: 'general', label: 'Allgemein' }, { id: 'stores', label: 'Geschäftewartung' }, { id: 'articles', label: 'Artikelwartung' }, { id: 'categories', label: 'Kategorienwartung' }, { id: 'remarks', label: 'Anmerkungswartung' }, { id: 'notes', label: 'Notizwartung' }];
@@ -23,6 +23,8 @@ let inited = false;
 let listUnsub = null;
 let ownListDocs = [];
 let sharedListDocs = [];
+let sharedListDocMap = new Map();
+let sharedListDocUnsubs = [];
 let masterUnsubs = [];
 let activeUnsubs = [];
 let presenceTimer = null;
@@ -197,6 +199,54 @@ function showInlineError(message) {
     if (main) main.innerHTML = `<div class="elc text-sm text-red-700">${escapeHtml(message)}</div>`;
 }
 
+function focusInputById(id, start = null, end = null) {
+    requestAnimationFrame(() => {
+        const input = root?.querySelector(`#${id}`);
+        if (!input) return;
+        input.focus({ preventScroll: true });
+        if (typeof input.setSelectionRange === 'function') {
+            const nextStart = Number.isInteger(start) ? start : input.value.length;
+            const nextEnd = Number.isInteger(end) ? end : nextStart;
+            input.setSelectionRange(nextStart, nextEnd);
+        }
+    });
+}
+
+function clearPermEntries(listId) {
+    Array.from(state.perms.keys()).filter((k) => k.startsWith(`${listId}:`)).forEach((k) => state.perms.delete(k));
+}
+
+function stopSharedListDocListeners() {
+    sharedListDocUnsubs.forEach((fn) => typeof fn === 'function' && fn());
+    sharedListDocUnsubs = [];
+    sharedListDocMap = new Map();
+    sharedListDocs = [];
+}
+
+function syncSharedListDocs(listIds) {
+    stopSharedListDocListeners();
+    const ownerIds = new Set(ownListDocs.map((d) => d.id));
+    const nextIds = Array.from(new Set((listIds || []).filter(Boolean))).filter((id) => !ownerIds.has(id));
+    if (!nextIds.length) {
+        applyListDocs([...ownListDocs]);
+        return;
+    }
+    nextIds.forEach((listId) => {
+        const unsub = onSnapshot(listDoc(listId), (snap) => {
+            if (snap.exists()) sharedListDocMap.set(listId, snap);
+            else sharedListDocMap.delete(listId);
+            sharedListDocs = Array.from(sharedListDocMap.values());
+            applyListDocs([...ownListDocs, ...sharedListDocs]);
+        }, (error) => {
+            reportListenerError(`listenLists:sharedDoc:${listId}`, error);
+            sharedListDocMap.delete(listId);
+            sharedListDocs = Array.from(sharedListDocMap.values());
+            applyListDocs([...ownListDocs, ...sharedListDocs]);
+        });
+        sharedListDocUnsubs.push(unsub);
+    });
+}
+
 function applyListDocs(docs) {
     const merged = new Map();
     docs.forEach((d) => merged.set(d.id, { id: d.id, ...d.data() }));
@@ -213,6 +263,8 @@ function subscribeLists() {
     if (listUnsub) listUnsub();
     ownListDocs = [];
     sharedListDocs = [];
+    sharedListDocMap = new Map();
+    stopSharedListDocListeners();
     const unsubs = [];
     unsubs.push(onSnapshot(query(listsRef(), where('ownerId', '==', uid())), (snap) => {
         ownListDocs = snap.docs;
@@ -227,15 +279,21 @@ function subscribeLists() {
         alertUser('Einkaufsliste konnte nicht geladen werden (listenLists). Bitte neu anmelden.', 'error');
         render();
     }));
-    unsubs.push(onSnapshot(query(listsRef(), where('memberIds', 'array-contains', uid())), (snap) => {
-        sharedListDocs = snap.docs.filter((d) => d.data()?.ownerId !== uid());
-        applyListDocs([...ownListDocs, ...sharedListDocs]);
+    unsubs.push(onSnapshot(query(collectionGroup(db, 'permissions'), where('userId', '==', uid())), (snap) => {
+        const sharedIds = snap.docs
+            .filter((d) => d.ref.path.includes('/einkaufsliste_lists/'))
+            .map((d) => d.data()?.listId || d.ref.parent?.parent?.id)
+            .filter(Boolean);
+        syncSharedListDocs(sharedIds);
     }, (error) => {
-        reportListenerError('listenLists:shared', error);
-        sharedListDocs = [];
+        reportListenerError('listenLists:sharedPermissions', error);
+        stopSharedListDocListeners();
         applyListDocs([...ownListDocs]);
     }));
-    listUnsub = () => unsubs.forEach((fn) => typeof fn === 'function' && fn());
+    listUnsub = () => {
+        unsubs.forEach((fn) => typeof fn === 'function' && fn());
+        stopSharedListDocListeners();
+    };
 }
 
 export function stopEinkaufslisteListeners() {
@@ -243,6 +301,8 @@ export function stopEinkaufslisteListeners() {
     listUnsub = null;
     ownListDocs = [];
     sharedListDocs = [];
+    sharedListDocMap = new Map();
+    stopSharedListDocListeners();
     stopMasters();
     stopActive();
     stopScanner();
@@ -306,7 +366,19 @@ function listenActiveList() {
     stopActive();
     const list = activeList();
     if (!list) return;
-    activeUnsubs.push(onSnapshot(sub(list.id, 'permissions'), (s) => { Array.from(state.perms.keys()).filter((k) => k.startsWith(`${list.id}:`)).forEach((k) => state.perms.delete(k)); s.docs.forEach((d) => state.perms.set(`${list.id}:${d.id}`, { listId: list.id, userId: d.id, ...d.data() })); render(); }, (error) => reportListenerError('listenActiveList:permissions', error)));
+    if (list.ownerId === uid()) {
+        activeUnsubs.push(onSnapshot(sub(list.id, 'permissions'), (s) => {
+            clearPermEntries(list.id);
+            s.docs.forEach((d) => state.perms.set(`${list.id}:${d.id}`, { listId: list.id, userId: d.id, ...d.data() }));
+            render();
+        }, (error) => reportListenerError('listenActiveList:permissions:owner', error)));
+    } else {
+        activeUnsubs.push(onSnapshot(doc(sub(list.id, 'permissions'), uid()), (s) => {
+            clearPermEntries(list.id);
+            if (s.exists()) state.perms.set(`${list.id}:${uid()}`, { listId: list.id, userId: uid(), ...s.data() });
+            render();
+        }, (error) => reportListenerError('listenActiveList:permissions:self', error)));
+    }
     activeUnsubs.push(onSnapshot(query(sub(list.id, 'items'), orderBy('createdAt', 'desc')), (s) => { state.items = s.docs.map((d) => ({ id: d.id, ...d.data(), storeIds: d.data().storeIds || [], eanCodes: d.data().eanCodes || [] })); render(); }, (error) => reportListenerError('listenActiveList:items', error)));
     activeUnsubs.push(onSnapshot(query(sub(list.id, 'presence'), orderBy('lastSeen', 'desc')), (s) => { state.presence = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((x) => Date.now() - (toDate(x.lastSeen)?.getTime() || 0) <= PRESENCE_MS); render(); }, (error) => reportListenerError('listenActiveList:presence', error)));
     activeUnsubs.push(onSnapshot(query(sub(list.id, 'activity'), orderBy('createdAt', 'desc'), limit(1)), (s) => { state.activity = s.docs[0] ? { id: s.docs[0].id, ...s.docs[0].data() } : null; render(); }, (error) => reportListenerError('listenActiveList:activity', error)));
@@ -475,7 +547,7 @@ function renderPurchase() {
     const delta = Number((Number(p.quantity || 0) - Number(p.target || 0)).toFixed(2));
     const keyBtn = 'rounded-2xl min-h-[3.25rem] border border-slate-300 bg-white text-lg font-black text-slate-800';
     const keyAccent = 'rounded-2xl min-h-[3.25rem] border text-base font-black';
-    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="space-y-1 text-center"><div class="text-xl font-black text-gray-900">${escapeHtml(p.title)}</div><div class="text-sm text-gray-500">${p.kind === 'scan' ? 'Scan-Erfassung' : 'Mengenübernahme'}</div></div><div class="elc space-y-3 bg-slate-50"><div class="text-xs font-bold uppercase text-gray-500 text-center">Menge</div><div class="flex min-h-[6.5rem] flex-col items-center justify-center text-center"><div class="text-5xl font-black leading-none text-indigo-700">${purchaseDisplayValue(p)}</div><div class="mt-2 text-base font-bold text-slate-500">${escapeHtml(p.unit)}</div></div>${p.target ? `<div class="text-sm text-center text-gray-600">Soll lt. Liste: ${fmtQty(p.target)} ${escapeHtml(p.unit)}</div>` : ''}${delta !== 0 ? `<div class="rounded-xl border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-bold text-orange-800 text-center">${delta > 0 ? `Achtung +${fmtQty(delta)} – übernehmen?` : `Achtung ${fmtQty(delta)} – übernehmen?`}</div>` : ''}</div><div class="space-y-2"><div class="grid grid-cols-4 gap-2"><button class="${keyBtn}" data-a="digit" data-v="7">7</button><button class="${keyBtn}" data-a="digit" data-v="8">8</button><button class="${keyBtn}" data-a="digit" data-v="9">9</button><button class="${keyAccent} border-indigo-200 bg-indigo-50 text-indigo-700" data-a="full">SOLL</button></div><div class="grid grid-cols-4 gap-2"><button class="${keyBtn}" data-a="digit" data-v="4">4</button><button class="${keyBtn}" data-a="digit" data-v="5">5</button><button class="${keyBtn}" data-a="digit" data-v="6">6</button><button class="${keyAccent} border-orange-200 bg-orange-50 text-orange-700" data-a="clear">C</button></div><div class="grid grid-cols-4 gap-2"><button class="${keyBtn}" data-a="digit" data-v="1">1</button><button class="${keyBtn}" data-a="digit" data-v="2">2</button><button class="${keyBtn}" data-a="digit" data-v="3">3</button><button class="${keyBtn}" data-a="back">⌫</button></div><div class="grid grid-cols-3 gap-2"><button class="${keyAccent} border-slate-300 bg-slate-100 text-slate-700" data-a="close-purchase">Abbruch</button><button class="${keyBtn}" data-a="digit" data-v=",">,</button><button class="${keyAccent} border-emerald-600 bg-emerald-600 text-white" data-a="confirm-purchase">Übernehmen</button></div></div></div>`;
+    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="space-y-1 text-center"><div class="text-xl font-black text-gray-900">${escapeHtml(p.title)}</div><div class="text-sm text-gray-500">${p.kind === 'scan' ? 'Scan-Erfassung' : 'Mengenübernahme'}</div></div><div class="elc space-y-3 bg-slate-50"><div class="text-xs font-bold uppercase text-gray-500 text-center">Menge</div><div class="flex min-h-[6.5rem] flex-col items-center justify-center text-center"><div class="text-5xl font-black leading-none text-indigo-700">${purchaseDisplayValue(p)}</div><div class="mt-2 text-base font-bold text-slate-500">${escapeHtml(p.unit)}</div></div>${p.target ? `<div class="text-sm text-center text-gray-600">Soll lt. Liste: ${fmtQty(p.target)} ${escapeHtml(p.unit)}</div>` : ''}${delta !== 0 ? `<div class="rounded-xl border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-bold text-orange-800 text-center">${delta > 0 ? `Achtung +${fmtQty(delta)} – übernehmen?` : `Achtung ${fmtQty(delta)} – übernehmen?`}</div>` : ''}</div><div class="space-y-2"><div class="grid grid-cols-4 gap-2"><button class="${keyBtn}" data-a="digit" data-v="7">7</button><button class="${keyBtn}" data-a="digit" data-v="8">8</button><button class="${keyBtn}" data-a="digit" data-v="9">9</button><button class="${keyAccent} border-indigo-200 bg-indigo-50 text-indigo-700" data-a="full">SOLL</button></div><div class="grid grid-cols-4 gap-2"><button class="${keyBtn}" data-a="digit" data-v="4">4</button><button class="${keyBtn}" data-a="digit" data-v="5">5</button><button class="${keyBtn}" data-a="digit" data-v="6">6</button><button class="${keyAccent} border-orange-200 bg-orange-50 text-orange-700" data-a="clear">C</button></div><div class="grid grid-cols-4 gap-2"><button class="${keyBtn}" data-a="digit" data-v="1">1</button><button class="${keyBtn}" data-a="digit" data-v="2">2</button><button class="${keyBtn}" data-a="digit" data-v="3">3</button><button class="${keyBtn}" data-a="back">⌫</button></div><div class="grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2"><div class="grid grid-cols-[7fr_3fr] gap-2"><button class="${keyAccent} border-slate-300 bg-slate-100 text-slate-700" data-a="close-purchase">Abbruch</button><button class="${keyBtn}" data-a="digit" data-v=",">,</button></div><button class="${keyBtn}" data-a="digit" data-v="0">0</button><button class="${keyAccent} border-emerald-600 bg-emerald-600 text-white" data-a="confirm-purchase">Übernehmen</button></div></div></div>`;
 }
 
 function renderDetail() {
@@ -557,8 +629,22 @@ function onInput(e) {
     if (t.id === 'el-q') state.q = t.value;
     if (t.id === 'el-title') state.title = t.value;
     if (t.id === 'el-note') state.note = t.value;
-    if (t.id === 'el-search') { state.search = t.value; render(); }
-    if (t.id === 'el-article-search') { state.articleSearch = t.value; render(); }
+    if (t.id === 'el-search') {
+        const start = t.selectionStart;
+        const end = t.selectionEnd;
+        state.search = t.value;
+        render();
+        focusInputById('el-search', start, end);
+        return;
+    }
+    if (t.id === 'el-article-search') {
+        const start = t.selectionStart;
+        const end = t.selectionEnd;
+        state.articleSearch = t.value;
+        render();
+        focusInputById('el-article-search', start, end);
+        return;
+    }
     if (t.id === 'el-draft-category') state.drafts.category = t.value;
     if (t.id === 'el-draft-store') state.drafts.store = t.value;
     if (t.id === 'el-draft-remark') state.drafts.remark = t.value;

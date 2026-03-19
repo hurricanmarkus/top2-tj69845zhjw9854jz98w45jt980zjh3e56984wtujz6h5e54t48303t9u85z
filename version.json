@@ -1,13 +1,22 @@
 {
-  "version": "1.2.4",
-  "buildId": "20260319-11",
+  "version": "1.2.5",
+  "buildId": "20260319-12",
   "releaseDate": "2026-03-19",
-  "releaseTime": "19:35",
+  "releaseTime": "19:52",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste-Stabilitaet: Listener-State sauber definiert, Root-Wiederaufbau ergaenzt und render() gegen Nullzugriffe gehaertet.",
-  "commitId": "bb1e735",
+  "note": "Einkaufsliste: Suchfeld-Fokus stabilisiert, Mengentastatur verfeinert und Shared-Listener plus Rules regelkonform umgebaut.",
+  "commitId": "f874708",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.2.5",
+      "buildId": "20260319-12",
+      "releaseDate": "2026-03-19",
+      "releaseTime": "19:52",
+      "note": "Einkaufsliste: Suchfeld-Fokus stabilisiert, Mengentastatur verfeinert und Shared-Listener plus Rules regelkonform umgebaut.",
+      "commitId": "f874708",
+      "obligation": "false"
+    },
     {
       "version": "1.2.4",
       "buildId": "20260319-11",

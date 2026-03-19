@@ -628,7 +628,14 @@ service cloud.firestore {
       allow delete: if hasEinkaufslisteActorId() && resource.data.ownerId == einkaufslisteActorId() && resource.data.isPrivateSystemList != true;
 
       match /permissions/{userId} {
-        allow read: if isEinkaufslisteOwner(listId) || (hasEinkaufslisteActorId() && userId == einkaufslisteActorId());
+        allow read: if isEinkaufslisteOwner(listId)
+          || (
+            hasEinkaufslisteActorId()
+            && (
+              userId == einkaufslisteActorId()
+              || (('userId' in resource.data) && resource.data.userId == einkaufslisteActorId())
+            )
+          );
         allow create, update, delete: if isEinkaufslisteOwner(listId);
       }
 
