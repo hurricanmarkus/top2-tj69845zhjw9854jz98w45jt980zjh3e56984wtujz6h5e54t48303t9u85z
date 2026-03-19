@@ -658,38 +658,38 @@ service cloud.firestore {
     }
 
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/einkaufsliste_master_categories/{categoryId} {
-      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
-      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
-      allow update: if hasAppUserIdClaim() && resource.data.createdBy == appUserId() && request.resource.data.createdBy == appUserId();
-      allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow read: if hasEinkaufslisteActorId() && resource.data.createdBy == einkaufslisteActorId();
+      allow create: if hasEinkaufslisteActorId() && request.resource.data.createdBy == einkaufslisteActorId();
+      allow update: if hasEinkaufslisteActorId() && resource.data.createdBy == einkaufslisteActorId() && request.resource.data.createdBy == einkaufslisteActorId();
+      allow delete: if hasEinkaufslisteActorId() && resource.data.createdBy == einkaufslisteActorId();
     }
 
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/einkaufsliste_master_stores/{storeId} {
-      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
-      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
-      allow update: if hasAppUserIdClaim() && resource.data.createdBy == appUserId() && request.resource.data.createdBy == appUserId();
-      allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow read: if hasEinkaufslisteActorId() && resource.data.createdBy == einkaufslisteActorId();
+      allow create: if hasEinkaufslisteActorId() && request.resource.data.createdBy == einkaufslisteActorId();
+      allow update: if hasEinkaufslisteActorId() && resource.data.createdBy == einkaufslisteActorId() && request.resource.data.createdBy == einkaufslisteActorId();
+      allow delete: if hasEinkaufslisteActorId() && resource.data.createdBy == einkaufslisteActorId();
     }
 
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/einkaufsliste_master_articles/{articleId} {
-      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
-      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
-      allow update: if hasAppUserIdClaim() && resource.data.createdBy == appUserId() && request.resource.data.createdBy == appUserId();
-      allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow read: if hasEinkaufslisteActorId() && resource.data.createdBy == einkaufslisteActorId();
+      allow create: if hasEinkaufslisteActorId() && request.resource.data.createdBy == einkaufslisteActorId();
+      allow update: if hasEinkaufslisteActorId() && resource.data.createdBy == einkaufslisteActorId() && request.resource.data.createdBy == einkaufslisteActorId();
+      allow delete: if hasEinkaufslisteActorId() && resource.data.createdBy == einkaufslisteActorId();
     }
 
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/einkaufsliste_master_notes/{noteId} {
-      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
-      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
-      allow update: if hasAppUserIdClaim() && resource.data.createdBy == appUserId() && request.resource.data.createdBy == appUserId();
-      allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow read: if hasEinkaufslisteActorId() && resource.data.createdBy == einkaufslisteActorId();
+      allow create: if hasEinkaufslisteActorId() && request.resource.data.createdBy == einkaufslisteActorId();
+      allow update: if hasEinkaufslisteActorId() && resource.data.createdBy == einkaufslisteActorId() && request.resource.data.createdBy == einkaufslisteActorId();
+      allow delete: if hasEinkaufslisteActorId() && resource.data.createdBy == einkaufslisteActorId();
     }
 
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/einkaufsliste_master_notizen/{noteId} {
-      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
-      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
-      allow update: if hasAppUserIdClaim() && resource.data.createdBy == appUserId() && request.resource.data.createdBy == appUserId();
-      allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow read: if hasEinkaufslisteActorId() && resource.data.createdBy == einkaufslisteActorId();
+      allow create: if hasEinkaufslisteActorId() && request.resource.data.createdBy == einkaufslisteActorId();
+      allow update: if hasEinkaufslisteActorId() && resource.data.createdBy == einkaufslisteActorId() && request.resource.data.createdBy == einkaufslisteActorId();
+      allow delete: if hasEinkaufslisteActorId() && resource.data.createdBy == einkaufslisteActorId();
     }
 
     // ═══════════════════════════════════════════════════════════════
