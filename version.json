@@ -1,13 +1,22 @@
 {
   "version": "1.1.0",
-  "buildId": "20260319-5",
+  "buildId": "20260319-6",
   "releaseDate": "2026-03-19",
-  "releaseTime": "18:00",
+  "releaseTime": "18:20",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste-Listener erhielten Fehlerhandler und Listen-Laden faellt jetzt bei Bedarf auf owner-only zurueck.",
-  "commitId": "dd766b1",
+  "note": "Einkaufsliste-Header auf App-Standard umgebaut: Zurueckleiste, Modus-Auswahl, Einstellungen und einklappbare Details ergaenzt.",
+  "commitId": "fd9ab03",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.1.0",
+      "buildId": "20260319-6",
+      "releaseDate": "2026-03-19",
+      "releaseTime": "18:20",
+      "note": "Einkaufsliste-Header auf App-Standard umgebaut: Zurueckleiste, Modus-Auswahl, Einstellungen und einklappbare Details ergaenzt.",
+      "commitId": "fd9ab03",
+      "obligation": "false"
+    },
     {
       "version": "1.1.0",
       "buildId": "20260319-5",

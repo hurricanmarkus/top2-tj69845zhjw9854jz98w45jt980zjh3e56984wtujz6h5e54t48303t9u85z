@@ -1,4 +1,4 @@
-import { alertUser, appId, auth, currentUser, db, escapeHtml, GUEST_MODE, USERS } from './haupteingang.js';
+import { alertUser, appId, auth, currentUser, db, escapeHtml, GUEST_MODE, navigate, USERS } from './haupteingang.js';
 import { getUserSetting, saveUserSetting } from './log-InOut.js';
 import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, or, query, runTransaction, serverTimestamp, setDoc, Timestamp, updateDoc, where } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
@@ -53,6 +53,8 @@ const state = {
     storeIds: [],
     search: '',
     settingsOpen: false,
+    detailsOpen: false,
+    modePickerOpen: false,
     purchase: null,
     detailId: null,
     articleEditor: null,
@@ -102,7 +104,7 @@ function ensureRoot() {
     root = document.getElementById('einkaufsliste-root');
     if (!root || root.dataset.ready === 'true') return;
     root.dataset.ready = 'true';
-    root.innerHTML = '<div id="el-main" class="space-y-3"></div><div id="el-settings" class="elmodal"></div><div id="el-purchase" class="elmodal"></div><div id="el-detail" class="elmodal"></div><div id="el-article" class="elmodal"></div><div id="el-scanner" class="elmodal"></div><div id="el-unknown" class="elmodal"></div>';
+    root.innerHTML = '<div id="el-main" class="space-y-3"></div><div id="el-modepicker" class="elmodal"></div><div id="el-settings" class="elmodal"></div><div id="el-purchase" class="elmodal"></div><div id="el-detail" class="elmodal"></div><div id="el-article" class="elmodal"></div><div id="el-scanner" class="elmodal"></div><div id="el-unknown" class="elmodal"></div>';
     root.addEventListener('click', onClick);
     root.addEventListener('input', onInput);
     root.addEventListener('change', onChange);
@@ -309,25 +311,52 @@ function groupedOpen() {
     return out.length ? out : [{ id: 'empty', label: 'Keine offenen Artikel', note: '', items: [] }];
 }
 
+function currentModeDef() {
+    return MODES.find((m) => m.id === state.mode) || MODES[0];
+}
+
+function renderListSelect() {
+    return `<div class="flex justify-center"><select id="el-list-select" class="els max-w-md text-center" ${state.lists.length ? '' : 'disabled'}>${state.lists.length ? state.lists.map((l) => `<option value="${l.id}" ${state.listId === l.id ? 'selected' : ''}>${escapeHtml(l.name || 'Liste')}</option>`).join('') : '<option value="">Keine Liste verfügbar</option>'}</select></div>`;
+}
+
+function renderDetailRows(list) {
+    if (!state.detailsOpen) return '';
+    const activityText = state.activity && Date.now() - (toDate(state.activity.createdAt)?.getTime() || 0) <= ACTIVITY_MS ? `${escapeHtml(state.activity.actorName || 'User')} · ${dt(state.activity.createdAt)} · ${escapeHtml(state.activity.text || '')}` : 'Keine aktuelle Aktivität.';
+    return `<div class="space-y-3"><div>${renderListSelect()}</div><div class="flex flex-wrap justify-between gap-2 items-start"><div class="flex flex-wrap gap-2 text-xs">${list ? `${list.ownerId === uid() ? chip('Owner', 'bg-indigo-100 text-indigo-700') : chip(permActive(perm()) ? 'freigegeben' : 'abgelaufen', permActive(perm()) ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700')} ${chip(`Letztes Update ${dt(list.updatedAt)}`)} ${chip(`Von ${escapeHtml(list.updatedByName || list.ownerName || '—')}`)}` : '<span class="text-sm text-gray-500">Bitte zuerst eine Liste auswählen.</span>'}</div>${list ? `<button class="elb bg-gray-100 text-gray-700" data-a="store-display">${state.storeDisplay === 'split' ? 'Nach Geschäft' : 'Kombiniert'}</button>` : ''}</div><div class="space-y-2 text-xs text-gray-600"><div>${list ? (state.presence.length ? state.presence.map((p) => chip(`${escapeHtml(p.userName || p.userId)} (${escapeHtml(p.currentArea || 'Liste')})`, 'bg-emerald-100 text-emerald-700')).join(' ') : '<span class="text-gray-400">Niemand sonst gerade aktiv.</span>') : '<span class="text-gray-400">Keine Liste ausgewählt.</span>'}</div><div class="font-semibold text-gray-600">${activityText}</div></div></div>`;
+}
+
+function renderHeader(list) {
+    return `<div class="elc space-y-3"><div class="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 items-center"><button class="elb bg-gray-100 text-gray-700" data-a="back-home">&lt; zurück</button><div class="flex justify-center"><button class="elb a w-full max-w-xs" data-a="open-mode-picker">${escapeHtml(currentModeDef().label)}</button></div><div class="flex justify-end"><button class="elb bg-gray-100 text-gray-700" data-a="open-settings">Einstellungen</button></div></div><div class="border-t border-gray-200 pt-3 space-y-3"><button class="w-full flex items-center justify-center gap-2 text-sm font-semibold text-gray-500" data-a="toggle-details"><span>Details</span><span>${state.detailsOpen ? '▴' : '▾'}</span></button>${renderDetailRows(list)}</div></div>`;
+}
+
+function renderManageSections() {
+    return `<div class="elc"><div class="elm justify-center">${MANAGE.map((s) => `<button class="elb ${state.section === s.id ? 'a' : 'bg-gray-100 text-gray-700'}" data-a="section" data-v="${s.id}">${s.label}</button>`).join('')}</div></div>`;
+}
+
+function selectList(nextId) {
+    const list = state.lists.find((x) => x.id === nextId);
+    if (!list) return;
+    if (list.ownerId !== uid() && !permActive(perm(list.id))) {
+        alertUser('Diese Liste ist außerhalb deiner Zugriffszeit gesperrt.', 'error');
+        return;
+    }
+    state.listId = nextId;
+    saveUserSetting(EL_LIST_KEY, state.listId);
+    listenActiveList();
+    render();
+}
+
 function render() {
     if (!root) return;
     const list = activeList();
     const blocked = list && !canNow(list);
     document.getElementById('el-main').innerHTML = `
-        <div class="elc space-y-3">
-            <div class="flex flex-wrap justify-between gap-2 items-center">
-                <div class="flex flex-wrap gap-2">${MODES.map((m) => `<button class="elb ${state.mode === m.id ? 'a' : 'bg-gray-100 text-gray-700'}" data-a="mode" data-v="${m.id}">${m.label}</button>`).join('')}</div>
-                <div class="flex flex-wrap gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="store-display">${state.storeDisplay === 'split' ? 'Nach Geschäft' : 'Kombiniert'}</button><button class="elb a" data-a="open-settings">⚙️ Einstellungen</button></div>
-            </div>
-            <div class="elm">${state.lists.map((l) => `<button class="elb ${state.listId === l.id ? 'a' : 'bg-gray-100 text-gray-700'}" data-a="list" data-id="${l.id}">${escapeHtml(ell(l.name, 18))}</button>`).join('')}</div>
-            ${state.mode === 'manage' ? `<div class="elm">${MANAGE.map((s) => `<button class="elb ${state.section === s.id ? 'a' : 'bg-gray-100 text-gray-700'}" data-a="section" data-v="${s.id}">${s.label}</button>`).join('')}</div>` : ''}
-        </div>
-        ${list ? `<div class="elc text-xs">${list.ownerId === uid() ? chip('Owner', 'bg-indigo-100 text-indigo-700') : chip(permActive(perm()) ? 'freigegeben' : 'abgelaufen', permActive(perm()) ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700')} ${chip(`Letztes Update ${dt(list.updatedAt)}`)} ${chip(`Von ${escapeHtml(list.updatedByName || list.ownerName || '—')}`)}</div>` : ''}
-        ${list ? `<div class="elc text-xs">${state.presence.length ? state.presence.map((p) => chip(`${escapeHtml(p.userName || p.userId)} (${escapeHtml(p.currentArea || 'Liste')})`, 'bg-emerald-100 text-emerald-700')).join(' ') : '<span class="text-gray-400">Niemand sonst gerade aktiv.</span>'}</div>` : ''}
-        <div class="elc text-xs font-semibold text-gray-600">${state.activity && Date.now() - (toDate(state.activity.createdAt)?.getTime() || 0) <= ACTIVITY_MS ? `${escapeHtml(state.activity.actorName || 'User')} · ${dt(state.activity.createdAt)} · ${escapeHtml(state.activity.text || '')}` : ' '}</div>
+        ${renderHeader(list)}
+        ${state.mode === 'manage' ? renderManageSections() : ''}
         ${blocked ? '<div class="elc text-sm font-bold text-red-700 bg-red-50 border-red-200">Diese Liste ist sichtbar, aber außerhalb deiner Zugriffszeit aktuell gesperrt.</div>' : renderBody()}
         ${renderChecked()}
     `;
+    renderModePicker();
     renderSettings();
     renderPurchase();
     renderDetail();
@@ -360,6 +389,14 @@ function renderChecked() {
     return `<div class="elc space-y-3"><div class="flex flex-wrap justify-between gap-2 items-center"><div class="font-black text-sm">Abgehackt-Liste</div><div class="text-xs font-bold text-gray-600">${done.length} erledigt</div></div>${done.length ? done.map((item) => `<div class="elitem border-t border-gray-100"><button class="text-left min-w-0" data-a="detail" data-id="${item.id}"><div class="font-bold text-sm text-gray-800 truncate">${escapeHtml(ell(item.title, 40))}</div><div class="text-xs text-gray-500 mt-1">Von ${escapeHtml(item.checkedByName || '—')} · ${dt(item.checkedAt)}</div></button><button class="elcheck" data-a="restore" data-id="${item.id}" title="2x schnell = wiederherstellen">↺</button></div>`).join('') : '<div class="py-2 text-sm text-gray-400">Noch nichts abgehakt.</div>'}</div>`;
 }
 
+function renderModePicker() {
+    const el = document.getElementById('el-modepicker');
+    if (!el) return;
+    el.className = `elmodal ${state.modePickerOpen ? 'o' : ''}`;
+    if (!state.modePickerOpen) { el.innerHTML = ''; return; }
+    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="text-xl font-black text-gray-900">Modus wählen</div><div class="text-sm text-gray-500">Bitte den gewünschten Arbeitsmodus auswählen.</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-mode-picker">Schließen</button></div><div class="space-y-2">${MODES.map((m) => `<button class="w-full rounded-2xl border p-3 text-left ${state.mode === m.id ? 'border-indigo-300 ring-2 ring-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white'}" data-a="mode" data-v="${m.id}"><div class="font-bold text-sm">${m.label}</div></button>`).join('')}</div></div>`;
+}
+
 function renderSettings() {
     const el = document.getElementById('el-settings');
     if (!el) return;
@@ -368,7 +405,7 @@ function renderSettings() {
     if (!state.settingsOpen) { el.innerHTML = ''; return; }
     const permissionEntries = state.listId ? Array.from(state.perms.values()).filter((p) => p.listId === state.listId).filter((p) => p.userId !== uid()) : [];
     const candidates = Object.values(USERS || {}).filter((u) => u.id !== uid() && u.name && u.permissionType !== 'not_registered');
-    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="text-xl font-black text-gray-900">Einkaufslisten verwalten</div><div class="text-sm text-gray-500">Privatliste ist fix, nicht umbenennbar und nicht teilbar.</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-settings">Schließen</button></div><div class="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]"><div class="elc space-y-3"><div class="flex flex-wrap justify-between gap-2 items-center"><div class="font-black text-sm">Listen</div><button class="elb a" data-a="create-list" ${!(currentUser.permissions || []).includes('EINKAUFSLISTE_CREATE') && currentUser.role !== 'SYSTEMADMIN' ? 'disabled' : ''}>+ Liste</button></div>${state.lists.map((l) => `<button class="w-full text-left rounded-2xl border p-3 ${state.listId === l.id ? 'ring-2 ring-indigo-500 border-indigo-300' : 'border-gray-200'}" data-a="list" data-id="${l.id}"><div class="font-bold text-sm">${escapeHtml(l.name)}</div><div class="text-xs text-gray-500">${l.isPrivateSystemList ? 'Privatliste' : 'Normale Liste'} · ${l.active !== false ? 'aktiv' : 'pausiert'}</div></button>`).join('')}</div><div class="space-y-4">${list ? `<div class="elc space-y-3"><div class="font-black text-sm">Allgemein</div><div class="grid gap-3 sm:grid-cols-2"><input id="el-set-name" class="eli" value="${escapeHtml(list.name || '')}" ${list.isPrivateSystemList || list.ownerId !== uid() ? 'disabled' : ''}><label class="inline-flex items-center gap-2 text-sm font-bold text-gray-700"><input type="checkbox" id="el-set-active" ${list.active !== false ? 'checked' : ''} ${list.isPrivateSystemList || list.ownerId !== uid() ? 'disabled' : ''}> aktiv</label></div>${list.ownerId === uid() && !list.isPrivateSystemList ? `<div class="flex flex-wrap gap-2"><button class="elb a" data-a="save-list">Liste speichern</button><button class="elb bg-red-600 text-white" data-a="delete-list" data-id="${list.id}">Liste löschen</button></div>` : ''}</div><div class="elc space-y-3"><div class="font-black text-sm">Mitbearbeiter</div>${list.ownerId === uid() && !list.isPrivateSystemList ? `<div class="space-y-3"><div class="grid gap-2 sm:grid-cols-3"><select id="el-c-user" class="els"><option value="">Person auswählen...</option>${candidates.map((u) => `<option value="${u.id}" ${state.collab.userId === u.id ? 'selected' : ''}>${escapeHtml(u.name)}</option>`).join('')}</select><input id="el-c-from" type="datetime-local" class="eli" value="${escapeHtml(state.collab.accessFrom)}"><input id="el-c-until" type="datetime-local" class="eli" value="${escapeHtml(state.collab.accessUntil)}"></div><div class="elm"><label>${'<input id="el-cr" type="checkbox" ' + (state.collab.canRead ? 'checked' : '') + '> Lesen'}</label><label>${'<input id="el-ca" type="checkbox" ' + (state.collab.canAdd ? 'checked' : '') + '> Hinzufügen'}</label><label>${'<input id="el-cs" type="checkbox" ' + (state.collab.canShop ? 'checked' : '') + '> Einkaufsmodus'}</label><label>${'<input id="el-cm" type="checkbox" ' + (state.collab.canManage ? 'checked' : '') + '> Verwaltung'}</label><label>${'<input id="el-cw" type="checkbox" ' + (state.collab.canManageWrite ? 'checked' : '') + '> Lesen/Bearbeiten'}</label></div><button class="elb a" data-a="save-collab">Freigabe speichern</button></div>` : '<div class="text-sm text-gray-500">Nur der Owner kann Freigaben verwalten.</div>'}${permissionEntries.map((p) => `<div class="rounded-2xl border border-gray-200 p-3"><div class="flex flex-wrap justify-between gap-2"><div><div class="font-bold text-sm">${escapeHtml(p.userName || USERS[p.userId]?.name || p.userId)}</div><div class="text-xs text-gray-500">Von ${dt(p.accessFrom)} · Bis ${p.accessUntil ? dt(p.accessUntil) : 'unbegrenzt'}</div><div class="mt-2 text-xs">${p.canRead ? chip('Lesen') : ''} ${p.canAdd ? chip('Hinzufügen', 'bg-indigo-100 text-indigo-700') : ''} ${p.canShop ? chip('Einkauf', 'bg-emerald-100 text-emerald-700') : ''} ${p.canManage ? chip('Verwaltung', 'bg-amber-100 text-amber-700') : ''} ${!permActive(p) ? chip('abgelaufen', 'bg-red-100 text-red-700') : ''}</div></div>${list.ownerId === uid() ? `<button class="elb bg-red-600 text-white" data-a="del-collab" data-id="${p.userId}">Entfernen</button>` : ''}</div></div>`).join('') || '<div class="text-sm text-gray-400">Keine Mitbearbeiter eingetragen.</div>'}</div>` : '<div class="elc text-sm text-gray-400">Keine Liste ausgewählt.</div>'}</div></div></div>`;
+    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="text-xl font-black text-gray-900">Einkaufslisten verwalten</div><div class="text-sm text-gray-500">Privatliste ist fix, nicht umbenennbar und nicht teilbar.</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-settings">Schließen</button></div><div class="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]"><div class="elc space-y-3"><div class="flex flex-wrap justify-between gap-2 items-center"><div class="font-black text-sm">Listen</div><button class="elb a" data-a="create-list" ${!(currentUser.permissions || []).includes('EINKAUFSLISTE_CREATE') && currentUser.role !== 'SYSTEMADMIN' ? 'disabled' : ''}>+ Liste</button></div>${state.lists.map((l) => `<button class="w-full text-left rounded-2xl border p-3 ${state.listId === l.id ? 'ring-2 ring-indigo-500 border-indigo-300' : 'border-gray-200'}" data-a="list" data-id="${l.id}"><div class="font-bold text-sm">${escapeHtml(l.name)}</div><div class="text-xs text-gray-500">${l.isPrivateSystemList ? 'Privatliste' : 'Normale Liste'} · ${l.active !== false ? 'aktiv' : 'pausiert'}</div></button>`).join('')}</div><div class="space-y-4">${list ? `<div class="elc space-y-3"><div class="font-black text-sm">Allgemein</div><div class="grid gap-3 sm:grid-cols-2"><input id="el-set-name" class="eli" value="${escapeHtml(list.name || '')}" ${list.isPrivateSystemList || list.ownerId !== uid() ? 'disabled' : ''}><label class="inline-flex items-center gap-2 text-sm font-bold text-gray-700"><input type="checkbox" id="el-set-active" ${list.active !== false ? 'checked' : ''} ${list.isPrivateSystemList || list.ownerId !== uid() ? 'disabled' : ''}> aktiv</label></div>${list.ownerId === uid() && !list.isPrivateSystemList ? `<div class="flex flex-wrap gap-2"><button class="elb a" data-a="save-list">Liste speichern</button><button class="elb bg-red-600 text-white" data-a="delete-list" data-id="${list.id}">Liste löschen</button></div>` : '<div class="text-sm text-gray-400">Nur der Listeninhaber kann diese Liste ändern.</div>'}</div><div class="elc space-y-3"><div class="font-black text-sm">Freigaben</div><div class="grid gap-2 sm:grid-cols-2"><select id="el-c-user" class="els"><option value="">Person wählen...</option>${candidates.map((u) => `<option value="${u.id}" ${state.collab.userId === u.id ? 'selected' : ''}>${escapeHtml(u.name)}</option>`).join('')}</select><input id="el-c-from" type="datetime-local" class="eli" value="${escapeHtml(state.collab.accessFrom || dtLocal(new Date()))}"></div><div class="grid gap-2 sm:grid-cols-2"><input id="el-c-until" type="datetime-local" class="eli" value="${escapeHtml(state.collab.accessUntil || '')}"><div class="elm"><label class="inline-flex items-center gap-1 text-xs font-bold text-gray-600"><input id="el-cr" type="checkbox" ${state.collab.canRead ? 'checked' : ''}> Lesen</label><label class="inline-flex items-center gap-1 text-xs font-bold text-gray-600"><input id="el-ca" type="checkbox" ${state.collab.canAdd ? 'checked' : ''}> Hinzufügen</label><label class="inline-flex items-center gap-1 text-xs font-bold text-gray-600"><input id="el-cs" type="checkbox" ${state.collab.canShop ? 'checked' : ''}> Einkaufen</label><label class="inline-flex items-center gap-1 text-xs font-bold text-gray-600"><input id="el-cm" type="checkbox" ${state.collab.canManage ? 'checked' : ''}> Verwalten</label><label class="inline-flex items-center gap-1 text-xs font-bold text-gray-600"><input id="el-cw" type="checkbox" ${state.collab.canManageWrite ? 'checked' : ''}> Schreibrechte</label></div></div><button class="elb a" data-a="save-collab" ${list.ownerId !== uid() || list.isPrivateSystemList ? 'disabled' : ''}>Freigabe speichern</button>${permissionEntries.length ? permissionEntries.map((p) => `<div class="rounded-2xl border border-gray-200 p-3"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="font-bold text-sm">${escapeHtml(p.userName || p.userId)}</div><div class="text-xs text-gray-500">${dt(p.accessFrom)} bis ${p.accessUntil ? dt(p.accessUntil) : 'offen'}</div></div><button class="elb bg-red-600 text-white" data-a="del-collab" data-id="${p.userId}" ${list.ownerId !== uid() || list.isPrivateSystemList ? 'disabled' : ''}>Entfernen</button></div></div>`).join('') : '<div class="text-sm text-gray-400">Noch keine Freigaben.</div>'}</div>` : '<div class="elc text-sm text-gray-400">Bitte zuerst eine Liste wählen.</div>'}</div></div></div>`;
 }
 
 function renderPurchase() {
@@ -413,6 +450,7 @@ function onInput(e) {
 function onChange(e) {
     const t = e.target;
     if (t.id === 'el-unit') state.unit = t.value;
+    if (t.id === 'el-list-select' && t.value) { selectList(t.value); return; }
     if (t.id === 'el-store-add' && t.value) { if (!state.storeIds.includes(t.value)) state.storeIds.push(t.value); t.value = ''; render(); }
     if (t.id === 'el-missing-ean') { state.missingEanOnly = t.checked; render(); }
     if (t.id === 'el-unknown-article') state.unknownArticleId = t.value;
@@ -446,10 +484,14 @@ async function onClick(e) {
     const btn = e.target.closest('[data-a]');
     if (!btn) return;
     const a = btn.dataset.a;
-    if (a === 'mode') { state.mode = btn.dataset.v; saveUserSetting(EL_MODE_KEY, state.mode); touchPresence(); render(); return; }
+    if (a === 'back-home') { navigate('home'); return; }
+    if (a === 'open-mode-picker') { state.modePickerOpen = true; render(); return; }
+    if (a === 'close-mode-picker') { state.modePickerOpen = false; render(); return; }
+    if (a === 'toggle-details') { state.detailsOpen = !state.detailsOpen; render(); return; }
+    if (a === 'mode') { state.mode = btn.dataset.v; state.modePickerOpen = false; saveUserSetting(EL_MODE_KEY, state.mode); touchPresence(); render(); return; }
     if (a === 'section') { state.section = btn.dataset.v; saveUserSetting(EL_SECTION_KEY, state.section); touchPresence(); render(); return; }
     if (a === 'store-display') { state.storeDisplay = state.storeDisplay === 'split' ? 'combined' : 'split'; saveUserSetting(EL_STORE_KEY, state.storeDisplay); render(); return; }
-    if (a === 'list') { const list = state.lists.find((x) => x.id === btn.dataset.id); if (list && list.ownerId !== uid() && !permActive(perm(list.id))) { alertUser('Diese Liste ist außerhalb deiner Zugriffszeit gesperrt.', 'error'); return; } state.listId = btn.dataset.id; saveUserSetting(EL_LIST_KEY, state.listId); listenActiveList(); render(); return; }
+    if (a === 'list') { selectList(btn.dataset.id); return; }
     if (a === 'open-settings') { state.settingsOpen = true; render(); return; }
     if (a === 'close-settings') { state.settingsOpen = false; render(); return; }
     if (a === 'del-store') { state.storeIds = state.storeIds.filter((x) => x !== btn.dataset.id); render(); return; }
