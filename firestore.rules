@@ -74,6 +74,96 @@ service cloud.firestore {
       return isAdminClaim && ((permType == 'individual') ? hasIndividualPerm : hasRolePerm);
     }
 
+    function hasEinkaufslisteActorId() {
+      return isAuthenticated() && ((request.auth.token != null && request.auth.token.appUserId != null) || request.auth.uid != null);
+    }
+
+    function einkaufslisteActorId() {
+      return hasAppUserIdClaim() ? appUserId() : request.auth.uid;
+    }
+
+    function einkaufslisteListPath(listId) {
+      return /databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/public/data/einkaufsliste_lists/$(listId);
+    }
+
+    function einkaufslistePermissionPath(listId, userId) {
+      return /databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/public/data/einkaufsliste_lists/$(listId)/permissions/$(userId);
+    }
+
+    function einkaufslisteListData(listId) {
+      return get(einkaufslisteListPath(listId)).data;
+    }
+
+    function einkaufslistePermissionData(listId) {
+      return get(einkaufslistePermissionPath(listId, einkaufslisteActorId())).data;
+    }
+
+    function isEinkaufslisteOwner(listId) {
+      return hasEinkaufslisteActorId() && exists(einkaufslisteListPath(listId)) && einkaufslisteListData(listId).ownerId == einkaufslisteActorId();
+    }
+
+    function isEinkaufslisteMember(listId) {
+      return hasEinkaufslisteActorId() && exists(einkaufslisteListPath(listId)) && einkaufslisteActorId() in einkaufslisteListData(listId).memberIds;
+    }
+
+    function hasEinkaufslistePermissionDoc(listId) {
+      return hasEinkaufslisteActorId() && exists(einkaufslistePermissionPath(listId, einkaufslisteActorId()));
+    }
+
+    function isEinkaufslistePermissionActive(listId) {
+      return hasEinkaufslistePermissionDoc(listId)
+        && (!('paused' in einkaufslistePermissionData(listId)) || einkaufslistePermissionData(listId).paused != true)
+        && (!('accessFrom' in einkaufslistePermissionData(listId)) || request.time >= einkaufslistePermissionData(listId).accessFrom)
+        && (!('accessUntil' in einkaufslistePermissionData(listId)) || request.time <= einkaufslistePermissionData(listId).accessUntil);
+    }
+
+    function canReadEinkaufslisteList(listId) {
+      return isEinkaufslisteOwner(listId) || isEinkaufslisteMember(listId);
+    }
+
+    function canAccessEinkaufslisteList(listId) {
+      return isEinkaufslisteOwner(listId)
+        || (hasEinkaufslistePermissionDoc(listId)
+          && einkaufslistePermissionData(listId).canRead == true
+          && isEinkaufslistePermissionActive(listId)
+          && einkaufslisteListData(listId).active != false);
+    }
+
+    function canCreateEinkaufslisteList() {
+      return hasEinkaufslisteActorId();
+    }
+
+    function canAddEinkaufslisteItems(listId) {
+      return isEinkaufslisteOwner(listId)
+        || (hasEinkaufslistePermissionDoc(listId)
+          && einkaufslistePermissionData(listId).canAdd == true
+          && isEinkaufslistePermissionActive(listId)
+          && einkaufslisteListData(listId).active != false);
+    }
+
+    function canShopEinkaufsliste(listId) {
+      return isEinkaufslisteOwner(listId)
+        || (hasEinkaufslistePermissionDoc(listId)
+          && einkaufslistePermissionData(listId).canShop == true
+          && isEinkaufslistePermissionActive(listId)
+          && einkaufslisteListData(listId).active != false);
+    }
+
+    function canManageEinkaufsliste(listId) {
+      return isEinkaufslisteOwner(listId)
+        || (hasEinkaufslistePermissionDoc(listId)
+          && einkaufslistePermissionData(listId).canManage == true
+          && isEinkaufslistePermissionActive(listId));
+    }
+
+    function canManageWriteEinkaufsliste(listId) {
+      return isEinkaufslisteOwner(listId)
+        || (hasEinkaufslistePermissionDoc(listId)
+          && einkaufslistePermissionData(listId).canManage == true
+          && einkaufslistePermissionData(listId).canManageWrite == true
+          && isEinkaufslistePermissionActive(listId));
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // BENUTZERVERWALTUNG (User Management)
     // ═══════════════════════════════════════════════════════════════
@@ -516,6 +606,86 @@ service cloud.firestore {
     }
 
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/sendungen_anbieter/{anbieterId} {
+      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
+      allow update: if hasAppUserIdClaim() && resource.data.createdBy == appUserId() && request.resource.data.createdBy == appUserId();
+      allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/einkaufsliste_lists/{listId} {
+      allow read: if canReadEinkaufslisteList(listId);
+      allow create: if canCreateEinkaufslisteList()
+        && request.resource.data.ownerId == einkaufslisteActorId()
+        && request.resource.data.memberIds is list
+        && einkaufslisteActorId() in request.resource.data.memberIds;
+      allow update: if isEinkaufslisteOwner(listId)
+        && request.resource.data.ownerId == resource.data.ownerId;
+      allow delete: if isEinkaufslisteOwner(listId) && resource.data.isPrivateSystemList != true;
+
+      match /permissions/{userId} {
+        allow read: if isEinkaufslisteOwner(listId) || (hasEinkaufslisteActorId() && userId == einkaufslisteActorId());
+        allow create, update, delete: if isEinkaufslisteOwner(listId);
+      }
+
+      match /items/{itemId} {
+        allow read: if canAccessEinkaufslisteList(listId);
+        allow create: if canAddEinkaufslisteItems(listId) || canShopEinkaufsliste(listId);
+        allow update, delete: if canAddEinkaufslisteItems(listId) || canShopEinkaufsliste(listId);
+      }
+
+      match /presence/{presenceId} {
+        allow read: if canAccessEinkaufslisteList(listId);
+        allow create, update: if canAccessEinkaufslisteList(listId) && hasEinkaufslisteActorId() && presenceId == einkaufslisteActorId();
+        allow delete: if canAccessEinkaufslisteList(listId) && hasEinkaufslisteActorId() && presenceId == einkaufslisteActorId();
+      }
+
+      match /activity/{activityId} {
+        allow read: if canAccessEinkaufslisteList(listId);
+        allow create: if canAccessEinkaufslisteList(listId);
+        allow update, delete: if false;
+      }
+
+      match /locks/{itemId} {
+        allow read: if canAccessEinkaufslisteList(listId);
+        allow create, update, delete: if canShopEinkaufsliste(listId) || canAddEinkaufslisteItems(listId);
+      }
+
+      match /audit/{auditId} {
+        allow read: if canAccessEinkaufslisteList(listId);
+        allow create: if canAccessEinkaufslisteList(listId);
+        allow update, delete: if false;
+      }
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/einkaufsliste_master_categories/{categoryId} {
+      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
+      allow update: if hasAppUserIdClaim() && resource.data.createdBy == appUserId() && request.resource.data.createdBy == appUserId();
+      allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/einkaufsliste_master_stores/{storeId} {
+      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
+      allow update: if hasAppUserIdClaim() && resource.data.createdBy == appUserId() && request.resource.data.createdBy == appUserId();
+      allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/einkaufsliste_master_articles/{articleId} {
+      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
+      allow update: if hasAppUserIdClaim() && resource.data.createdBy == appUserId() && request.resource.data.createdBy == appUserId();
+      allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/einkaufsliste_master_notes/{noteId} {
+      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
+      allow update: if hasAppUserIdClaim() && resource.data.createdBy == appUserId() && request.resource.data.createdBy == appUserId();
+      allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/einkaufsliste_master_notizen/{noteId} {
       allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
       allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
       allow update: if hasAppUserIdClaim() && resource.data.createdBy == appUserId() && request.resource.data.createdBy == appUserId();

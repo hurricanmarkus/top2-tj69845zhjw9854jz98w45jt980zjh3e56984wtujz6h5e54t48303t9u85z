@@ -36,6 +36,7 @@ import { initializeHaushaltszahlungen, listenForHaushaltszahlungen, stopHaushalt
 import { initializeAbbuchungsberechner, stopAbbuchungsberechnerListeners } from './abbuchungsberechner2.js';
 import { initializeGeschenkemanagement, listenForGeschenke, stopGeschenkemanagementListeners } from './geschenkemanagement.js';
 import { initializeSendungsverwaltungView, listenForSendungen, stopSendungsverwaltungListeners } from './sendungsverwaltung.js';
+import { initializeEinkaufsliste, stopEinkaufslisteListeners } from './einkaufsliste.js';
 import { ensureNachrichtencenterSelfContact } from './notfall.js';
 import { initializeNotizen, stopNotizenListeners } from './notizen.js';
 import { initializeMitarbeiterkarte, stopMitarbeiterkarteListeners } from './ma-karte.js';
@@ -80,7 +81,11 @@ export const PERMISSIONS_CONFIG = {
     'ABBUCHUNGSBERECHNER': { label: 'Abbuchungsberechner', indent: false },
     'ABBUCHUNGSBERECHNER_CREATE': { label: '-> Neuen Eintrag anlegen', indent: true },
     'GESCHENKEMANAGEMENT': { label: 'Geschenkemanagement', indent: false },
-    'GESCHENKEMANAGEMENT_CREATE': { label: '-> Neues Geschenk anlegen', indent: true }
+    'GESCHENKEMANAGEMENT_CREATE': { label: '-> Neues Geschenk anlegen', indent: true },
+    'EINKAUFSLISTE': { label: 'Einkaufsliste', indent: false },
+    'EINKAUFSLISTE_CREATE': { label: '-> Neue Liste anlegen', indent: true },
+    'EINKAUFSLISTE_MANAGE': { label: '-> Verwaltung öffnen', indent: true },
+    'EINKAUFSLISTE_MANAGE_WRITE': { label: '-> -> Verwaltung bearbeiten', indent: true },
 };
 
 // BEGINN-ZIKA: LET-BEFEHLE IMMER NACH IMPORT-BEFEHLE //
@@ -178,7 +183,8 @@ export const views = {
     rezepte: { id: 'rezepteView' },
     haushaltszahlungen: { id: 'haushaltszahlungenView' },
     abbuchungsberechner: { id: 'abbuchungsberechnerView' },
-    geschenkemanagement: { id: 'geschenkemanagementView' }
+    geschenkemanagement: { id: 'geschenkemanagementView' },
+    einkaufsliste: { id: 'einkaufslisteView' },
 };
 const viewElements = Object.fromEntries(Object.keys(views).map(key => [key + 'View', document.getElementById(views[key].id)]));
 
@@ -217,6 +223,9 @@ export function stopAllUserDependentListeners(resetMode = false) {
     }
     if (typeof stopHaushaltszahlungenListeners === 'function') {
         stopHaushaltszahlungenListeners();
+    }
+    if (typeof stopEinkaufslisteListeners === 'function') {
+        stopEinkaufslisteListeners();
     }
     if (typeof stopAbbuchungsberechnerListeners === 'function') {
         stopAbbuchungsberechnerListeners();
@@ -1469,9 +1478,6 @@ async function initializeFirebase() {
 
 
             // --- URL PRÜFUNG (ZAHLUNGSVERWALTUNG GAST LINK) ---
-            // HIER WAR DER BUG: Es wurde nur auf guestId geprüft.
-            // FIX: Wir prüfen, ob guestId da ist UND KEIN voteId da ist.
-
             if (guestId && !voteId) {
                 console.log("Gast-Link (Zahlungsverwaltung) erkannt! Starte Gast-Ansicht...");
                 // Wir importieren die Funktion dynamisch, um Zyklen zu vermeiden oder rufen sie direkt auf wenn verfügbar
@@ -1493,12 +1499,6 @@ async function initializeFirebase() {
     }
 }
 
-
-
-
-
-
-
 // --- HIER ENDET DIE FUNKTION ZUM ERSETZEN ---
 async function seedInitialData() {
     try {
@@ -1507,9 +1507,9 @@ async function seedInitialData() {
         if (rolesSnapshot.empty) {
             const batch = writeBatch(db);
             const defaultRoles = {
-                SYSTEMADMIN: { name: 'Systemadmin', permissions: ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG', 'TOOLS', 'ZAHLUNGSVERWALTUNG', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG', 'REZEPTE'], deletable: false },
-                ADMIN: { name: 'Admin', permissions: ['ENTRANCE', 'PUSHOVER', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG', 'REZEPTE'], deletable: false },
-                ANGEMELDET: { name: 'Angemeldet', permissions: ['ENTRANCE', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG', 'REZEPTE'], deletable: true },
+                SYSTEMADMIN: { name: 'Systemadmin', permissions: ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG', 'TOOLS', 'ZAHLUNGSVERWALTUNG', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG', 'REZEPTE', 'EINKAUFSLISTE', 'EINKAUFSLISTE_CREATE', 'EINKAUFSLISTE_MANAGE', 'EINKAUFSLISTE_MANAGE_WRITE'], deletable: false },
+                ADMIN: { name: 'Admin', permissions: ['ENTRANCE', 'PUSHOVER', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG', 'REZEPTE', 'EINKAUFSLISTE', 'EINKAUFSLISTE_CREATE', 'EINKAUFSLISTE_MANAGE', 'EINKAUFSLISTE_MANAGE_WRITE'], deletable: false },
+                ANGEMELDET: { name: 'Angemeldet', permissions: ['ENTRANCE', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG', 'REZEPTE', 'EINKAUFSLISTE'], deletable: true },
                 NO_RIGHTS: { name: '- Keine Rechte -', permissions: [], deletable: false }
             };
             Object.keys(defaultRoles).forEach(roleId => batch.set(doc(rolesCollectionRef, roleId), defaultRoles[roleId]));
@@ -1527,24 +1527,35 @@ async function seedInitialData() {
             if (systemAdminRoleSnap.exists()) {
                 const roleData = systemAdminRoleSnap.data() || {};
                 const rolePerms = Array.isArray(roleData.permissions) ? roleData.permissions : [];
-                if (!rolePerms.includes('TOOLS')) {
-                    await updateDoc(systemAdminRoleDoc, { permissions: [...rolePerms, 'TOOLS'] });
+                const requiredSystemPerms = ['TOOLS', 'EINKAUFSLISTE', 'EINKAUFSLISTE_CREATE', 'EINKAUFSLISTE_MANAGE', 'EINKAUFSLISTE_MANAGE_WRITE'];
+                const nextSystemPerms = Array.from(new Set([...rolePerms, ...requiredSystemPerms]));
+                if (nextSystemPerms.length !== rolePerms.length) {
+                    await updateDoc(systemAdminRoleDoc, { permissions: nextSystemPerms });
                 }
             }
-        }
 
-        // --- 2. Admin-Rollenprüfung und -erstellung ---
-        const adminRolesSnapshot = await getDocs(adminRolesCollectionRef);
-        const emptyRoleDoc = doc(adminRolesCollectionRef, 'LEERE_ROLLE');
-        const emptyRoleSnapshot = await getDoc(emptyRoleDoc);
-        if (!emptyRoleSnapshot.exists()) {
-            await setDoc(emptyRoleDoc, { name: '** Leere Rolle**', permissions: {}, deletable: false });
-        }
+            const adminRoleDoc = doc(rolesCollectionRef, 'ADMIN');
+            const adminRoleSnap = await getDoc(adminRoleDoc);
+            if (adminRoleSnap.exists()) {
+                const roleData = adminRoleSnap.data() || {};
+                const rolePerms = Array.isArray(roleData.permissions) ? roleData.permissions : [];
+                const requiredAdminPerms = ['EINKAUFSLISTE', 'EINKAUFSLISTE_CREATE', 'EINKAUFSLISTE_MANAGE', 'EINKAUFSLISTE_MANAGE_WRITE'];
+                const nextAdminPerms = Array.from(new Set([...rolePerms, ...requiredAdminPerms]));
+                if (nextAdminPerms.length !== rolePerms.length) {
+                    await updateDoc(adminRoleDoc, { permissions: nextAdminPerms });
+                }
+            }
 
-        // --- 3. Benutzerprüfung und -erstellung ---
-        const usersSnapshot = await getDocs(usersCollectionRef);
-        if (usersSnapshot.empty) {
-            await setDoc(doc(usersCollectionRef, 'SYSTEMADMIN'), { name: 'Systemadmin', key: 'top2sys', role: 'SYSTEMADMIN', isActive: true });
+            const angemeldetRoleDoc = doc(rolesCollectionRef, 'ANGEMELDET');
+            const angemeldetRoleSnap = await getDoc(angemeldetRoleDoc);
+            if (angemeldetRoleSnap.exists()) {
+                const roleData = angemeldetRoleSnap.data() || {};
+                const rolePerms = Array.isArray(roleData.permissions) ? roleData.permissions : [];
+                const nextAngemeldetPerms = Array.from(new Set([...rolePerms, 'EINKAUFSLISTE']));
+                if (nextAngemeldetPerms.length !== rolePerms.length) {
+                    await updateDoc(angemeldetRoleDoc, { permissions: nextAngemeldetPerms });
+                }
+            }
         }
     } catch (error) {
         console.error("SCHWERER FEHLER in seedInitialData (Datenbank-Setup):", error);
@@ -2697,6 +2708,11 @@ export function navigate(targetViewName, options = {}) {
             return alertUser("Zugriff verweigert (Haushaltszahlungen).", 'error');
         }
 
+        // Zugriffsschutz für Einkaufsliste
+        if (targetViewName === 'einkaufsliste' && !userPermissions.includes('EINKAUFSLISTE')) {
+            return alertUser("Zugriff verweigert (Einkaufsliste).", 'error');
+        }
+
         // Zugriffsschutz für Abbuchungsberechner
         if (targetViewName === 'abbuchungsberechner' && !userPermissions.includes('ABBUCHUNGSBERECHNER')) {
             return alertUser("Zugriff verweigert (Abbuchungsberechner).", 'error');
@@ -2793,6 +2809,10 @@ export function navigate(targetViewName, options = {}) {
 
     if (targetViewName === 'haushaltszahlungen') {
         initializeHaushaltszahlungen();
+    }
+
+    if (targetViewName === 'einkaufsliste') {
+        initializeEinkaufsliste();
     }
 
     if (targetViewName === 'abbuchungsberechner') {
@@ -3765,6 +3785,9 @@ export function setupEventListeners() {
 
     const haushaltszahlungenCard = document.getElementById('haushaltszahlungenCard');
     if (haushaltszahlungenCard) haushaltszahlungenCard.addEventListener('click', () => navigate('haushaltszahlungen'));
+
+    const einkaufslisteCard = document.getElementById('einkaufslisteCard');
+    if (einkaufslisteCard) einkaufslisteCard.addEventListener('click', () => navigate('einkaufsliste'));
 
     const abbuchungsberechnerCard = document.getElementById('abbuchungsberechnerCard');
     if (abbuchungsberechnerCard) abbuchungsberechnerCard.addEventListener('click', () => navigate('abbuchungsberechner'));

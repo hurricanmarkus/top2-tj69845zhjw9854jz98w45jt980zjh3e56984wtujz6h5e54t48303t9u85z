@@ -322,7 +322,11 @@ export async function checkCurrentUserValidity() {
                 'CHECKLIST_SWITCH',
                 'CHECKLIST_SETTINGS',
                 'ESSENSBERECHNUNG',
-                'TOOLS'
+                'TOOLS',
+                'EINKAUFSLISTE',
+                'EINKAUFSLISTE_CREATE',
+                'EINKAUFSLISTE_MANAGE',
+                'EINKAUFSLISTE_MANAGE_WRITE'
             ];
         }
 

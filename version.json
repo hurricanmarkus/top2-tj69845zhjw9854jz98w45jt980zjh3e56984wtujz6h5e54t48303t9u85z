@@ -1,13 +1,22 @@
 {
-  "version": "1.0.7",
-  "buildId": "20260318-4",
-  "releaseDate": "2026-03-18",
-  "releaseTime": "10:17",
+  "version": "1.1.0",
+  "buildId": "20260319-1",
+  "releaseDate": "2026-03-19",
+  "releaseTime": "16:43",
   "timezone": "Europe/Vienna",
-  "note": "Neue Buchungen/Loeschungen setzen Verifizierungsstatus von Transaktionen und Restwert zurueck; Update-Installation zeigt grosse Prozentanzeige und Spinner.",
-  "commitId": "173aee8",
+  "note": "Einkaufsliste als neues Live-Modul integriert: Shell, Rechteverwaltung, Firestore-Regeln und PWA-Versionierung vervollstaendigt.",
+  "commitId": "ba9e840",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.1.0",
+      "buildId": "20260319-1",
+      "releaseDate": "2026-03-19",
+      "releaseTime": "16:43",
+      "note": "Einkaufsliste als neues Live-Modul integriert: Shell, Rechteverwaltung, Firestore-Regeln und PWA-Versionierung vervollstaendigt.",
+      "commitId": "ba9e840",
+      "obligation": "false"
+    },
     {
       "version": "1.0.7",
       "buildId": "20260318-4",

@@ -146,7 +146,17 @@ export function setupPermissionDependencies(container) {
         ]
     );
 
-    // 9. NEU: Logik für NOTIZEN (Hauptansicht -> Anlegen)
+    // 9. NEU: Logik für EINKAUFSLISTE (Hauptansicht -> Unterrechte)
+    setupToggleLogic(
+        '[data-perm="EINKAUFSLISTE"]',
+        [
+            '[data-perm="EINKAUFSLISTE_CREATE"]',
+            '[data-perm="EINKAUFSLISTE_MANAGE"]',
+            '[data-perm="EINKAUFSLISTE_MANAGE_WRITE"]'
+        ]
+    );
+
+    // 10. NEU: Logik für NOTIZEN (Hauptansicht -> Anlegen)
     setupToggleLogic(
         '[data-perm="NOTIZEN"]',
         [

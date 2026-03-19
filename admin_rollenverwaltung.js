@@ -187,6 +187,7 @@ export function renderRoleManagement() {
             const isZahlungsverwaltungEnabled = role.permissions?.includes('ZAHLUNGSVERWALTUNG');
             const isHaushaltszahlungenEnabled = role.permissions?.includes('HAUSHALTSZAHLUNGEN');
             const isGeschenkemanagementEnabled = role.permissions?.includes('GESCHENKEMANAGEMENT');
+            const isEinkaufslisteEnabled = role.permissions?.includes('EINKAUFSLISTE');
             
             permissionsCheckboxesHTML = Object.keys(PERMISSIONS_CONFIG).map(permKey => {
                 const perm = PERMISSIONS_CONFIG[permKey];
@@ -212,6 +213,9 @@ export function renderRoleManagement() {
                     isDisabled = true;
                 }
                 if (permKey.startsWith('GESCHENKEMANAGEMENT_') && !isGeschenkemanagementEnabled) {
+                    isDisabled = true;
+                }
+                if (permKey.startsWith('EINKAUFSLISTE_') && !isEinkaufslisteEnabled) {
                     isDisabled = true;
                 }
                 
@@ -270,6 +274,8 @@ export function renderRoleManagement() {
         setupPair('ZAHLUNGSVERWALTUNG', ['ZAHLUNGSVERWALTUNG_CREATE']);
         setupPair('HAUSHALTSZAHLUNGEN', ['HAUSHALTSZAHLUNGEN_CREATE']);
         setupPair('GESCHENKEMANAGEMENT', ['GESCHENKEMANAGEMENT_CREATE']);
+        setupPair('EINKAUFSLISTE', ['EINKAUFSLISTE_CREATE', 'EINKAUFSLISTE_MANAGE', 'EINKAUFSLISTE_MANAGE_WRITE']);
+        setupPair('EINKAUFSLISTE_MANAGE', ['EINKAUFSLISTE_MANAGE_WRITE']);
     };
 
     userRolesList.querySelectorAll('.p-3.border').forEach(card => setupCheckboxDependencies(card));
