@@ -74,6 +74,7 @@ const state = {
     scanLastAt: 0,
     unknownCode: '',
     unknownArticleId: '',
+    dragStoreCategory: null,
     collab: { userId: '', accessFrom: '', accessUntil: '', canRead: true, canAdd: false, canShop: false, canManage: false, canManageWrite: false },
     lastTap: new Map(),
     missingEanOnly: false,
@@ -116,6 +117,7 @@ function ensureStyle() {
     const s = document.createElement('style');
     s.id = 'el-style';
     s.textContent = '.elc{background:#fff;border:1px solid #e5e7eb;border-radius:1rem;padding:.8rem;box-shadow:0 10px 24px rgba(15,23,42,.06)}.elb{border-radius:.8rem;padding:.5rem .75rem;font-size:.78rem;font-weight:800}.elb.a{background:linear-gradient(135deg,#4338ca,#6d28d9);color:#fff}.eli,.els,.elt{width:100%;border:1px solid #d1d5db;border-radius:.8rem;background:#fff;padding:.62rem .75rem;font-size:.83rem}.elt{min-height:82px;resize:vertical}.elm{display:flex;flex-wrap:wrap;gap:.45rem;align-items:center}.elitem{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.6rem;align-items:start;padding:.72rem 0}.elcheck{width:2.25rem;height:2.25rem;border-radius:.8rem;border:1px solid #cbd5e1;background:#fff;font-weight:900}.elmodal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:center;justify-content:center;padding:.8rem;z-index:120}.elmodal.o{display:flex}.elpanel{width:min(100%,760px);max-height:92vh;overflow:auto;background:#fff;border-radius:1.2rem;box-shadow:0 24px 60px rgba(15,23,42,.28)}.elkey{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.45rem}.elkey button{border-radius:.8rem;min-height:2.35rem;border:1px solid #d1d5db;background:#f8fafc;font-weight:800}.elcam{background:#020617;border-radius:1rem;overflow:hidden;position:relative;aspect-ratio:4/3}.elcam video{width:100%;height:100%;object-fit:cover}.elcam:after{content:"";position:absolute;inset:14%;border:3px solid rgba(255,255,255,.85);border-radius:1rem}.elstat{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem}.elstat>div{background:#f8fafc;border:1px solid #e5e7eb;border-radius:.85rem;padding:.55rem}@media(max-width:480px){.elstat{grid-template-columns:repeat(2,minmax(0,1fr))}}';
+    s.textContent += '.elitem{padding:.56rem 0}.elstorecat-row{touch-action:none}.elstorecat-row.dragging{opacity:.58;transform:scale(.985)}.elstorecat-row.drop-before{box-shadow:inset 0 4px 0 #6366f1}.elstorecat-row.drop-after{box-shadow:inset 0 -4px 0 #6366f1}.elchipbtn{display:inline-flex;align-items:center;justify-content:center;width:1rem;height:1rem;border-radius:999px;background:rgba(255,255,255,.7);font-size:.72rem;font-weight:900;line-height:1;margin-left:.15rem}';
     document.head.appendChild(s);
 }
 
@@ -131,10 +133,11 @@ function ensureRoot() {
     root.addEventListener('input', onInput);
     root.addEventListener('change', onChange);
     root.addEventListener('keydown', onKeyDownActive);
+    root.addEventListener('pointermove', onPointerMoveActive);
     root.addEventListener('pointerdown', onDown);
-    root.addEventListener('pointerup', clearHold);
-    root.addEventListener('pointerleave', clearHold);
-    root.addEventListener('pointercancel', clearHold);
+    root.addEventListener('pointerup', finalizePointerState);
+    root.addEventListener('pointerleave', finalizePointerState);
+    root.addEventListener('pointercancel', finalizePointerState);
 }
 
 async function seedDefaults() {
@@ -523,7 +526,7 @@ function updateScannerDynamicUi() {
     if (status) status.textContent = state.scanStatus || '';
     const collected = document.getElementById('el-scan-collected');
     if (collected) {
-        collected.innerHTML = state.scanCodes.length ? state.scanCodes.map((code) => chip(escapeHtml(code), 'bg-indigo-100 text-indigo-700')).join(' ') : '<span class="text-sm text-gray-400">Noch keine Codes erfasst.</span>';
+        collected.innerHTML = state.scanCodes.length ? state.scanCodes.map((code) => chip(`${escapeHtml(code)} <button type="button" class="elchipbtn" data-a="remove-scanned-code" data-id="${escapeHtml(code)}">×</button>`, 'bg-indigo-100 text-indigo-700')).join(' ') : '<span class="text-sm text-gray-400">Noch keine Codes erfasst.</span>';
     }
     const okButton = root?.querySelector('[data-a="save-scanned-codes"]');
     if (okButton) okButton.disabled = !state.scanCodes.length;
@@ -535,6 +538,7 @@ function openStoreCategoryEditor(storeId) {
     const store = state.stores.find((s) => s.id === storeId);
     if (!store) return;
     state.storeCategoryEditor = { storeId, categoryOrder: [...(store.categoryOrder || [])] };
+    state.dragStoreCategory = null;
     render();
 }
 
@@ -542,7 +546,7 @@ function toggleStoreCategoryDraft(catId) {
     if (!state.storeCategoryEditor) return;
     const has = state.storeCategoryEditor.categoryOrder.includes(catId);
     state.storeCategoryEditor.categoryOrder = has ? state.storeCategoryEditor.categoryOrder.filter((id) => id !== catId) : [...state.storeCategoryEditor.categoryOrder, catId];
-    renderStoreCategoryEditor();
+    renderStoreCategoryEditorActive();
 }
 
 function moveStoreCategoryDraft(catId, dir) {
@@ -553,7 +557,53 @@ function moveStoreCategoryDraft(catId, dir) {
     if (index < 0 || next < 0 || next >= order.length) return;
     [order[index], order[next]] = [order[next], order[index]];
     state.storeCategoryEditor.categoryOrder = order;
-    renderStoreCategoryEditor();
+    renderStoreCategoryEditorActive();
+}
+
+function reorderStoreCategoryDraft(dragId, targetId, after = false) {
+    if (!state.storeCategoryEditor || !dragId || !targetId || dragId === targetId) return;
+    const order = state.storeCategoryEditor.categoryOrder.filter((id) => id !== dragId);
+    const index = order.indexOf(targetId);
+    if (index < 0) {
+        order.push(dragId);
+    } else {
+        order.splice(index + (after ? 1 : 0), 0, dragId);
+    }
+    state.storeCategoryEditor.categoryOrder = order;
+}
+
+function beginStoreCategoryDrag(catId) {
+    if (!state.storeCategoryEditor || !catId) return;
+    state.dragStoreCategory = { id: catId, overId: catId, after: false };
+    renderStoreCategoryEditorActive();
+}
+
+function updateStoreCategoryDrag(clientX, clientY) {
+    const drag = state.dragStoreCategory;
+    if (!drag) return;
+    const row = document.elementFromPoint(clientX, clientY)?.closest('[data-store-category-row]');
+    if (!row) return;
+    const overId = row.dataset.id || '';
+    const rect = row.getBoundingClientRect();
+    const after = clientY > rect.top + (rect.height / 2);
+    if (drag.overId === overId && drag.after === after) return;
+    state.dragStoreCategory = { ...drag, overId, after };
+    renderStoreCategoryEditorActive();
+}
+
+function finishStoreCategoryDrag() {
+    const drag = state.dragStoreCategory;
+    if (!drag) return;
+    reorderStoreCategoryDraft(drag.id, drag.overId, drag.after);
+    state.dragStoreCategory = null;
+    renderStoreCategoryEditorActive();
+}
+
+function removeScannedCodeActive(code) {
+    state.scanCodes = state.scanCodes.filter((entry) => entry !== code);
+    state.scanStatus = state.scanCodes.length ? `${state.scanCodes.length} Code(s) erfasst.` : 'Noch keine Codes erfasst.';
+    updateScannerDynamicUi();
+    focusInputById('el-scan-manual');
 }
 
 function renderListSelect() {
@@ -571,6 +621,12 @@ function renderHeader(list) {
     const listBoxText = list?.name || 'Keine Liste';
     const listMeta = list ? `${list.ownerId === uid() ? 'Privat/Owner' : 'Freigegeben'} · ${list.active !== false ? 'aktiv' : 'pausiert'}` : 'Bitte zuerst eine Liste auswählen';
     return `<div class="space-y-3"><div class="border-b border-slate-200 pb-3"><div class="flex flex-wrap items-center justify-between gap-3"><button class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-700 shadow-sm" data-a="back-home">← Zurück</button><div class="min-w-0 flex-1"><div class="text-xl font-black text-indigo-700">Einkaufsliste</div><div class="text-sm text-gray-500">Listen verwalten, einkaufen und EANs pflegen.</div></div></div></div><div class="elc"><div class="flex flex-wrap items-center justify-between gap-2"><button class="elb a" data-a="open-mode-picker">${escapeHtml(currentModeDef().label)}</button><button class="elb bg-gray-100 text-gray-700" data-a="toggle-details">Details ${state.detailsOpen ? '▴' : '▾'}</button></div></div><div class="${state.mode === 'shop' ? 'grid gap-2 lg:grid-cols-[minmax(220px,320px)_minmax(0,1fr)] items-start' : 'space-y-2'}"><div class="elc !p-3"><div class="text-[11px] font-bold uppercase tracking-wide text-gray-500">Aktive Liste</div><div class="mt-1 inline-flex max-w-full items-center rounded-full border-2 px-4 py-1.5 text-sm font-bold shadow-sm ${listBoxClass}">${escapeHtml(listBoxText)}</div><div class="mt-2 text-xs font-semibold text-gray-500">${escapeHtml(listMeta)}</div></div>${state.mode === 'shop' ? `<div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2"><input id="el-search" class="eli" placeholder="Suchen oder scannen..." value="${escapeHtml(state.search)}"><button class="elb a" data-a="open-scan">📷</button></div>` : ''}</div>${state.detailsOpen ? `<div class="elc">${renderDetailRows(list)}</div>` : ''}</div>`;
+}
+
+function renderHeaderActive(list) {
+    const listBoxClass = list ? (list.ownerId === uid() ? 'border-indigo-500 text-indigo-700 bg-indigo-50' : 'border-emerald-500 text-emerald-700 bg-emerald-50') : 'border-slate-300 text-slate-500 bg-slate-50';
+    const listBoxText = list?.name || 'Keine Liste';
+    return `<div class="space-y-3"><div class="border-b border-slate-200 pb-3"><div class="min-w-0"><div class="text-2xl font-black tracking-tight text-slate-900">Einkaufsliste</div><div class="text-sm text-slate-500">Listen verwalten, einkaufen und EANs pflegen.</div></div></div><div class="elc"><div class="flex flex-wrap items-center justify-between gap-2"><button class="elb a" data-a="open-mode-picker">${escapeHtml(currentModeDef().label)}</button><button class="elb bg-gray-100 text-gray-700" data-a="toggle-details">Details ${state.detailsOpen ? '▴' : '▾'}</button></div></div><div class="${state.mode === 'shop' ? 'grid gap-2 lg:grid-cols-[minmax(200px,280px)_minmax(0,1fr)] items-start' : 'space-y-2'}"><div class="min-w-0"><div class="inline-flex max-w-full items-center rounded-2xl border-2 px-4 py-2 text-sm font-black shadow-sm ${listBoxClass}">${escapeHtml(listBoxText)}</div></div>${state.mode === 'shop' ? `<div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2"><input id="el-search" class="eli" placeholder="Suchen oder scannen..." value="${escapeHtml(state.search)}"><button class="elb a" data-a="open-scan">📷</button></div>` : ''}</div>${state.detailsOpen ? `<div class="elc">${renderDetailRows(list)}</div>` : ''}</div>`;
 }
 
 function renderManageSections() {
@@ -598,16 +654,16 @@ function render() {
     const list = activeList();
     const blocked = list && !canNow(list);
     main.innerHTML = `
-        ${renderHeader(list)}
+        ${renderHeaderActive(list)}
         ${state.mode === 'manage' ? renderManageSections() : ''}
-        ${blocked ? '<div class="elc text-sm font-bold text-red-700 bg-red-50 border-red-200">Diese Liste ist sichtbar, aber außerhalb deiner Zugriffszeit aktuell gesperrt.</div>' : renderBody()}
+        ${blocked ? '<div class="elc text-sm font-bold text-red-700 bg-red-50 border-red-200">Diese Liste ist sichtbar, aber außerhalb deiner Zugriffszeit aktuell gesperrt.</div>' : renderBodyActive()}
         ${state.mode === 'manage' ? '' : renderChecked()}
     `;
     renderModePicker();
     renderSettings();
     renderPurchase();
     renderDetail();
-    renderStoreCategoryEditor();
+    renderStoreCategoryEditorActive();
     renderArticle();
     renderScannerActive();
     renderUnknown();
@@ -625,6 +681,20 @@ function renderBody() {
     if (state.section === 'categories') return `<div class="space-y-3"><div class="elc flex flex-wrap gap-2"><input id="el-draft-category" class="eli" placeholder="Neue Kategorie" value="${escapeHtml(state.drafts.category)}"><button class="elb a" data-a="add-category" ${!canManageWrite() ? 'disabled' : ''}>+ Kategorie</button></div>${state.categories.map((c) => `<div class="elc flex flex-wrap justify-between gap-2"><div class="font-bold text-sm">${escapeHtml(c.name)}</div><button class="elb bg-red-600 text-white" data-a="del-category" data-id="${c.id}" ${!canManageWrite() ? 'disabled' : ''}>Löschen</button></div>`).join('')}</div>`;
     if (state.section === 'remarks') return `<div class="space-y-3"><div class="elc flex flex-wrap gap-2"><input id="el-draft-remark" class="eli" placeholder="Häufige Anmerkung" value="${escapeHtml(state.drafts.remark)}"><button class="elb a" data-a="add-remark" ${!canManageWrite() ? 'disabled' : ''}>+ Anmerkung</button></div>${state.remarks.map((n) => `<div class="elc flex flex-wrap justify-between gap-2"><div class="font-bold text-sm">${escapeHtml(n.text || n.name || '')}</div><button class="elb bg-red-600 text-white" data-a="del-remark" data-id="${n.id}" ${!canManageWrite() ? 'disabled' : ''}>Löschen</button></div>`).join('') || '<div class="elc text-sm text-gray-400">Keine Anmerkungen.</div>'}</div>`;
     return `<div class="space-y-3"><div class="elc flex flex-wrap gap-2"><input id="el-draft-note" class="eli" placeholder="Meta-Notiz" value="${escapeHtml(state.drafts.note)}"><button class="elb a" data-a="add-note" ${!canManageWrite() ? 'disabled' : ''}>+ Notiz</button></div>${state.notes.map((n) => `<div class="elc flex flex-wrap justify-between gap-2"><div class="font-bold text-sm">${escapeHtml(n.text || n.name || '')}</div><button class="elb bg-red-600 text-white" data-a="del-note" data-id="${n.id}" ${!canManageWrite() ? 'disabled' : ''}>Löschen</button></div>`).join('') || '<div class="elc text-sm text-gray-400">Keine Notizen.</div>'}</div>`;
+}
+
+function renderBodyActive() {
+    const list = activeList();
+    if (!list) return '<div class="elc text-sm text-gray-500">Bitte zuerst eine Liste auswählen.</div>';
+    if (state.mode === 'add') return renderBody();
+    if (state.mode === 'shop') {
+        return `<div class="space-y-2">${groupedOpen().map((g) => `<div class="elc !p-3 space-y-1.5"><div class="flex flex-wrap justify-between gap-2 items-center"><div class="font-black text-sm">${escapeHtml(g.label)}</div><div class="text-[11px] font-bold text-gray-600">${g.items.length} offen</div></div>${g.note ? `<div class="text-xs rounded-xl border border-orange-300 bg-orange-50 px-3 py-1.5 text-orange-800">${escapeHtml(g.note)}</div>` : ''}${g.items.length ? g.items.map(renderItem).join('') : '<div class="py-2 text-sm text-gray-400">Keine offenen Artikel.</div>'}</div>`).join('') || '<div class="elc text-sm text-gray-400">Keine Artikel gefunden.</div>'}</div>`;
+    }
+    if (!canManage()) return '<div class="elc text-sm text-red-700">Keine Verwaltungsberechtigung für diese Liste.</div>';
+    if (state.section === 'stores') {
+        return `<div class="space-y-3"><div class="elc flex flex-wrap gap-2"><input id="el-draft-store" class="eli" placeholder="Neues Geschäft" value="${escapeHtml(state.drafts.store)}"><button class="elb a" data-a="add-store" ${!canManageWrite() ? 'disabled' : ''}>+ Geschäft</button></div>${(activeList()?.storeOrder?.length ? activeList().storeOrder : state.stores.map((s) => s.id)).map((id, i, arr) => { const s = state.stores.find((x) => x.id === id); if (!s) return ''; const categoryNames = (s.categoryOrder || []).map((catId) => state.categories.find((c) => c.id === catId)?.name).filter(Boolean); return `<div class="elc space-y-2"><div class="flex flex-wrap justify-between gap-2 items-start"><div><div class="font-bold text-sm">${escapeHtml(s.name)}</div><div class="text-xs text-gray-500">${categoryNames.length ? `${categoryNames.length} Kategorie(n) für Sortierung gewählt` : 'Noch keine Kategorien ausgewählt'}</div></div><div class="flex flex-wrap gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="store-up" data-id="${s.id}" ${i === 0 || !canManageWrite() ? 'disabled' : ''}>↑</button><button class="elb bg-gray-100 text-gray-700" data-a="store-down" data-id="${s.id}" ${i === arr.length - 1 || !canManageWrite() ? 'disabled' : ''}>↓</button><button class="elb bg-indigo-100 text-indigo-700" data-a="open-store-categories" data-id="${s.id}" ${!canManageWrite() ? 'disabled' : ''}>Kategorienwartung</button><button class="elb bg-red-600 text-white" data-a="del-store-master" data-id="${s.id}" ${!canManageWrite() ? 'disabled' : ''}>Löschen</button></div></div><div class="flex flex-wrap items-center gap-1.5 text-xs">${categoryNames.length ? categoryNames.map((name, index) => `${index ? '<span class="font-black text-slate-400">→</span>' : ''}${chip(escapeHtml(name), 'bg-indigo-100 text-indigo-700')}`).join(' ') : '<span class="text-xs text-gray-400">Keine Kategorien sortiert.</span>'}</div></div>`; }).join('')}</div>`;
+    }
+    return renderBody();
 }
 
 function renderItem(item) {
@@ -651,6 +721,19 @@ function renderStoreCategoryEditor() {
     el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="text-xl font-black text-gray-900">Kategorienwartung</div><div class="text-sm text-gray-500">${escapeHtml(store?.name || 'Geschäft')} sortiert die Anzeige im Einkaufsmodus.</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-store-categories">Schließen</button></div><div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"><div class="elc space-y-2"><div class="text-sm font-black text-gray-900">Verfügbare Kategorien</div>${available.length ? available.map((c) => `<label class="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"><input type="checkbox" data-a="toggle-store-category" data-id="${c.id}"> ${escapeHtml(c.name)}</label>`).join('') : '<div class="text-sm text-gray-400">Alle Kategorien sind bereits ausgewählt.</div>'}</div><div class="elc space-y-2"><div class="text-sm font-black text-gray-900">Ausgewählte Reihenfolge</div>${selected.length ? selected.map((c, index) => `<div class="flex items-center justify-between gap-2 rounded-2xl border border-indigo-100 bg-indigo-50 px-3 py-2"><div class="text-sm font-bold text-indigo-900">${index + 1}. ${escapeHtml(c.name)}</div><div class="flex gap-2"><button class="elb bg-white text-gray-700" data-a="store-category-up" data-id="${c.id}" ${index === 0 ? 'disabled' : ''}>↑</button><button class="elb bg-white text-gray-700" data-a="store-category-down" data-id="${c.id}" ${index === selected.length - 1 ? 'disabled' : ''}>↓</button><button class="elb bg-red-100 text-red-700" data-a="toggle-store-category" data-id="${c.id}">Entfernen</button></div></div>`).join('') : '<div class="text-sm text-gray-400">Noch keine Kategorie gewählt.</div>'}</div></div><div class="flex flex-wrap justify-end gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="close-store-categories">Abbruch</button><button class="elb bg-emerald-600 text-white" data-a="save-store-categories">Speichern</button></div></div>`;
 }
 
+function renderStoreCategoryEditorActive() {
+    const el = document.getElementById('el-storecat');
+    if (!el) return;
+    const editor = state.storeCategoryEditor;
+    el.className = `elmodal ${editor ? 'o' : ''}`;
+    if (!editor) { el.innerHTML = ''; return; }
+    const store = state.stores.find((s) => s.id === editor.storeId);
+    const selected = editor.categoryOrder.map((catId) => state.categories.find((c) => c.id === catId)).filter(Boolean);
+    const available = state.categories.filter((c) => !editor.categoryOrder.includes(c.id));
+    const drag = state.dragStoreCategory;
+    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="text-xl font-black text-gray-900">Kategorienwartung</div><div class="text-sm text-gray-500">${escapeHtml(store?.name || 'Geschäft')} sortiert die Anzeige im Einkaufsmodus.</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-store-categories">Schließen</button></div><div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"><div class="elc space-y-2"><div class="text-sm font-black text-gray-900">Verfügbare Kategorien</div>${available.length ? available.map((c) => `<label class="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"><input type="checkbox" data-a="toggle-store-category" data-id="${c.id}"> ${escapeHtml(c.name)}</label>`).join('') : '<div class="text-sm text-gray-400">Alle Kategorien sind bereits ausgewählt.</div>'}</div><div class="elc space-y-2"><div class="flex items-center justify-between gap-2"><div class="text-sm font-black text-gray-900">Ausgewählte Reihenfolge</div><div class="text-xs font-semibold text-slate-400">Ziehen zum Sortieren</div></div>${selected.length ? selected.map((c, index) => { const dropClass = drag?.overId === c.id ? (drag.after ? ' drop-after' : ' drop-before') : ''; const draggingClass = drag?.id === c.id ? ' dragging' : ''; return `<div class="elstorecat-row flex items-center justify-between gap-2 rounded-2xl border border-indigo-100 bg-indigo-50 px-3 py-2${dropClass}${draggingClass}" data-store-category-row data-id="${c.id}"><div class="flex items-center gap-3 min-w-0"><button type="button" class="cursor-grab rounded-xl border border-indigo-200 bg-white px-2 py-1 text-base font-black text-indigo-700" data-drag-store-category data-id="${c.id}" aria-label="Kategorie ziehen">↕</button><div class="text-sm font-bold text-indigo-900">${index + 1}. ${escapeHtml(c.name)}</div></div><div class="flex gap-2"><button class="elb bg-white text-gray-700" data-a="store-category-up" data-id="${c.id}" ${index === 0 ? 'disabled' : ''}>↑</button><button class="elb bg-white text-gray-700" data-a="store-category-down" data-id="${c.id}" ${index === selected.length - 1 ? 'disabled' : ''}>↓</button><button class="elb bg-red-100 text-red-700" data-a="toggle-store-category" data-id="${c.id}">Entfernen</button></div></div>`; }).join('') : '<div class="text-sm text-gray-400">Noch keine Kategorie gewählt.</div>'}</div></div><div class="flex flex-wrap justify-end gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="close-store-categories">Abbruch</button><button class="elb bg-emerald-600 text-white" data-a="save-store-categories">Speichern</button></div></div>`;
+}
+
 function renderScannerActive() {
     const el = document.getElementById('el-scanner');
     if (!el) return;
@@ -658,7 +741,7 @@ function renderScannerActive() {
     if (!state.scanOpen) { el.innerHTML = ''; stopScanner(); return; }
     const article = state.articles.find((a) => a.id === state.scanArticleId);
     const isArticleMode = state.scanMode === 'article-ean';
-    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="text-xl font-black text-gray-900">${isArticleMode ? `EAN zuordnen: ${escapeHtml(article?.title || 'Artikel')}` : 'Scanner'}</div><div class="text-sm text-gray-500">${isArticleMode ? 'Mehrere Codes können gesammelt und gemeinsam gespeichert werden.' : 'Barcode + QR live, ohne Refresh.'}</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-scan">Schließen</button></div><div class="elcam"><video id="el-video" autoplay playsinline muted></video></div><div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"><input id="el-scan-manual" class="eli" placeholder="${isArticleMode ? 'EAN/QR eingeben oder per Scanner senden' : 'EAN/QR manuell eingeben'}"><button class="elb a" data-a="manual-scan">${isArticleMode ? 'Code hinzufügen' : 'Code übernehmen'}</button></div><div id="el-scan-status" class="text-sm text-gray-500">${escapeHtml(state.scanStatus || 'Kamera wird gestartet...')}</div>${isArticleMode ? `<div class="elc space-y-2"><div class="text-xs font-bold uppercase text-gray-500">Erfasste Codes</div><div id="el-scan-collected" class="elm">${state.scanCodes.length ? state.scanCodes.map((code) => chip(escapeHtml(code), 'bg-indigo-100 text-indigo-700')).join(' ') : '<span class="text-sm text-gray-400">Noch keine Codes erfasst.</span>'}</div></div><div class="flex flex-wrap justify-end gap-2"><button class="elb bg-emerald-600 text-white" data-a="save-scanned-codes" ${state.scanCodes.length ? '' : 'disabled'}>OK</button><button class="elb bg-indigo-600 text-white" data-a="save-scanned-codes-next" ${state.scanCodes.length && nextMissingEanArticle(state.scanArticleId) ? '' : 'disabled'}>Nächsten Artikel ohne EAN</button></div>` : ''}</div>`;
+    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="text-xl font-black text-gray-900">${isArticleMode ? `EAN zuordnen: ${escapeHtml(article?.title || 'Artikel')}` : 'Scanner'}</div><div class="text-sm text-gray-500">${isArticleMode ? 'Mehrere Codes können gesammelt und gemeinsam gespeichert werden.' : 'Barcode + QR live, ohne Refresh.'}</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-scan">Schließen</button></div><div class="elcam"><video id="el-video" autoplay playsinline muted></video></div><div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"><input id="el-scan-manual" class="eli" placeholder="${isArticleMode ? 'EAN/QR eingeben oder per Scanner senden' : 'EAN/QR manuell eingeben'}"><button class="elb a" data-a="manual-scan">${isArticleMode ? 'Code hinzufügen' : 'Code übernehmen'}</button></div><div id="el-scan-status" class="text-sm text-gray-500">${escapeHtml(state.scanStatus || 'Kamera wird gestartet...')}</div>${isArticleMode ? `<div class="elc space-y-2"><div class="text-xs font-bold uppercase text-gray-500">Erfasste Codes</div><div id="el-scan-collected" class="elm">${state.scanCodes.length ? state.scanCodes.map((code) => chip(`${escapeHtml(code)} <button type="button" class="elchipbtn" data-a="remove-scanned-code" data-id="${escapeHtml(code)}">×</button>`, 'bg-indigo-100 text-indigo-700')).join(' ') : '<span class="text-sm text-gray-400">Noch keine Codes erfasst.</span>'}</div></div><div class="flex flex-wrap justify-end gap-2"><button class="elb bg-emerald-600 text-white" data-a="save-scanned-codes" ${state.scanCodes.length ? '' : 'disabled'}>OK</button><button class="elb bg-indigo-600 text-white" data-a="save-scanned-codes-next" ${state.scanCodes.length && nextMissingEanArticle(state.scanArticleId) ? '' : 'disabled'}>Nächsten Artikel ohne EAN</button></div>` : ''}</div>`;
     startScannerActive();
     focusInputById('el-scan-manual');
 }
@@ -821,7 +904,17 @@ function onChange(e) {
     if (t.id === 'el-cw') state.collab.canManageWrite = t.checked;
 }
 
+function onPointerMoveActive(e) {
+    updateStoreCategoryDrag(e.clientX, e.clientY);
+}
+
 function onDown(e) {
+    const dragHandle = e.target.closest('[data-drag-store-category]');
+    if (dragHandle) {
+        e.preventDefault();
+        beginStoreCategoryDrag(dragHandle.dataset.id);
+        return;
+    }
     const itemHold = e.target.closest('[data-hold-item]');
     if (itemHold) {
         holdPayload = { action: 'edit-item', id: itemHold.dataset.holdItem };
@@ -835,6 +928,11 @@ function onDown(e) {
 }
 
 function clearHold() { if (holdTimer) clearTimeout(holdTimer); holdTimer = null; holdPayload = null; }
+
+function finalizePointerState() {
+    clearHold();
+    finishStoreCategoryDrag();
+}
 
 function onHold(payload) {
     holdConsumedKey = `${payload.action}:${payload.id}`;
@@ -934,6 +1032,7 @@ async function onClickActive(e) {
     if (a === 'manual-scan') { await submitScannerManualInputActive(); return; }
     if (a === 'save-scanned-codes') { await saveScannedCodesActive(false); return; }
     if (a === 'save-scanned-codes-next') { await saveScannedCodesActive(true); return; }
+    if (a === 'remove-scanned-code') { removeScannedCodeActive(btn.dataset.id); return; }
     if (a === 'close-unknown') { state.unknownCode = ''; state.unknownArticleId = ''; render(); return; }
     if (a === 'save-unknown') { await saveUnknownCode(); return; }
     if (a === 'open-article') { state.articleEditor = { title: '', defaultQuantity: 1, defaultUnit: 'Stück', categoryId: '', eanCodes: [], variants: [], persistentNotes: [], storeIds: [] }; render(); return; }
@@ -949,7 +1048,7 @@ async function onClickActive(e) {
     if (a === 'del-store-master') { await deleteDoc(doc(master('stores'), btn.dataset.id)); await logActivity('Geschäft gelöscht', { storeId: btn.dataset.id }); return; }
     if (a === 'store-up' || a === 'store-down') { await moveStore(btn.dataset.id, a === 'store-up' ? -1 : 1); return; }
     if (a === 'open-store-categories') { openStoreCategoryEditor(btn.dataset.id); return; }
-    if (a === 'close-store-categories') { state.storeCategoryEditor = null; render(); return; }
+    if (a === 'close-store-categories') { state.storeCategoryEditor = null; state.dragStoreCategory = null; render(); return; }
     if (a === 'toggle-store-category') { toggleStoreCategoryDraft(btn.dataset.id); return; }
     if (a === 'store-category-up') { moveStoreCategoryDraft(btn.dataset.id, -1); return; }
     if (a === 'store-category-down') { moveStoreCategoryDraft(btn.dataset.id, 1); return; }
@@ -1260,6 +1359,7 @@ async function saveStoreCategoryEditorActive() {
     if (!editor) return;
     await updateDoc(doc(master('stores'), editor.storeId), { categoryOrder: editor.categoryOrder, updatedAt: serverTimestamp() });
     await logActivity('Geschäftskategorien sortiert', { storeId: editor.storeId, categoryCount: editor.categoryOrder.length });
+    state.dragStoreCategory = null;
     state.storeCategoryEditor = null;
     render();
 }

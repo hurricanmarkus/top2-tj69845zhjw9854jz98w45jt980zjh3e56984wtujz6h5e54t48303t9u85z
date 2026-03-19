@@ -1,13 +1,22 @@
 {
-  "version": "1.3.1",
-  "buildId": "20260319-14",
+  "version": "1.3.2",
+  "buildId": "20260319-15",
   "releaseDate": "2026-03-19",
-  "releaseTime": "21:12",
+  "releaseTime": "21:33",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste-Syntaxfix: doppelte Funktionsdeklarationen neutralisiert und PWA-Build fuer sauberes Neuladen angehoben.",
-  "commitId": "0286e6b",
+  "note": "Einkaufsliste UI verfeinert: Header vereinfacht, Listen kompakter, Store-Kategorien per Ziehen sortierbar und Scan-Codes entfernbar.",
+  "commitId": "5e7cd36",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.3.2",
+      "buildId": "20260319-15",
+      "releaseDate": "2026-03-19",
+      "releaseTime": "21:33",
+      "note": "Einkaufsliste UI verfeinert: Header vereinfacht, Listen kompakter, Store-Kategorien per Ziehen sortierbar und Scan-Codes entfernbar.",
+      "commitId": "5e7cd36",
+      "obligation": "false"
+    },
     {
       "version": "1.3.1",
       "buildId": "20260319-14",
@@ -24,15 +33,6 @@
       "releaseTime": "20:35",
       "note": "Einkaufsliste erweitert um neues Header-Layout, Listenpersistenz, Store-Kategorienwartung und Mehrfach-EAN-Scan fuer Artikel ohne EAN.",
       "commitId": "77ccfd8",
-      "obligation": "false"
-    },
-    {
-      "version": "1.2.5",
-      "buildId": "20260319-12",
-      "releaseDate": "2026-03-19",
-      "releaseTime": "19:52",
-      "note": "Einkaufsliste: Suchfeld-Fokus stabilisiert, Mengentastatur verfeinert und Shared-Listener plus Rules regelkonform umgebaut.",
-      "commitId": "f874708",
       "obligation": "false"
     },
     {
