@@ -1,13 +1,22 @@
 {
-  "version": "1.3.0",
-  "buildId": "20260319-13",
+  "version": "1.3.1",
+  "buildId": "20260319-14",
   "releaseDate": "2026-03-19",
-  "releaseTime": "20:35",
+  "releaseTime": "21:12",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste erweitert um neues Header-Layout, Listenpersistenz, Store-Kategorienwartung und Mehrfach-EAN-Scan fuer Artikel ohne EAN.",
-  "commitId": "77ccfd8",
+  "note": "Einkaufsliste-Syntaxfix: doppelte Funktionsdeklarationen neutralisiert und PWA-Build fuer sauberes Neuladen angehoben.",
+  "commitId": "0286e6b",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.3.1",
+      "buildId": "20260319-14",
+      "releaseDate": "2026-03-19",
+      "releaseTime": "21:12",
+      "note": "Einkaufsliste-Syntaxfix: doppelte Funktionsdeklarationen neutralisiert und PWA-Build fuer sauberes Neuladen angehoben.",
+      "commitId": "0286e6b",
+      "obligation": "false"
+    },
     {
       "version": "1.3.0",
       "buildId": "20260319-13",
@@ -69,15 +78,6 @@
       "releaseTime": "18:43",
       "note": "Einkaufsliste erweitert um neue Listenbox, Detailsteuerung, Store-Nummerierung und Langklick-Bearbeitung der Produkte.",
       "commitId": "fb38ee5",
-      "obligation": "false"
-    },
-    {
-      "version": "1.1.0",
-      "buildId": "20260319-6",
-      "releaseDate": "2026-03-19",
-      "releaseTime": "18:20",
-      "note": "Einkaufsliste-Header auf App-Standard umgebaut: Zurueckleiste, Modus-Auswahl, Einstellungen und einklappbare Details ergaenzt.",
-      "commitId": "fd9ab03",
       "obligation": "false"
     },
     {

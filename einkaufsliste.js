@@ -123,14 +123,14 @@ function ensureRoot() {
     root = document.getElementById('einkaufsliste-root');
     if (!root) return;
     if (!root.querySelector('#el-main')) {
-        root.innerHTML = '<div id="el-main" class="space-y-3"></div><div id="el-modepicker" class="elmodal"></div><div id="el-settings" class="elmodal"></div><div id="el-purchase" class="elmodal"></div><div id="el-detail" class="elmodal"></div><div id="el-storecat" class="elmodal"></div><div id="el-article" class="elmodal"></div><div id="el-scanner" class="elmodal"></div><div id="el-unknown" class="elmodal"></div>';
+        root.innerHTML = `<div class="space-y-3" id="el-main"></div><div id="el-modepicker"></div><div id="el-settings"></div><div id="el-purchase"></div><div id="el-detail"></div><div id="el-storecat"></div><div id="el-article"></div><div id="el-scanner"></div><div id="el-unknown"></div>`;
     }
     if (root.dataset.ready === 'true') return;
     root.dataset.ready = 'true';
-    root.addEventListener('click', onClick);
+    root.addEventListener('click', onClickActive);
     root.addEventListener('input', onInput);
     root.addEventListener('change', onChange);
-    root.addEventListener('keydown', onKeyDown);
+    root.addEventListener('keydown', onKeyDownActive);
     root.addEventListener('pointerdown', onDown);
     root.addEventListener('pointerup', clearHold);
     root.addEventListener('pointerleave', clearHold);
@@ -609,7 +609,7 @@ function render() {
     renderDetail();
     renderStoreCategoryEditor();
     renderArticle();
-    renderScanner();
+    renderScannerActive();
     renderUnknown();
 }
 
@@ -649,6 +649,18 @@ function renderStoreCategoryEditor() {
     const selected = editor.categoryOrder.map((catId) => state.categories.find((c) => c.id === catId)).filter(Boolean);
     const available = state.categories.filter((c) => !editor.categoryOrder.includes(c.id));
     el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="text-xl font-black text-gray-900">Kategorienwartung</div><div class="text-sm text-gray-500">${escapeHtml(store?.name || 'Geschäft')} sortiert die Anzeige im Einkaufsmodus.</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-store-categories">Schließen</button></div><div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"><div class="elc space-y-2"><div class="text-sm font-black text-gray-900">Verfügbare Kategorien</div>${available.length ? available.map((c) => `<label class="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"><input type="checkbox" data-a="toggle-store-category" data-id="${c.id}"> ${escapeHtml(c.name)}</label>`).join('') : '<div class="text-sm text-gray-400">Alle Kategorien sind bereits ausgewählt.</div>'}</div><div class="elc space-y-2"><div class="text-sm font-black text-gray-900">Ausgewählte Reihenfolge</div>${selected.length ? selected.map((c, index) => `<div class="flex items-center justify-between gap-2 rounded-2xl border border-indigo-100 bg-indigo-50 px-3 py-2"><div class="text-sm font-bold text-indigo-900">${index + 1}. ${escapeHtml(c.name)}</div><div class="flex gap-2"><button class="elb bg-white text-gray-700" data-a="store-category-up" data-id="${c.id}" ${index === 0 ? 'disabled' : ''}>↑</button><button class="elb bg-white text-gray-700" data-a="store-category-down" data-id="${c.id}" ${index === selected.length - 1 ? 'disabled' : ''}>↓</button><button class="elb bg-red-100 text-red-700" data-a="toggle-store-category" data-id="${c.id}">Entfernen</button></div></div>`).join('') : '<div class="text-sm text-gray-400">Noch keine Kategorie gewählt.</div>'}</div></div><div class="flex flex-wrap justify-end gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="close-store-categories">Abbruch</button><button class="elb bg-emerald-600 text-white" data-a="save-store-categories">Speichern</button></div></div>`;
+}
+
+function renderScannerActive() {
+    const el = document.getElementById('el-scanner');
+    if (!el) return;
+    el.className = `elmodal ${state.scanOpen ? 'o' : ''}`;
+    if (!state.scanOpen) { el.innerHTML = ''; stopScanner(); return; }
+    const article = state.articles.find((a) => a.id === state.scanArticleId);
+    const isArticleMode = state.scanMode === 'article-ean';
+    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="text-xl font-black text-gray-900">${isArticleMode ? `EAN zuordnen: ${escapeHtml(article?.title || 'Artikel')}` : 'Scanner'}</div><div class="text-sm text-gray-500">${isArticleMode ? 'Mehrere Codes können gesammelt und gemeinsam gespeichert werden.' : 'Barcode + QR live, ohne Refresh.'}</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-scan">Schließen</button></div><div class="elcam"><video id="el-video" autoplay playsinline muted></video></div><div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"><input id="el-scan-manual" class="eli" placeholder="${isArticleMode ? 'EAN/QR eingeben oder per Scanner senden' : 'EAN/QR manuell eingeben'}"><button class="elb a" data-a="manual-scan">${isArticleMode ? 'Code hinzufügen' : 'Code übernehmen'}</button></div><div id="el-scan-status" class="text-sm text-gray-500">${escapeHtml(state.scanStatus || 'Kamera wird gestartet...')}</div>${isArticleMode ? `<div class="elc space-y-2"><div class="text-xs font-bold uppercase text-gray-500">Erfasste Codes</div><div id="el-scan-collected" class="elm">${state.scanCodes.length ? state.scanCodes.map((code) => chip(escapeHtml(code), 'bg-indigo-100 text-indigo-700')).join(' ') : '<span class="text-sm text-gray-400">Noch keine Codes erfasst.</span>'}</div></div><div class="flex flex-wrap justify-end gap-2"><button class="elb bg-emerald-600 text-white" data-a="save-scanned-codes" ${state.scanCodes.length ? '' : 'disabled'}>OK</button><button class="elb bg-indigo-600 text-white" data-a="save-scanned-codes-next" ${state.scanCodes.length && nextMissingEanArticle(state.scanArticleId) ? '' : 'disabled'}>Nächsten Artikel ohne EAN</button></div>` : ''}</div>`;
+    startScannerActive();
+    focusInputById('el-scan-manual');
 }
 
 function renderModePicker() {
@@ -754,6 +766,14 @@ function setPurchaseToTarget() {
     state.purchase.pristine = false;
     state.purchase.raw = formatEditableQty(value);
     state.purchase.quantity = value;
+}
+
+function onKeyDownActive(e) {
+    if (!state.scanOpen) return;
+    if (e.key === 'Enter' && document.activeElement?.id === 'el-scan-manual') {
+        e.preventDefault();
+        submitScannerManualInputActive();
+    }
 }
 
 function onInput(e) {
@@ -868,6 +888,72 @@ async function onClick(e) {
     if (a === 'del-store-master') { await deleteDoc(doc(master('stores'), btn.dataset.id)); await logActivity('Geschäft gelöscht', { storeId: btn.dataset.id }); return; }
     if (a === 'store-up' || a === 'store-down') { await moveStore(btn.dataset.id, a === 'store-up' ? -1 : 1); return; }
     if (a === 'store-cat') { await toggleStoreCategory(btn.dataset.store, btn.dataset.cat, e.target.checked); return; }
+    if (a === 'add-remark') { await addFree(collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_master_notes'), state.drafts.remark); state.drafts.remark = ''; render(); return; }
+    if (a === 'del-remark') { await deleteDoc(doc(collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_master_notes'), btn.dataset.id)); return; }
+    if (a === 'add-note') { await addFree(collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_master_notizen'), state.drafts.note); state.drafts.note = ''; render(); return; }
+    if (a === 'del-note') { await deleteDoc(doc(collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_master_notizen'), btn.dataset.id)); return; }
+    if (a === 'create-list') { await createList(); return; }
+    if (a === 'save-list') { await saveList(); return; }
+    if (a === 'delete-list') { await deleteList(btn.dataset.id); return; }
+    if (a === 'save-collab') { await saveCollaborator(); return; }
+    if (a === 'del-collab') { await deleteCollaborator(btn.dataset.id); return; }
+    if (a === 'save-detail') { await saveDetailItem(); return; }
+    if (a === 'move-detail') { await moveDetailItem(); return; }
+    if (a === 'delete-detail-item') { await deleteDetailItem(); return; }
+    if (a === 'close-purchase') { state.purchase = null; render(); return; }
+    if (a === 'digit') { appendPurchaseInput(btn.dataset.v); renderPurchase(); resetAutoScan(); return; }
+    if (a === 'back') { removePurchaseInput(); renderPurchase(); resetAutoScan(); return; }
+    if (a === 'clear') { clearPurchaseInput(); renderPurchase(); resetAutoScan(); return; }
+    if (a === 'full') { setPurchaseToTarget(); renderPurchase(); resetAutoScan(); return; }
+    if (a === 'confirm-purchase') { await confirmPurchase(); return; }
+}
+
+async function onClickActive(e) {
+    const btn = e.target.closest('[data-a]');
+    if (!btn) return;
+    const a = btn.dataset.a;
+    const clickKey = btn.dataset.id ? `${a}:${btn.dataset.id}` : a;
+    if (holdConsumedKey === clickKey && Date.now() - holdConsumedAt < 900) { holdConsumedKey = ''; return; }
+    if (a === 'back-home') { navigate('home'); return; }
+    if (a === 'open-mode-picker') { state.modePickerOpen = true; render(); return; }
+    if (a === 'close-mode-picker') { state.modePickerOpen = false; render(); return; }
+    if (a === 'toggle-details') { state.detailsOpen = !state.detailsOpen; render(); return; }
+    if (a === 'mode') { state.mode = btn.dataset.v; state.modePickerOpen = false; saveUserSetting(EL_MODE_KEY, state.mode); touchPresence(); render(); return; }
+    if (a === 'section') { state.section = btn.dataset.v; saveUserSetting(EL_SECTION_KEY, state.section); touchPresence(); render(); return; }
+    if (a === 'store-display') { state.storeDisplay = state.storeDisplay === 'split' ? 'combined' : 'split'; saveUserSetting(EL_STORE_KEY, state.storeDisplay); render(); return; }
+    if (a === 'list') { selectList(btn.dataset.id); return; }
+    if (a === 'open-settings') { state.settingsOpen = true; render(); return; }
+    if (a === 'close-settings') { state.settingsOpen = false; render(); return; }
+    if (a === 'del-store') { state.storeIds = state.storeIds.filter((x) => x !== btn.dataset.id); render(); return; }
+    if (a === 'add-item') { await addItem(); return; }
+    if (a === 'check' || a === 'restore') { await handleDouble(btn.dataset.id, a); return; }
+    if (a === 'detail') { state.detailId = btn.dataset.id; render(); return; }
+    if (a === 'close-detail') { state.detailId = null; render(); return; }
+    if (a === 'open-scan') { openScanner('shopping'); return; }
+    if (a === 'close-scan') { closeScannerModal(); return; }
+    if (a === 'manual-scan') { await submitScannerManualInputActive(); return; }
+    if (a === 'save-scanned-codes') { await saveScannedCodesActive(false); return; }
+    if (a === 'save-scanned-codes-next') { await saveScannedCodesActive(true); return; }
+    if (a === 'close-unknown') { state.unknownCode = ''; state.unknownArticleId = ''; render(); return; }
+    if (a === 'save-unknown') { await saveUnknownCode(); return; }
+    if (a === 'open-article') { state.articleEditor = { title: '', defaultQuantity: 1, defaultUnit: 'Stück', categoryId: '', eanCodes: [], variants: [], persistentNotes: [], storeIds: [] }; render(); return; }
+    if (a === 'edit-article') { const article = state.articles.find((x) => x.id === btn.dataset.id); if (article) { state.articleEditor = JSON.parse(JSON.stringify(article)); render(); } return; }
+    if (a === 'capture-ean') { openScanner('article-ean', btn.dataset.id); return; }
+    if (a === 'close-article') { state.articleEditor = null; render(); return; }
+    if (a === 'art-store') { const ids = state.articleEditor.storeIds || []; state.articleEditor.storeIds = ids.includes(btn.dataset.id) ? ids.filter((x) => x !== btn.dataset.id) : [...ids, btn.dataset.id]; renderArticle(); return; }
+    if (a === 'save-article') { await saveArticle(); return; }
+    if (a === 'delete-article') { await deleteDoc(doc(master('articles'), btn.dataset.id)); await logActivity('Artikel gelöscht', { articleId: btn.dataset.id }); state.articleEditor = null; render(); return; }
+    if (a === 'add-category') { await addMaster('categories', state.drafts.category, 'name'); state.drafts.category = ''; render(); return; }
+    if (a === 'del-category') { await deleteDoc(doc(master('categories'), btn.dataset.id)); await logActivity('Kategorie gelöscht', { categoryId: btn.dataset.id }); return; }
+    if (a === 'add-store') { await addMaster('stores', state.drafts.store, 'name'); state.drafts.store = ''; render(); return; }
+    if (a === 'del-store-master') { await deleteDoc(doc(master('stores'), btn.dataset.id)); await logActivity('Geschäft gelöscht', { storeId: btn.dataset.id }); return; }
+    if (a === 'store-up' || a === 'store-down') { await moveStore(btn.dataset.id, a === 'store-up' ? -1 : 1); return; }
+    if (a === 'open-store-categories') { openStoreCategoryEditor(btn.dataset.id); return; }
+    if (a === 'close-store-categories') { state.storeCategoryEditor = null; render(); return; }
+    if (a === 'toggle-store-category') { toggleStoreCategoryDraft(btn.dataset.id); return; }
+    if (a === 'store-category-up') { moveStoreCategoryDraft(btn.dataset.id, -1); return; }
+    if (a === 'store-category-down') { moveStoreCategoryDraft(btn.dataset.id, 1); return; }
+    if (a === 'save-store-categories') { await saveStoreCategoryEditorActive(); return; }
     if (a === 'add-remark') { await addFree(collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_master_notes'), state.drafts.remark); state.drafts.remark = ''; render(); return; }
     if (a === 'del-remark') { await deleteDoc(doc(collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_master_notes'), btn.dataset.id)); return; }
     if (a === 'add-note') { await addFree(collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_master_notizen'), state.drafts.note); state.drafts.note = ''; render(); return; }
@@ -1043,6 +1129,89 @@ async function acquireLock(itemId) {
     }
 }
 
+async function submitScannerManualInputActive() {
+    const input = document.getElementById('el-scan-manual');
+    const value = String(input?.value || '').trim();
+    if (!value) return;
+    input.value = '';
+    await processScannerCodeActive(value);
+}
+
+async function processScannerCodeActive(rawCode) {
+    const code = String(rawCode || '').trim();
+    if (!code) return false;
+    const now = Date.now();
+    if (state.scanLastCode === code && now - state.scanLastAt < 1200) return false;
+    state.scanLastCode = code;
+    state.scanLastAt = now;
+    if (state.scanMode === 'article-ean') {
+        state.scanCodes = Array.from(new Set([...(state.scanCodes || []), code]));
+        state.scanStatus = `${state.scanCodes.length} Code(s) erfasst.`;
+        updateScannerDynamicUi();
+        focusInputById('el-scan-manual');
+        return true;
+    }
+    closeScannerModal();
+    await handleScanCode(code);
+    return true;
+}
+
+async function saveScannedCodesActive(openNext = false) {
+    const article = state.articles.find((a) => a.id === state.scanArticleId);
+    if (!article) return alertUser('Artikel für die EAN-Erfassung wurde nicht gefunden.', 'error');
+    if (!state.scanCodes.length) return alertUser('Bitte zuerst mindestens einen Code erfassen.', 'error');
+    const eanCodes = Array.from(new Set([...(article.eanCodes || []), ...state.scanCodes]));
+    await updateDoc(doc(master('articles'), article.id), { eanCodes, updatedAt: serverTimestamp() });
+    await logActivity('EANs zum Artikel hinzugefügt', { articleId: article.id, count: state.scanCodes.length });
+    if (openNext) {
+        const nextArticle = nextMissingEanArticle(article.id);
+        if (nextArticle) {
+            state.scanArticleId = nextArticle.id;
+            state.scanCodes = [];
+            state.scanStatus = `Nächster Artikel: ${nextArticle.title}`;
+            state.scanLastCode = '';
+            state.scanLastAt = 0;
+            render();
+            return;
+        }
+        closeScannerModal();
+        alertUser('Keine weiteren Artikel ohne EAN gefunden.', 'success');
+        return;
+    }
+    closeScannerModal();
+}
+
+async function startScannerActive() {
+    try {
+        stopScanner();
+        const video = document.getElementById('el-video');
+        const status = document.getElementById('el-scan-status');
+        if (!video) return;
+        scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+        video.srcObject = scanStream;
+        state.scanStatus = state.scanMode === 'article-ean' ? 'Scanner aktiv. Mehrere Codes können gesammelt werden.' : 'Scanner aktiv.';
+        if (status) status.textContent = state.scanStatus;
+        if ('BarcodeDetector' in window) {
+            const detector = new window.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'code_128', 'qr_code'] });
+            scanTimer = setInterval(async () => {
+                if (!state.scanOpen) return;
+                try {
+                    const codes = await detector.detect(video);
+                    if (codes?.length) await processScannerCodeActive(codes[0].rawValue || '');
+                } catch {}
+            }, 700);
+        } else {
+            state.scanStatus = 'BarcodeDetector nicht verfügbar. Bitte Code manuell eingeben.';
+            if (status) status.textContent = state.scanStatus;
+        }
+        updateScannerDynamicUi();
+    } catch {
+        const status = document.getElementById('el-scan-status');
+        state.scanStatus = 'Kamera konnte nicht gestartet werden.';
+        if (status) status.textContent = state.scanStatus;
+    }
+}
+
 async function startScanner() {
     try {
         const video = document.getElementById('el-video'); const status = document.getElementById('el-scan-status'); if (!video) return;
@@ -1086,6 +1255,15 @@ async function toggleStoreCategory(storeId, catId, checked) {
     const store = state.stores.find((s) => s.id === storeId); if (!store) return; const next = checked ? Array.from(new Set([...(store.categoryOrder || []), catId])) : (store.categoryOrder || []).filter((x) => x !== catId); await updateDoc(doc(master('stores'), storeId), { categoryOrder: next, updatedAt: serverTimestamp() }); await logActivity('Geschäftskategorie geändert', { storeId, catId, checked });
 }
 
+async function saveStoreCategoryEditorActive() {
+    const editor = state.storeCategoryEditor;
+    if (!editor) return;
+    await updateDoc(doc(master('stores'), editor.storeId), { categoryOrder: editor.categoryOrder, updatedAt: serverTimestamp() });
+    await logActivity('Geschäftskategorien sortiert', { storeId: editor.storeId, categoryCount: editor.categoryOrder.length });
+    state.storeCategoryEditor = null;
+    render();
+}
+
 async function createList() {
     const name = prompt('Name der neuen Einkaufsliste:'); if (!String(name || '').trim()) return;
     const ref = doc(listsRef()); await setDoc(ref, { name: String(name).trim(), ownerId: uid(), ownerName: uname(), isPrivateSystemList: false, active: true, memberIds: [uid()], storeOrder: state.stores.map((s) => s.id), storeNotes: {}, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() }); state.listId = ref.id; persistListId(); await logActivity('Liste erstellt', { listId: ref.id, name: String(name).trim() });
@@ -1110,6 +1288,8 @@ async function deleteCollaborator(userId) {
     await updateDoc(listDoc(list.id), { memberIds, updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() });
     await logActivity('Mitbearbeiter entfernt', { userId });
 }
+
+if (false) {
 
 function renderPurchase() {
     const el = document.getElementById('el-purchase');
@@ -1389,4 +1569,6 @@ async function saveArticle() {
     await logActivity('Artikel gespeichert', { title });
     state.articleEditor = null;
     render();
+}
+
 }
