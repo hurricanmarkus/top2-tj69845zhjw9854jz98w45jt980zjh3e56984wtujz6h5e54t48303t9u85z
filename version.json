@@ -1,13 +1,22 @@
 {
-  "version": "1.2.1",
-  "buildId": "20260319-8",
+  "version": "1.2.2",
+  "buildId": "20260319-9",
   "releaseDate": "2026-03-19",
-  "releaseTime": "18:46",
+  "releaseTime": "19:04",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste-Itembearbeitung an bestehende Add/Shop-Rechte angepasst, damit die neue UI keine Firestore-Permissionfehler ausloest.",
-  "commitId": "fb38ee5",
+  "note": "Einkaufsliste-Feinschliff: Listen-Minibox reduziert, Mengetastatur neu aufgebaut und Kategorie im Eintragsdialog editierbar gemacht.",
+  "commitId": "1a35b66",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.2.2",
+      "buildId": "20260319-9",
+      "releaseDate": "2026-03-19",
+      "releaseTime": "19:04",
+      "note": "Einkaufsliste-Feinschliff: Listen-Minibox reduziert, Mengetastatur neu aufgebaut und Kategorie im Eintragsdialog editierbar gemacht.",
+      "commitId": "1a35b66",
+      "obligation": "false"
+    },
     {
       "version": "1.2.1",
       "buildId": "20260319-8",
