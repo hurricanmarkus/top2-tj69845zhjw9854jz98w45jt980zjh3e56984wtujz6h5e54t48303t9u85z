@@ -1,4 +1,4 @@
-import { alertUser, appId, currentUser, db, escapeHtml, GUEST_MODE, USERS } from './haupteingang.js';
+import { alertUser, appId, auth, currentUser, db, escapeHtml, GUEST_MODE, USERS } from './haupteingang.js';
 import { getUserSetting, saveUserSetting } from './log-InOut.js';
 import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp, setDoc, Timestamp, updateDoc, where } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
@@ -183,11 +183,23 @@ export async function initializeEinkaufsliste() {
         state.section = getUserSetting(EL_SECTION_KEY, 'general');
         state.storeDisplay = getUserSetting(EL_STORE_KEY, 'split');
     }
-    await seedDefaults();
-    await ensurePrivateList();
-    listenMasters();
-    listenLists();
-    render();
+    try {
+        const tokenResult = await auth?.currentUser?.getIdTokenResult?.(true);
+        if (!tokenResult?.claims?.appUserId || tokenResult.claims.appUserId !== uid()) {
+            root.innerHTML = '<div class="elc text-sm text-amber-700">Anmeldung noch nicht vollständig. Bitte neu anmelden und die Einkaufsliste erneut öffnen.</div>';
+            alertUser('Einkaufsliste konnte nicht geladen werden: appUserId-Claim fehlt. Bitte neu anmelden.', 'error');
+            return;
+        }
+        await seedDefaults();
+        await ensurePrivateList();
+        listenMasters();
+        listenLists();
+        render();
+    } catch (error) {
+        console.error('Einkaufsliste Initialisierung fehlgeschlagen:', error);
+        root.innerHTML = '<div class="elc text-sm text-red-700">Einkaufsliste konnte wegen fehlender Berechtigung nicht geladen werden. Bitte neu anmelden.</div>';
+        alertUser('Einkaufsliste konnte nicht geladen werden. Bitte neu anmelden.', 'error');
+    }
 }
 
 const EL_MODE_KEY = 'el_mode';

@@ -249,6 +249,15 @@ export async function checkCurrentUserValidity() {
         }
 
         const tokenAppUserId = idTokenResult.claims.appUserId || null;
+        if (!tokenAppUserId && storedAppUserId) {
+            console.warn(`CHECK-MISSING! appUserId fehlt im Token für App User '${storedAppUserId}'.`);
+            switchToGuestMode(
+                true,
+                "Ihre Anmeldung ist noch nicht vollständig. Bitte melden Sie sich erneut an.",
+                "info"
+            );
+            return;
+        }
         if (tokenAppUserId && storedAppUserId && tokenAppUserId !== storedAppUserId) {
             console.warn(`CHECK-MISMATCH! appUserId im Token: '${tokenAppUserId}', App User im Speicher: '${storedAppUserId}'`);
             switchToGuestMode(

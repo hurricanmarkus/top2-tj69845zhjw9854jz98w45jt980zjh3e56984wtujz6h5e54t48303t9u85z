@@ -1,13 +1,22 @@
 {
   "version": "1.1.0",
-  "buildId": "20260319-1",
+  "buildId": "20260319-2",
   "releaseDate": "2026-03-19",
-  "releaseTime": "16:43",
+  "releaseTime": "17:45",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste als neues Live-Modul integriert: Shell, Rechteverwaltung, Firestore-Regeln und PWA-Versionierung vervollstaendigt.",
-  "commitId": "ba9e840",
+  "note": "Login- und Claim-Handshake fuer Einkaufsliste gehaertet: appUserId wird jetzt vor Modulzugriff verbindlich geprueft.",
+  "commitId": "6d01e4b",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.1.0",
+      "buildId": "20260319-2",
+      "releaseDate": "2026-03-19",
+      "releaseTime": "17:45",
+      "note": "Login- und Claim-Handshake fuer Einkaufsliste gehaertet: appUserId wird jetzt vor Modulzugriff verbindlich geprueft.",
+      "commitId": "6d01e4b",
+      "obligation": "false"
+    },
     {
       "version": "1.1.0",
       "buildId": "20260319-1",

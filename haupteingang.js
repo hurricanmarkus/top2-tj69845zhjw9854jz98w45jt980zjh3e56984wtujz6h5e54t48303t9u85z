@@ -3911,7 +3911,15 @@ export function setupEventListeners() {
             }
 
             // 5. Finales Token aktualisieren und UI updaten
-            const idTokenResult = await auth.currentUser.getIdTokenResult(true);
+            let idTokenResult = null;
+            for (let i = 0; i < 10; i++) {
+                idTokenResult = await auth.currentUser.getIdTokenResult(true);
+                if (idTokenResult?.claims?.appUserId === appUserId) break;
+                await new Promise((resolve) => setTimeout(resolve, 400));
+            }
+            if (!idTokenResult?.claims?.appUserId || idTokenResult.claims.appUserId !== appUserId) {
+                throw new Error("Login unvollständig: appUserId-Claim wurde nicht rechtzeitig gesetzt. Bitte erneut anmelden.");
+            }
             const newClaimRole = idTokenResult.claims.appRole || 'Keine Rolle zugewiesen';
 
             // =================================================================
