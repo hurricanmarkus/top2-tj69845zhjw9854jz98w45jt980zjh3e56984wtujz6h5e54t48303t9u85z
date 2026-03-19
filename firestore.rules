@@ -613,14 +613,19 @@ service cloud.firestore {
     }
 
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/einkaufsliste_lists/{listId} {
-      allow read: if canReadEinkaufslisteList(listId);
+      allow read: if hasEinkaufslisteActorId()
+        && (
+          resource.data.ownerId == einkaufslisteActorId()
+          || (('memberIds' in resource.data) && resource.data.memberIds is list && einkaufslisteActorId() in resource.data.memberIds)
+        );
       allow create: if canCreateEinkaufslisteList()
         && request.resource.data.ownerId == einkaufslisteActorId()
         && request.resource.data.memberIds is list
         && einkaufslisteActorId() in request.resource.data.memberIds;
-      allow update: if isEinkaufslisteOwner(listId)
+      allow update: if hasEinkaufslisteActorId()
+        && resource.data.ownerId == einkaufslisteActorId()
         && request.resource.data.ownerId == resource.data.ownerId;
-      allow delete: if isEinkaufslisteOwner(listId) && resource.data.isPrivateSystemList != true;
+      allow delete: if hasEinkaufslisteActorId() && resource.data.ownerId == einkaufslisteActorId() && resource.data.isPrivateSystemList != true;
 
       match /permissions/{userId} {
         allow read: if isEinkaufslisteOwner(listId) || (hasEinkaufslisteActorId() && userId == einkaufslisteActorId());
