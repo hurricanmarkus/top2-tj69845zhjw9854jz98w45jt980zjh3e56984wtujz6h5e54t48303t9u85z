@@ -2,7 +2,7 @@ import { alertUser, appId, auth, currentUser, db, escapeHtml, GUEST_MODE, naviga
 import { getUserSetting, saveUserSetting } from './log-InOut.js';
 import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, or, query, runTransaction, serverTimestamp, setDoc, Timestamp, updateDoc, where } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
-const MODES = [{ id: 'manage', label: 'Verwaltung' }, { id: 'shop', label: 'Einkaufsmodus' }, { id: 'add', label: 'Hinzufügemodus' }];
+const MODES = [{ id: 'manage', label: 'Verwaltung' }, { id: 'shop', label: 'Listenmodus' }];
 const MANAGE = [{ id: 'general', label: 'Allgemein' }, { id: 'stores', label: 'Geschäftewartung' }, { id: 'articles', label: 'Artikelwartung' }, { id: 'categories', label: 'Kategorienwartung' }, { id: 'remarks', label: 'Anmerkungswartung' }, { id: 'notes', label: 'Notizwartung' }];
 const UNITS = ['Stück', 'Kg', 'Gramm', 'Liter', 'Milliliter', 'Bund', 'Netz', 'Sack', 'Dose', 'Flasche', 'Becher', 'Packung'];
 const DEFAULTS = {
@@ -49,7 +49,8 @@ const state = {
     remarks: [],
     notes: [],
     listId: null,
-    mode: 'add',
+    mode: 'shop',
+    listMode: 'search',
     section: 'general',
     storeDisplay: 'split',
     q: '1',
@@ -328,7 +329,9 @@ export async function initializeEinkaufsliste() {
     if (!root) return;
     if (!inited) {
         inited = true;
-        state.mode = getUserSetting(EL_MODE_KEY, 'add');
+        const storedMode = getUserSetting(EL_MODE_KEY, 'shop');
+        state.mode = storedMode === 'manage' ? 'manage' : 'shop';
+        state.listMode = storedMode === 'add' ? 'input' : (getUserSetting(EL_LIST_MODE_KEY, 'search') === 'input' ? 'input' : 'search');
         state.section = getUserSetting(EL_SECTION_KEY, 'general');
         state.storeDisplay = getUserSetting(EL_STORE_KEY, 'split');
         state.storeNumbers = isSettingTrue(EL_STORE_NUMBERS_KEY, false);
@@ -356,6 +359,7 @@ export async function initializeEinkaufsliste() {
 }
 
 const EL_MODE_KEY = 'el_mode';
+const EL_LIST_MODE_KEY = 'el_list_mode';
 const EL_SECTION_KEY = 'el_section';
 const EL_STORE_KEY = 'el_store';
 const EL_STORE_NUMBERS_KEY = 'el_store_numbers';
@@ -404,7 +408,7 @@ function listenActiveList() {
 async function touchPresence() {
     const list = activeList();
     if (!list) return;
-    await setDoc(doc(sub(list.id, 'presence'), uid()), { userId: uid(), userName: uname(), currentArea: state.mode === 'manage' ? MANAGE.find((x) => x.id === state.section)?.label || 'Verwaltung' : (state.mode === 'shop' ? 'Einkaufsmodus' : 'Eingabe'), lastSeen: serverTimestamp() }, { merge: true });
+    await setDoc(doc(sub(list.id, 'presence'), uid()), { userId: uid(), userName: uname(), currentArea: state.mode === 'manage' ? MANAGE.find((x) => x.id === state.section)?.label || 'Verwaltung' : (state.listMode === 'input' ? 'Listenmodus · Eingeben' : 'Listenmodus · Suchen'), lastSeen: serverTimestamp() }, { merge: true });
 }
 
 async function logActivity(text, payload = {}) {
@@ -421,7 +425,7 @@ async function logActivityForList(listId, text, payload = {}) {
 }
 
 function groupedOpen() {
-    const searchTerm = state.mode === 'shop' ? String(state.search || '').trim().toLowerCase() : '';
+    const searchTerm = state.mode === 'shop' && state.listMode === 'search' ? String(state.search || '').trim().toLowerCase() : '';
     const items = state.items.filter((x) => x.status !== 'checked').filter((x) => !searchTerm || [x.title, x.note, x.persistentNote, ...(x.eanCodes || [])].filter(Boolean).some((v) => String(v).toLowerCase().includes(searchTerm)));
     if (state.storeDisplay === 'combined') return [{ id: 'combined', label: 'Alle Geschäfte', note: '', items: sortItemsForShopDisplay(items) }];
     const order = activeList()?.storeOrder?.length ? activeList().storeOrder : state.stores.map((s) => s.id);
@@ -451,13 +455,13 @@ function cameraButtonClass() {
 }
 
 function renderModeToggle() {
-    return `<div class="inline-flex rounded-full border border-slate-200 bg-slate-100 p-1"><button class="rounded-full px-3 py-1.5 text-xs font-black ${state.mode === 'shop' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600'}" data-a="quick-mode" data-v="shop">Suchen</button><button class="rounded-full px-3 py-1.5 text-xs font-black ${state.mode === 'add' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600'}" data-a="quick-mode" data-v="add">Eingeben</button></div>`;
+    return `<div class="inline-flex rounded-full border border-slate-200 bg-slate-100 p-1"><button class="rounded-full px-3 py-1.5 text-xs font-black ${state.listMode === 'search' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600'}" data-a="quick-mode" data-v="search">Suchen</button><button class="rounded-full px-3 py-1.5 text-xs font-black ${state.listMode === 'input' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600'}" data-a="quick-mode" data-v="input">Eingeben</button></div>`;
 }
 
 function renderScannerPanelActive(embedded = false) {
     const article = state.articles.find((a) => a.id === state.scanArticleId);
     const isArticleMode = state.scanMode === 'article-ean';
-    const scannerTitle = isArticleMode ? `EAN zuordnen: ${escapeHtml(article?.title || 'Artikel')}` : state.scanMode === 'list-add' ? 'Scanner · Hinzufügemodus' : 'Scanner · Einkaufsmodus';
+    const scannerTitle = isArticleMode ? `EAN zuordnen: ${escapeHtml(article?.title || 'Artikel')}` : state.scanMode === 'list-add' ? 'Scanner · Eingeben' : 'Scanner · Listenmodus';
     const scannerText = isArticleMode ? 'Mehrere Codes können gesammelt und gemeinsam gespeichert werden.' : state.scanMode === 'list-add' ? 'Gefundene EANs werden direkt mit Menge, Einheit, Geschäft und Anmerkung hinzugefügt.' : 'Gefundene EANs öffnen die Mengenübernahme. Der Scan bleibt aktiv.';
     const manualLabel = isArticleMode ? 'Code hinzufügen' : state.scanMode === 'list-add' ? 'Artikel hinzufügen' : 'Code übernehmen';
     const shellClass = embedded ? 'mt-3 max-w-lg rounded-2xl border border-slate-200 bg-slate-50 p-3 space-y-3' : 'elpanel p-4 sm:p-5 space-y-4';
@@ -468,7 +472,7 @@ function renderScannerPanelActive(embedded = false) {
 
 function renderActionBar() {
     if (state.mode === 'manage') return '';
-    if (state.mode === 'shop') {
+    if (state.listMode === 'search') {
         return `<div class="elc !p-3"><div class="grid gap-3 lg:grid-cols-[auto_minmax(0,1fr)] items-center"><div class="flex justify-center lg:justify-start">${renderModeToggle()}</div><div class="mx-auto flex w-full max-w-3xl items-center gap-2"><input id="el-search" class="eli text-center" placeholder="Suchen oder scannen..." value="${escapeHtml(state.search)}"><button class="elb ${cameraButtonClass()}" data-a="open-scan" title="Scanner ${state.scanOpen ? 'deaktivieren' : 'aktivieren'}">📷</button></div></div>${state.scanOpen && state.scanMode !== 'article-ean' ? renderScannerPanelActive(true) : ''}</div>`;
     }
     return `<div class="elc !p-3"><div class="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)] items-start"><div class="space-y-2"><div class="flex justify-center lg:justify-start">${renderModeToggle()}</div><div class="mx-auto grid max-w-[210px] grid-cols-[88px_110px] gap-2 lg:mx-0"><input id="el-q" class="eli text-center" value="${escapeHtml(state.q)}" placeholder="Menge"><select id="el-unit" class="els">${UNITS.map((u) => `<option value="${u}" ${state.unit === u ? 'selected' : ''}>${u}</option>`).join('')}</select></div></div><div class="mx-auto w-full max-w-5xl space-y-2"><div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center"><select id="el-store-add" class="els"><option value="">Geschäft zuordnen...</option>${state.stores.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}</select><input id="el-note" class="eli" placeholder="Anmerkung optional" value="${escapeHtml(state.note)}"><button class="elb ${cameraButtonClass()}" data-a="open-scan" title="Scanner ${state.scanOpen ? 'deaktivieren' : 'aktivieren'}">📷</button></div><div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_56px] items-center"><input id="el-title" class="eli" placeholder="Artikel eingeben..." value="${escapeHtml(state.title)}"><button class="elb a !px-0" data-a="add-item" ${!canAdd() ? 'disabled' : ''}>+</button></div>${state.storeIds.length ? `<div class="elm">${state.storeIds.map((id) => chip(`${escapeHtml(state.stores.find((s) => s.id === id)?.name || id)} <button data-a="del-store" data-id="${id}">×</button>`, 'bg-orange-100 text-orange-700')).join(' ')}</div>` : '<div class="text-xs text-gray-400">Optional einem oder mehreren Geschäften zuordnen.</div>'}${state.scanOpen && state.scanMode !== 'article-ean' ? renderScannerPanelActive(true) : ''}</div></div>`;
@@ -620,7 +624,7 @@ function render() {
     main.innerHTML = `
         ${renderHeaderActive(list)}
         ${state.mode === 'manage' ? renderManageSections() : ''}
-        ${blocked ? '<div class="elc text-sm font-bold text-red-700 bg-red-50 border-red-200">Diese Liste ist sichtbar, aber außerhalb deiner Zugriffszeit aktuell gesperrt.</div>' : renderBodyActive()}
+        ${blocked ? '<div class="elc text-sm text-red-700">Diese Liste ist sichtbar, aber außerhalb deiner Zugriffszeit aktuell gesperrt.</div>' : renderBodyActive()}
         ${state.mode === 'manage' ? '' : renderChecked()}
     `;
     renderModePicker();
@@ -636,7 +640,9 @@ function render() {
 function renderBody() {
     const list = activeList();
     if (!list) return '<div class="elc text-sm text-gray-500">Bitte zuerst eine Liste auswählen.</div>';
-    if (state.mode === 'add') return `<div class="elc space-y-3"><div class="grid grid-cols-[90px_110px_minmax(0,1fr)] gap-2"><input id="el-q" class="eli" value="${escapeHtml(state.q)}"><select id="el-unit" class="els">${UNITS.map((u) => `<option value="${u}" ${state.unit === u ? 'selected' : ''}>${u}</option>`).join('')}</select><input id="el-title" class="eli" placeholder="Artikel eingeben..." value="${escapeHtml(state.title)}"></div><div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"><select id="el-store-add" class="els"><option value="">Geschäft zuordnen...</option>${state.stores.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}</select><input id="el-note" class="eli" placeholder="Anmerkung optional" value="${escapeHtml(state.note)}"><button class="elb a" data-a="add-item" ${!canAdd() ? 'disabled' : ''}>+ Hinzufügen</button></div>${state.storeIds.length ? `<div class="elm">${state.storeIds.map((id) => chip(`${escapeHtml(state.stores.find((s) => s.id === id)?.name || id)} <button data-a="del-store" data-id="${id}">×</button>`, 'bg-orange-100 text-orange-700')).join(' ')}</div>` : '<div class="text-xs text-gray-400">Optional einem oder mehreren Geschäften zuordnen.</div>'}</div>`;
+    if (state.mode === 'shop' || state.mode === 'add') {
+        return `<div class="space-y-3"><div class="elc"><div class="grid grid-cols-[90px_110px_minmax(0,1fr)] gap-2"><input id="el-q" class="eli" value="${escapeHtml(state.q)}"><select id="el-unit" class="els">${UNITS.map((u) => `<option value="${u}" ${state.unit === u ? 'selected' : ''}>${u}</option>`).join('')}</select><input id="el-title" class="eli" placeholder="Artikel eingeben..." value="${escapeHtml(state.title)}"></div><div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"><select id="el-store-add" class="els"><option value="">Geschäft zuordnen...</option>${state.stores.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}</select><input id="el-note" class="eli" placeholder="Anmerkung optional" value="${escapeHtml(state.note)}"><button class="elb a" data-a="add-item" ${!canAdd() ? 'disabled' : ''}>+ Hinzufügen</button></div>${state.storeIds.length ? `<div class="elm">${state.storeIds.map((id) => chip(`${escapeHtml(state.stores.find((s) => s.id === id)?.name || id)} <button data-a="del-store" data-id="${id}">×</button>`, 'bg-orange-100 text-orange-700')).join(' ')}</div>` : '<div class="text-xs text-gray-400">Optional einem oder mehreren Geschäften zuordnen.</div>'}</div>`;
+    }
     if (state.mode === 'shop') return `<div class="space-y-3">${groupedOpen().map((g) => `<div class="elc space-y-2"><div class="flex flex-wrap justify-between gap-2 items-center"><div class="font-black text-sm">${escapeHtml(g.label)}</div><div class="text-xs font-bold text-gray-600">${g.items.length} offen</div></div>${g.note ? `<div class="text-xs rounded-xl border border-orange-300 bg-orange-50 px-3 py-2 text-orange-800">${escapeHtml(g.note)}</div>` : ''}${g.items.length ? g.items.map(renderItem).join('') : '<div class="py-3 text-sm text-gray-400">Keine offenen Artikel.</div>'}</div>`).join('') || '<div class="elc text-sm text-gray-400">Keine Artikel gefunden.</div>'}</div>`;
     if (!canManage()) return '<div class="elc text-sm text-red-700">Keine Verwaltungsberechtigung für diese Liste.</div>';
     if (state.section === 'general') return `<div class="space-y-3"><div class="elc"><div class="elstat"><div><div class="text-[11px] font-bold uppercase text-gray-500">Aktive Listen</div><div class="text-xl font-black text-indigo-700">${state.lists.filter((l) => l.active !== false).length}</div></div><div><div class="text-[11px] font-bold uppercase text-gray-500">Offene Artikel</div><div class="text-xl font-black text-orange-700">${state.items.filter((x) => x.status !== 'checked').length}</div></div><div><div class="text-[11px] font-bold uppercase text-gray-500">Letztes Update</div><div class="text-sm font-black text-slate-700">${dt(activeList()?.updatedAt)}</div></div></div></div>${state.lists.map((l) => `<div class="elc"><div class="flex justify-between gap-2"><div><div class="font-bold text-sm">${escapeHtml(l.name)}</div><div class="text-xs text-gray-500">${dt(l.updatedAt)} · ${escapeHtml(l.updatedByName || l.ownerName || '—')}</div></div><div class="text-xs font-bold text-gray-600">${l.id === state.listId ? state.items.filter((x) => x.status !== 'checked').length : '…'} offen</div></div></div>`).join('')}</div>`;
@@ -818,137 +824,6 @@ function setPurchaseToTarget() {
     state.purchase.quantity = value;
 }
 
-function onKeyDownActive(e) {
-    const activeId = document.activeElement?.id || '';
-    if (state.scanOpen && e.key === 'Enter' && activeId === 'el-scan-manual') {
-        e.preventDefault();
-        submitScannerManualInputActive();
-        return;
-    }
-    if (state.mode === 'add' && e.key === 'Enter' && !e.shiftKey && ['el-title', 'el-q', 'el-note'].includes(activeId)) {
-        e.preventDefault();
-        addItem();
-    }
-}
-
-function onInput(e) {
-    const t = e.target;
-    if (t.id === 'el-q') state.q = t.value;
-    if (t.id === 'el-title') state.title = t.value;
-    if (t.id === 'el-note') state.note = t.value;
-    if (t.id === 'el-search') {
-        const start = t.selectionStart;
-        const end = t.selectionEnd;
-        state.search = t.value;
-        render();
-        focusInputById('el-search', start, end);
-        return;
-    }
-    if (t.id === 'el-article-search') {
-        const start = t.selectionStart;
-        const end = t.selectionEnd;
-        state.articleSearch = t.value;
-        render();
-        focusInputById('el-article-search', start, end);
-        return;
-    }
-    if (t.id === 'el-draft-category') state.drafts.category = t.value;
-    if (t.id === 'el-draft-store') state.drafts.store = t.value;
-    if (t.id === 'el-draft-remark') state.drafts.remark = t.value;
-    if (t.id === 'el-draft-note') state.drafts.note = t.value;
-}
-
-function onChange(e) {
-    const t = e.target;
-    if (t.id === 'el-unit') state.unit = t.value;
-    if (t.id === 'el-list-select' && t.value) { selectList(t.value); return; }
-    if (t.id === 'el-store-add' && t.value) { if (!state.storeIds.includes(t.value)) state.storeIds.push(t.value); t.value = ''; render(); }
-    if (t.id === 'el-store-numbers') { state.storeNumbers = t.checked; saveUserSetting(EL_STORE_NUMBERS_KEY, state.storeNumbers); render(); return; }
-    if (t.id === 'el-missing-ean') { state.missingEanOnly = t.checked; render(); }
-    if (t.id === 'el-unknown-article') state.unknownArticleId = t.value;
-    if (t.id === 'el-c-user') state.collab.userId = t.value;
-    if (t.id === 'el-c-from') state.collab.accessFrom = t.value;
-    if (t.id === 'el-c-until') state.collab.accessUntil = t.value;
-    if (t.id === 'el-cr') state.collab.canRead = t.checked;
-    if (t.id === 'el-ca') state.collab.canAdd = t.checked;
-    if (t.id === 'el-cs') state.collab.canShop = t.checked;
-    if (t.id === 'el-cm') state.collab.canManage = t.checked;
-    if (t.id === 'el-cw') state.collab.canManageWrite = t.checked;
-}
-
-function onPointerMoveActive(e) {
-    updateStoreCategoryDrag(e.clientX, e.clientY);
-}
-
-function onDown(e) {
-    const dragHandle = e.target.closest('[data-drag-store-category]');
-    if (dragHandle) {
-        e.preventDefault();
-        beginStoreCategoryDrag(dragHandle.dataset.id);
-        return;
-    }
-    const itemHold = e.target.closest('[data-hold-item]');
-    if (itemHold) {
-        holdPayload = { action: 'edit-item', id: itemHold.dataset.holdItem };
-        holdTimer = setTimeout(() => onHold(holdPayload), HOLD_MS);
-        return;
-    }
-    const btn = e.target.closest('[data-a="check"]');
-    if (!btn) return;
-    holdPayload = { action: btn.dataset.a, id: btn.dataset.id };
-    holdTimer = setTimeout(() => onHold(holdPayload), HOLD_MS);
-}
-
-function clearHold() { if (holdTimer) clearTimeout(holdTimer); holdTimer = null; holdPayload = null; }
-
-function finalizePointerState() {
-    clearHold();
-    finishStoreCategoryDrag();
-}
-
-function onHold(payload) {
-    holdConsumedKey = `${payload.action}:${payload.id}`;
-    holdConsumedAt = Date.now();
-    if (payload.action === 'edit-item') {
-        state.detailId = payload.id;
-        render();
-        return;
-    }
-    const item = state.items.find((x) => x.id === payload.id);
-    if (!item) return;
-    if (navigator.vibrate) navigator.vibrate(30);
-    openPurchase(item, false);
-}
-
-async function onClick(e) {
-    const btn = e.target.closest('[data-a]');
-    if (!btn) return;
-    const a = btn.dataset.a;
-    const clickKey = btn.dataset.id ? `${a}:${btn.dataset.id}` : a;
-    if (holdConsumedKey === clickKey && Date.now() - holdConsumedAt < 900) { holdConsumedKey = ''; return; }
-    if (a === 'back-home') { navigate('home'); return; }
-    if (a === 'open-mode-picker') { state.modePickerOpen = true; render(); return; }
-    if (a === 'close-mode-picker') { state.modePickerOpen = false; render(); return; }
-    if (a === 'toggle-details') { state.detailsOpen = !state.detailsOpen; render(); return; }
-    if (a === 'mode') { state.mode = btn.dataset.v; state.modePickerOpen = false; saveUserSetting(EL_MODE_KEY, state.mode); touchPresence(); render(); return; }
-    if (a === 'section') { state.section = btn.dataset.v; saveUserSetting(EL_SECTION_KEY, state.section); touchPresence(); render(); return; }
-    if (a === 'store-display') { state.storeDisplay = state.storeDisplay === 'split' ? 'combined' : 'split'; saveUserSetting(EL_STORE_KEY, state.storeDisplay); render(); return; }
-    if (a === 'list') { selectList(btn.dataset.id); return; }
-    if (a === 'open-settings') { state.settingsOpen = true; render(); return; }
-    if (a === 'close-settings') { state.settingsOpen = false; render(); return; }
-    if (a === 'del-store') { state.storeIds = state.storeIds.filter((x) => x !== btn.dataset.id); render(); return; }
-    if (a === 'add-item') { await addItem(); return; }
-    if (a === 'check' || a === 'restore') { await handleDouble(btn.dataset.id, a); return; }
-    if (a === 'detail') { state.detailId = btn.dataset.id; render(); return; }
-    if (a === 'close-detail') { state.detailId = null; render(); return; }
-    if (a === 'open-scan') { if (state.scanOpen) closeScannerModal(); else openScanner(state.mode === 'add' ? 'list-add' : 'shopping'); return; }
-    if (a === 'close-scan') { closeScannerModal(); return; }
-    if (a === 'manual-scan') { await submitScannerManualInputActive(); return; }
-    if (a === 'save-scanned-codes') { await saveScannedCodesActive(false); return; }
-    if (a === 'save-scanned-codes-next') { await saveScannedCodesActive(true); return; }
-    if (a === 'remove-scanned-code') { removeScannedCodeActive(btn.dataset.id); return; }
-    if (a === 'close-unknown') { state.unknownCode = ''; state.unknownArticleId = ''; render(); return; }
-    if (a === 'save-unknown') { await saveUnknownCode(); return; }
     if (a === 'open-article') { state.articleEditor = { title: '', defaultQuantity: 1, defaultUnit: 'Stück', categoryId: '', eanCodes: [], variants: [], persistentNotes: [], storeIds: [] }; render(); return; }
     if (a === 'edit-article') { const article = state.articles.find((x) => x.id === btn.dataset.id); if (article) { state.articleEditor = JSON.parse(JSON.stringify(article)); render(); } return; }
     if (a === 'capture-ean') { openScanner('article-ean', btn.dataset.id); return; }
