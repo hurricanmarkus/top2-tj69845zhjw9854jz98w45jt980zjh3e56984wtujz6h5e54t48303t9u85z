@@ -1,13 +1,22 @@
 {
-  "version": "1.4.0",
-  "buildId": "20260320-1",
+  "version": "1.4.1",
+  "buildId": "20260320-2",
   "releaseDate": "2026-03-20",
-  "releaseTime": "08:00",
+  "releaseTime": "08:41",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste erweitert um neuen Header, Such-/Eingabe-Umschalter und dauerhaft aktiven Scanner fuer Einkaufs- und Hinzufuegemodus.",
-  "commitId": "ecc2b86",
+  "note": "Einkaufsliste UI nachgeschliffen: Moduswahl als grauer Statusbutton, Inline-Kamera unter der Leiste, kompakter Listenwechsel und verdichteter Eingabemodus.",
+  "commitId": "43bb868",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.4.1",
+      "buildId": "20260320-2",
+      "releaseDate": "2026-03-20",
+      "releaseTime": "08:41",
+      "note": "Einkaufsliste UI nachgeschliffen: Moduswahl als grauer Statusbutton, Inline-Kamera unter der Leiste, kompakter Listenwechsel und verdichteter Eingabemodus.",
+      "commitId": "43bb868",
+      "obligation": "false"
+    },
     {
       "version": "1.4.0",
       "buildId": "20260320-1",
