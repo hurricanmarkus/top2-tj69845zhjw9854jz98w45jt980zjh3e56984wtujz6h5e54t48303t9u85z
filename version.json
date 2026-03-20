@@ -1,13 +1,22 @@
 {
-  "version": "1.4.6",
-  "buildId": "20260320-7",
+  "version": "1.4.7",
+  "buildId": "20260320-8",
   "releaseDate": "2026-03-20",
-  "releaseTime": "11:24",
+  "releaseTime": "11:34",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste Doppeldefinition bereinigt: die doppelte renderPurchase/Scanner-Baustelle ist raus, onClickActive bleibt im aktiven Scope.",
-  "commitId": "8de8f83",
+  "note": "Einkaufsliste Totalfix: alle doppelten Funktionsdeklarationen (startScanner/handleScanCode/saveUnknownCode/saveArticle) entfernt, 140 Zeilen Dead-Code geloescht, fehlenden remove-scanned-code Handler ergaenzt, saveUnknownCode updatedAt gefixt.",
+  "commitId": "",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.4.7",
+      "buildId": "20260320-8",
+      "releaseDate": "2026-03-20",
+      "releaseTime": "11:34",
+      "note": "Einkaufsliste Totalfix: alle doppelten Funktionsdeklarationen (startScanner/handleScanCode/saveUnknownCode/saveArticle) entfernt, 140 Zeilen Dead-Code geloescht, fehlenden remove-scanned-code Handler ergaenzt, saveUnknownCode updatedAt gefixt.",
+      "commitId": "",
+      "obligation": "false"
+    },
     {
       "version": "1.4.6",
       "buildId": "20260320-7",

@@ -1258,23 +1258,6 @@ async function startScannerActive() {
     }
 }
 
-async function startScanner() {
-    try {
-        const video = document.getElementById('el-video'); const status = document.getElementById('el-scan-status'); if (!video) return;
-        scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }); video.srcObject = scanStream; if (status) status.textContent = 'Scanner aktiv.';
-        if ('BarcodeDetector' in window) {
-            const detector = new window.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'code_128', 'qr_code'] });
-            scanTimer = setInterval(async () => {
-                if (!state.scanOpen) return; try { const codes = await detector.detect(video); if (codes?.length) await handleScanCode(codes[0].rawValue || ''); } catch {}
-            }, 700);
-        } else if (status) status.textContent = 'BarcodeDetector nicht verfÃ¼gbar. Bitte Code manuell eingeben.';
-    } catch {
-        const status = document.getElementById('el-scan-status');
-        state.scanStatus = 'Kamera konnte nicht gestartet werden.';
-        if (status) status.textContent = state.scanStatus;
-    }
-}
-
 async function handleScanCode(code) {
     const article = state.articles.find((a) => (a.eanCodes || []).includes(code) || (a.variants || []).some((v) => (v.eanCodes || []).includes(code)));
     if (!article) {
@@ -1295,7 +1278,7 @@ async function handleScanCode(code) {
 async function saveUnknownCode() {
     if (!state.unknownCode || !state.unknownArticleId) return alertUser('Bitte Artikel auswÃ¤hlen.', 'error');
     const article = state.articles.find((a) => a.id === state.unknownArticleId); if (!article) return;
-    await updateDoc(doc(master('articles'), article.id), { eanCodes: Array.from(new Set([...(article.eanCodes || []), state.unknownCode])) });
+    await updateDoc(doc(master('articles'), article.id), { eanCodes: Array.from(new Set([...(article.eanCodes || []), state.unknownCode])), updatedAt: serverTimestamp() });
     await logActivity('EAN zugeordnet', { articleId: article.id, code: state.unknownCode });
     const code = state.unknownCode; state.unknownCode = ''; state.unknownArticleId = ''; render(); await handleScanCode(code);
 }
@@ -1381,6 +1364,7 @@ async function onClick(e) {
     if (a === 'manual-scan') { await submitScannerManualInputActive(); return; }
     if (a === 'save-scanned-codes') { await saveScannedCodesActive(false); return; }
     if (a === 'save-scanned-codes-next') { await saveScannedCodesActive(true); return; }
+    if (a === 'remove-scanned-code') { removeScannedCodeActive(btn.dataset.id); return; }
     if (a === 'close-unknown') { state.unknownCode = ''; state.unknownArticleId = ''; render(); return; }
     if (a === 'save-unknown') { await saveUnknownCode(); return; }
     if (a === 'open-article') { state.articleEditor = { title: '', defaultQuantity: 1, defaultUnit: 'StÃ¼ck', categoryId: '', eanCodes: [], variants: [], persistentNotes: [], storeIds: [] }; render(); return; }
@@ -1419,143 +1403,4 @@ async function onClick(e) {
     if (a === 'clear') { clearPurchaseInput(); renderPurchase(); resetAutoScan(); return; }
     if (a === 'full') { setPurchaseToTarget(); renderPurchase(); resetAutoScan(); return; }
     if (a === 'confirm-purchase') { await confirmPurchase(); return; }
-}
-
-async function saveStoreCategoryEditor() {
-    const editor = state.storeCategoryEditor;
-    if (!editor) return;
-    await updateDoc(doc(master('stores'), editor.storeId), { categoryOrder: editor.categoryOrder, updatedAt: serverTimestamp() });
-    await logActivity('GeschÃ¤ftskategorien sortiert', { storeId: editor.storeId, categoryCount: editor.categoryOrder.length });
-    state.storeCategoryEditor = null;
-    render();
-}
-
-async function submitScannerManualInput() {
-    const input = document.getElementById('el-scan-manual');
-    const value = String(input?.value || '').trim();
-    if (!value) return;
-    input.value = '';
-    await processScannerCode(value);
-}
-
-async function processScannerCode(rawCode) {
-    const code = String(rawCode || '').trim();
-    if (!code) return false;
-    const now = Date.now();
-    if (state.scanLastCode === code && now - state.scanLastAt < 1200) return false;
-    state.scanLastCode = code;
-    state.scanLastAt = now;
-    if (state.scanMode === 'article-ean') {
-        state.scanCodes = Array.from(new Set([...(state.scanCodes || []), code]));
-        state.scanStatus = `${state.scanCodes.length} Code(s) erfasst.`;
-        updateScannerDynamicUi();
-        focusInputById('el-scan-manual');
-        return true;
-    }
-    closeScannerModal();
-    await handleScanCode(code);
-    return true;
-}
-
-async function saveScannedCodes(openNext = false) {
-    const article = state.articles.find((a) => a.id === state.scanArticleId);
-    if (!article) return alertUser('Artikel fÃ¼r die EAN-Erfassung wurde nicht gefunden.', 'error');
-    if (!state.scanCodes.length) return alertUser('Bitte zuerst mindestens einen Code erfassen.', 'error');
-    const eanCodes = Array.from(new Set([...(article.eanCodes || []), ...state.scanCodes]));
-    await updateDoc(doc(master('articles'), article.id), { eanCodes, updatedAt: serverTimestamp() });
-    await logActivity('EANs zum Artikel hinzugefÃ¼gt', { articleId: article.id, count: state.scanCodes.length });
-    if (openNext) {
-        const nextArticle = nextMissingEanArticle(article.id);
-        if (nextArticle) {
-            state.scanArticleId = nextArticle.id;
-            state.scanCodes = [];
-            state.scanStatus = `NÃ¤chster Artikel: ${nextArticle.title}`;
-            state.scanLastCode = '';
-            state.scanLastAt = 0;
-            render();
-            return;
-        }
-        closeScannerModal();
-        alertUser('Keine weiteren Artikel ohne EAN gefunden.', 'success');
-        return;
-    }
-    closeScannerModal();
-}
-
-async function startScanner() {
-    try {
-        stopScanner();
-        const video = document.getElementById('el-video');
-        const status = document.getElementById('el-scan-status');
-        if (!video) return;
-        scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-        video.srcObject = scanStream;
-        state.scanStatus = state.scanMode === 'article-ean' ? 'Scanner aktiv. Mehrere Codes kÃ¶nnen gesammelt werden.' : 'Scanner aktiv.';
-        if (status) status.textContent = state.scanStatus;
-        if ('BarcodeDetector' in window) {
-            const detector = new window.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'code_128', 'qr_code'] });
-            scanTimer = setInterval(async () => {
-                if (!state.scanOpen) return;
-                try {
-                    const codes = await detector.detect(video);
-                    if (codes?.length) await processScannerCode(codes[0].rawValue || '');
-                } catch {}
-            }, 700);
-        } else {
-            state.scanStatus = 'BarcodeDetector nicht verfÃ¼gbar. Bitte Code manuell eingeben.';
-            if (status) status.textContent = state.scanStatus;
-        }
-        updateScannerDynamicUi();
-    } catch {
-        const status = document.getElementById('el-scan-status');
-        state.scanStatus = 'Kamera konnte nicht gestartet werden.';
-        if (status) status.textContent = state.scanStatus;
-    }
-}
-
-async function handleScanCode(code) {
-    const article = state.articles.find((a) => (a.eanCodes || []).includes(code) || (a.variants || []).some((v) => (v.eanCodes || []).includes(code)));
-    if (!article) { state.unknownCode = code; state.unknownArticleId = ''; render(); return; }
-    if (state.purchase) state.purchase = null;
-    openPurchase(article, true);
-}
-
-async function saveUnknownCode() {
-    if (!state.unknownCode || !state.unknownArticleId) return alertUser('Bitte Artikel auswÃ¤hlen.', 'error');
-    const article = state.articles.find((a) => a.id === state.unknownArticleId);
-    if (!article) return;
-    await updateDoc(doc(master('articles'), article.id), { eanCodes: Array.from(new Set([...(article.eanCodes || []), state.unknownCode])), updatedAt: serverTimestamp() });
-    await logActivity('EAN zugeordnet', { articleId: article.id, code: state.unknownCode });
-    const code = state.unknownCode;
-    state.unknownCode = '';
-    state.unknownArticleId = '';
-    render();
-    await handleScanCode(code);
-}
-
-async function saveArticle() {
-    const a = state.articleEditor;
-    if (!a) return;
-    const title = document.getElementById('ela-title')?.value?.trim() || '';
-    if (!title) return alertUser('Bitte Bezeichnung eingeben.', 'error');
-    const payload = {
-        title,
-        defaultQuantity: parseQty(document.getElementById('ela-q')?.value || '1') || 1,
-        defaultUnit: document.getElementById('ela-unit')?.value || 'StÃ¼ck',
-        categoryId: document.getElementById('ela-cat')?.value || '',
-        eanCodes: String(document.getElementById('ela-ean')?.value || '').split('\n').map((x) => x.trim()).filter(Boolean),
-        variants: String(document.getElementById('ela-var')?.value || '').split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
-            const [label, codes] = line.split('|');
-            return { label: (label || '').trim(), eanCodes: String(codes || '').split(',').map((x) => x.trim()).filter(Boolean) };
-        }),
-        persistentNotes: String(document.getElementById('ela-note')?.value || '').split('\n').map((x) => x.trim()).filter(Boolean),
-        storeIds: a.storeIds || [],
-        updatedAt: serverTimestamp(),
-        createdBy: uid(),
-        createdByName: uname()
-    };
-    if (a.id) await updateDoc(doc(master('articles'), a.id), payload); else await addDoc(master('articles'), { ...payload, createdAt: serverTimestamp() });
-    await logActivity('Artikel gespeichert', { title });
-    state.articleEditor = null;
-    render();
 }
