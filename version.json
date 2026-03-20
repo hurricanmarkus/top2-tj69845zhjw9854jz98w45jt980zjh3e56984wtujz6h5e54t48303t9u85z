@@ -1,13 +1,22 @@
 {
-  "version": "1.4.9",
-  "buildId": "20260320-10",
+  "version": "1.4.10",
+  "buildId": "20260320-11",
   "releaseDate": "2026-03-20",
   "releaseTime": "16:15",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste: Long-Press auf Checkbox oeffnet Mengenfenster, Scanner-/Eingabelayout verbreitert und Home-Reihenfolge angepasst.",
+  "note": "Einkaufsliste: Rest-Eintraege hervorgehoben und loeschbar, Doppelclick-Hinweis verzögert, Reopen-Flicker behoben und Kopfzeile kompakter gemacht.",
   "commitId": "",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.4.10",
+      "buildId": "20260320-11",
+      "releaseDate": "2026-03-20",
+      "releaseTime": "16:15",
+      "note": "Einkaufsliste: Rest-Eintraege hervorgehoben und loeschbar, Doppelclick-Hinweis verzögert, Reopen-Flicker behoben und Kopfzeile kompakter gemacht.",
+      "commitId": "",
+      "obligation": "false"
+    },
     {
       "version": "1.4.9",
       "buildId": "20260320-10",

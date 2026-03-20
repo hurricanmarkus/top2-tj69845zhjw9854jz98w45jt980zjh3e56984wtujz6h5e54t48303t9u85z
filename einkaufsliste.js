@@ -35,6 +35,7 @@ let holdTimer = null;
 let holdPayload = null;
 let holdConsumedKey = '';
 let holdConsumedAt = 0;
+let doubleHintTimers = new Map();
 
 const state = {
     lists: [],
@@ -84,6 +85,21 @@ const state = {
     drafts: { category: '', store: '', remark: '', note: '' }
 };
 
+async function deleteListItem(itemId, activityLabel = 'Artikel gelöscht') {
+    const item = state.items.find((x) => x.id === itemId);
+    if (!item) return;
+    if (!canEditItems()) return alertUser('Keine Berechtigung zum Löschen.', 'error');
+    if (state.detailId === itemId) {
+        state.detailId = null;
+        render();
+    }
+    if (!(await acquireLock(item.id))) return;
+    await deleteDoc(doc(sub(state.listId, 'items'), item.id));
+    await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() });
+    await logActivity(activityLabel, { itemId: item.id, title: item.title });
+    render();
+}
+
 const uid = () => currentUser?.mode || '';
 const uname = () => currentUser?.displayName || 'Unbekannt';
 const listsRef = () => collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_lists');
@@ -112,6 +128,19 @@ const canManage = (l = activeList()) => !!l && (l.ownerId === uid() || (perm(l.i
 const canManageWrite = (l = activeList()) => !!l && (l.ownerId === uid() || (perm(l.id)?.canManage && perm(l.id)?.canManageWrite && permActive(perm(l.id))));
 const canAddToList = (l = activeList()) => !!l && canAdd(l);
 const canEditItems = (l = activeList()) => !!l && l.active !== false && (canAdd(l) || canShop(l));
+const isRestItem = (item) => /^Rest von\s+/i.test(String(item?.title || '').trim());
+
+function closePurchaseModal() {
+    if (autoScanTimer) clearTimeout(autoScanTimer);
+    autoScanTimer = null;
+    state.purchase = null;
+    render();
+}
+
+function closeDetailModal() {
+    state.detailId = null;
+    render();
+}
 
 function ensureStyle() {
     if (document.getElementById('el-style')) return;
@@ -553,6 +582,12 @@ function closeScannerModal() {
     render();
 }
 
+function closeUnknownModal() {
+    state.unknownCode = '';
+    state.unknownArticleId = '';
+    render();
+}
+
 function updateScannerDynamicUi() {
     const status = document.getElementById('el-scan-status');
     if (status) status.textContent = state.scanStatus || '';
@@ -590,7 +625,7 @@ function renderHeader(list) {
 function renderHeaderActive(list) {
     const listBoxClass = list ? 'border-blue-500 text-blue-700 bg-blue-50' : 'border-slate-300 text-slate-500 bg-slate-50';
     const listBoxText = list?.name || 'Keine Liste';
-    return `<div class="space-y-3"><div class="back-link-container w-full mb-2"><button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition" data-a="back-home"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 mr-1"><path d="m15 18-6-6 6-6" /></svg><span class="text-sm font-semibold">zurück</span></button><div class="border-t border-gray-300 mt-2"></div></div><div class="flex flex-wrap items-center gap-2"><div class="min-w-0 flex-1 flex justify-center"><div class="inline-flex max-w-full items-center rounded-full border-2 px-4 py-2 text-sm font-black shadow-sm ${listBoxClass}">${escapeHtml(listBoxText)}</div></div><div class="flex items-center gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="open-mode-picker">${escapeHtml(currentModeDef().label)}</button><button class="elb bg-gray-100 text-gray-700 !px-3" data-a="toggle-details" title="Menü">⋮</button></div></div>${state.detailsOpen ? `<div class="elc">${renderDetailRows(list)}</div>` : ''}${renderActionBar()}</div>`;
+    return `<div class="space-y-2"><div class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2"><div class="back-link-container flex flex-col items-start min-w-0"><button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition" data-a="back-home"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 mr-1"><path d="m15 18-6-6 6-6" /></svg><span class="text-sm font-semibold">zurück</span></button><div class="border-t border-gray-300 mt-2 w-full"></div></div><div class="min-w-0 flex justify-center"><div class="inline-flex max-w-full items-center rounded-full border-2 px-2.5 py-1 text-[11px] sm:text-sm font-black shadow-sm whitespace-nowrap overflow-hidden text-ellipsis ${listBoxClass}">${escapeHtml(listBoxText)}</div></div><div class="flex items-center justify-end gap-1 sm:gap-2 min-w-0"><button class="elb bg-gray-100 text-gray-700 !px-2 sm:!px-3 text-[11px] sm:text-xs whitespace-nowrap" data-a="open-mode-picker">${escapeHtml(currentModeDef().label)}</button><button class="elb bg-gray-100 text-gray-700 !px-2 text-base sm:text-lg leading-none" data-a="toggle-details" title="Menü">⋮</button></div></div>${state.detailsOpen ? `<div class="elc">${renderDetailRows(list)}</div>` : ''}${renderActionBar()}</div>`;
 }
 
 function renderManageSections() {
@@ -666,12 +701,13 @@ function renderItem(item) {
     const lock = state.locks.get(item.id);
     const locked = lock && lock.userId !== uid() && Date.now() < ((toDate(lock.expiresAt)?.getTime() || 0));
     const stores = (item.storeIds || []).map((id) => numberedStoreLabel(id)).join(', ');
-    return `<div class="elitem border-t border-gray-100"><button type="button" class="text-left min-w-0" data-hold-item="${item.id}" title="2 Sekunden halten zum Bearbeiten"><div class="flex flex-wrap gap-2 items-center"><div class="font-bold text-sm text-gray-900 truncate flex-1">${escapeHtml(ell(item.title, 40))}</div>${chip(`${fmtQty(item.quantity)} ${escapeHtml(item.unit || '')}`, 'bg-indigo-50 text-indigo-700')}${state.categories.find((c) => c.id === item.categoryId) ? chip(escapeHtml(state.categories.find((c) => c.id === item.categoryId).name), 'bg-amber-50 text-amber-700') : ''}${locked ? chip(`gesperrt von ${escapeHtml(lock.userName || lock.userId)}`, 'bg-red-100 text-red-700') : ''}</div><div class="text-xs text-gray-500 mt-1">${escapeHtml(stores)}${item.restoredAt ? ` · Wiederhergestellt von ${escapeHtml(item.restoredByName || '—')} · ${dt(item.restoredAt)}` : ''}</div>${item.persistentNote ? `<div class="text-xs text-gray-600 mt-2">${escapeHtml(item.persistentNote)}</div>` : ''}${item.note ? `<div class="text-xs text-gray-600 mt-1">${escapeHtml(item.note)}</div>` : ''}</button><button class="elcheck" data-a="check" data-hold-check data-id="${item.id}" title="2 Sekunden halten für Mengenfenster, kurz tippen zum Abhaken">✓</button></div>`;
+    const restItem = isRestItem(item);
+    return `<div class="elitem border-t border-gray-100 ${restItem ? 'rounded-2xl border-l-4 border-l-orange-400 bg-orange-50/60 px-2' : ''}"><button type="button" class="text-left min-w-0" data-hold-item="${item.id}" title="2 Sekunden halten zum Bearbeiten"><div class="flex flex-wrap gap-2 items-center"><div class="font-bold text-sm text-gray-900 truncate flex-1">${escapeHtml(ell(item.title, 40))}</div>${restItem ? chip('REST', 'bg-orange-100 text-orange-800 ring-1 ring-orange-300') : ''}${chip(`${fmtQty(item.quantity)} ${escapeHtml(item.unit || '')}`, 'bg-indigo-50 text-indigo-700')}${state.categories.find((c) => c.id === item.categoryId) ? chip(escapeHtml(state.categories.find((c) => c.id === item.categoryId).name), 'bg-amber-50 text-amber-700') : ''}${locked ? chip(`gesperrt von ${escapeHtml(lock.userName || lock.userId)}`, 'bg-red-100 text-red-700') : ''}</div><div class="text-xs text-gray-500 mt-1">${escapeHtml(stores)}${item.restoredAt ? ` · Wiederhergestellt von ${escapeHtml(item.restoredByName || '—')} · ${dt(item.restoredAt)}` : ''}</div>${restItem ? '<div class="mt-2 text-[11px] font-semibold uppercase tracking-wide text-orange-700">Automatisch angelegter Rest-Eintrag</div>' : ''}${item.persistentNote ? `<div class="text-xs text-gray-600 mt-2">${escapeHtml(item.persistentNote)}</div>` : ''}${item.note ? `<div class="text-xs text-gray-600 mt-1">${escapeHtml(item.note)}</div>` : ''}</button><button class="elcheck" data-a="check" data-hold-check data-id="${item.id}" title="2 Sekunden halten für Mengenfenster, kurz tippen zum Abhaken">✓</button></div>`;
 }
 
 function renderChecked() {
     const done = state.items.filter((x) => x.status === 'checked').sort((a, b) => (toDate(b.checkedAt)?.getTime() || 0) - (toDate(a.checkedAt)?.getTime() || 0));
-    return `<div class="elc space-y-3"><div class="flex flex-wrap justify-between gap-2 items-center"><div class="font-black text-sm">Abgehackt-Liste</div><div class="text-xs font-bold text-gray-600">${done.length} erledigt</div></div>${done.length ? done.map((item) => `<div class="elitem border-t border-gray-100"><button class="text-left min-w-0" data-a="detail" data-id="${item.id}"><div class="font-bold text-sm text-gray-800 truncate">${escapeHtml(ell(item.title, 40))}</div><div class="text-xs text-gray-500 mt-1">Von ${escapeHtml(item.checkedByName || '—')} · ${dt(item.checkedAt)}</div></button><button class="elcheck" data-a="restore" data-id="${item.id}" title="2x schnell = wiederherstellen">↺</button></div>`).join('') : '<div class="py-2 text-sm text-gray-400">Noch nichts abgehakt.</div>'}</div>`;
+    return `<div class="elc space-y-3"><div class="flex flex-wrap justify-between gap-2 items-center"><div class="font-black text-sm">Abgehackt-Liste</div><div class="text-xs font-bold text-gray-600">${done.length} erledigt</div></div>${done.length ? done.map((item) => { const restItem = isRestItem(item); return `<div class="elitem border-t border-gray-100 ${restItem ? 'rounded-2xl border-l-4 border-l-orange-400 bg-orange-50/60 px-2' : ''}"><button class="text-left min-w-0" data-a="detail" data-id="${item.id}"><div class="flex flex-wrap gap-2 items-center"><div class="font-bold text-sm text-gray-800 truncate">${escapeHtml(ell(item.title, 40))}</div>${restItem ? chip('REST', 'bg-orange-100 text-orange-800 ring-1 ring-orange-300') : ''}</div><div class="text-xs text-gray-500 mt-1">Von ${escapeHtml(item.checkedByName || '—')} · ${dt(item.checkedAt)}</div>${restItem ? '<div class="mt-2 text-[11px] font-semibold uppercase tracking-wide text-orange-700">Automatisch angelegter Rest-Eintrag</div>' : ''}</button><div class="flex items-center gap-2"><button class="elcheck" data-a="restore" data-id="${item.id}" title="2x schnell = wiederherstellen">↺</button><button class="elcheck bg-red-50 text-red-700" data-a="delete-checked-item" data-id="${item.id}" title="Dauerhaft löschen">×</button></div></div>`; }).join('') : '<div class="py-2 text-sm text-gray-400">Noch nichts abgehakt.</div>'}</div>`;
 }
 
 function renderStoreCategoryEditor() {
@@ -754,7 +790,7 @@ function renderDetail() {
     const otherLists = state.lists.filter((x) => x.id !== state.listId).filter((x) => canAdd(x) || canShop(x));
     el.className = `elmodal ${item ? 'o' : ''}`;
     if (!item) { el.innerHTML = ''; return; }
-    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="text-xl font-black text-gray-900">Produkt bearbeiten</div><div class="text-sm text-gray-500">Langer Klick auf den Namen öffnet dieses Fenster.</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-detail">Schließen</button></div><div class="grid gap-3 sm:grid-cols-2"><input id="el-d-title" class="eli" value="${escapeHtml(item.title || '')}" ${!canEditItems() ? 'disabled' : ''}><input id="el-d-qty" class="eli" value="${escapeHtml(formatEditableQty(item.quantity || '1'))}" ${!canEditItems() ? 'disabled' : ''}></div><div class="grid gap-3 sm:grid-cols-2"><select id="el-d-cat" class="els" ${!canEditItems() ? 'disabled' : ''}><option value="">Kategorie wählen...</option>${state.categories.map((c) => `<option value="${c.id}" ${item.categoryId === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}</select><div class="flex items-center rounded-2xl border border-gray-200 bg-slate-50 px-3 text-sm font-bold text-gray-600">Einheit: ${escapeHtml(item.unit || 'Stück')}</div></div><textarea id="el-d-note" class="elt" placeholder="Anmerkung für diese Position" ${!canEditItems() ? 'disabled' : ''}>${escapeHtml(item.note || '')}</textarea><textarea id="el-d-pnote" class="elt" placeholder="Gespeicherte Anmerkung" ${!canEditItems() ? 'disabled' : ''}>${escapeHtml(item.persistentNote || '')}</textarea><div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]"><select id="el-d-move-list" class="els" ${!otherLists.length || !canEditItems() ? 'disabled' : ''}><option value="">Auf andere Liste verschieben...</option>${otherLists.map((list) => `<option value="${list.id}">${escapeHtml(list.name)}</option>`).join('')}</select><button class="elb bg-gray-100 text-gray-700" data-a="move-detail" ${!otherLists.length || !canEditItems() ? 'disabled' : ''}>Verschieben</button></div><div class="elc space-y-2 bg-slate-50 text-sm"><div><b>Hinzugefügt:</b> ${dt(item.createdAt)} von ${escapeHtml(item.createdByName || item.createdBy || '—')}</div>${item.checkedAt ? `<div><b>Abgehakt:</b> ${dt(item.checkedAt)} von ${escapeHtml(item.checkedByName || item.checkedBy || '—')}</div>` : ''}${item.restoredAt ? `<div><b>Wiederhergestellt:</b> ${dt(item.restoredAt)} von ${escapeHtml(item.restoredByName || item.restoredBy || '—')}</div>` : ''}<div><b>EAN-Codes:</b> ${escapeHtml((article?.eanCodes || []).join(', ') || 'keine')}</div></div><div class="flex flex-wrap justify-between gap-2"><button class="elb bg-red-600 text-white" data-a="delete-detail-item" ${!canEditItems() ? 'disabled' : ''}>Löschen</button><div class="flex flex-wrap gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="close-detail">Schließen</button><button class="elb a" data-a="save-detail" ${!canEditItems() ? 'disabled' : ''}>Speichern</button></div></div></div>`;
+    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-start"><div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><div class="text-xl font-black text-gray-900">Produkt bearbeiten</div>${isRestItem(item) ? chip('REST', 'bg-orange-100 text-orange-800 ring-1 ring-orange-300') : ''}</div><div class="text-sm text-gray-500">${isRestItem(item) ? `Automatisch angelegt als Rest von ${escapeHtml(String(item.title || '').replace(/^Rest von\s+/i, '').trim() || item.title || 'Artikel')}.` : 'Langer Klick auf den Namen öffnet dieses Fenster.'}</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-detail">Schließen</button></div>${isRestItem(item) ? '<div class="rounded-2xl border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-800">Dieser Eintrag ist ein automatisch erzeugter Rest-Eintrag und kann wie jeder andere Eintrag bearbeitet oder gelöscht werden.</div>' : ''}<div class="grid gap-3 sm:grid-cols-2"><input id="el-d-title" class="eli" value="${escapeHtml(item.title || '')}" ${!canEditItems() ? 'disabled' : ''}><input id="el-d-qty" class="eli" value="${escapeHtml(formatEditableQty(item.quantity || '1'))}" ${!canEditItems() ? 'disabled' : ''}></div><div class="grid gap-3 sm:grid-cols-2"><select id="el-d-cat" class="els" ${!canEditItems() ? 'disabled' : ''}><option value="">Kategorie wählen...</option>${state.categories.map((c) => `<option value="${c.id}" ${item.categoryId === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}</select><div class="flex items-center rounded-2xl border border-gray-200 bg-slate-50 px-3 text-sm font-bold text-gray-600">Einheit: ${escapeHtml(item.unit || 'Stück')}</div></div><textarea id="el-d-note" class="elt" placeholder="Anmerkung für diese Position" ${!canEditItems() ? 'disabled' : ''}>${escapeHtml(item.note || '')}</textarea><textarea id="el-d-pnote" class="elt" placeholder="Gespeicherte Anmerkung" ${!canEditItems() ? 'disabled' : ''}>${escapeHtml(item.persistentNote || '')}</textarea><div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]"><select id="el-d-move-list" class="els" ${!otherLists.length || !canEditItems() ? 'disabled' : ''}><option value="">Auf andere Liste verschieben...</option>${otherLists.map((list) => `<option value="${list.id}">${escapeHtml(list.name)}</option>`).join('')}</select><button class="elb bg-gray-100 text-gray-700" data-a="move-detail" ${!otherLists.length || !canEditItems() ? 'disabled' : ''}>Verschieben</button></div><div class="elc space-y-2 bg-slate-50 text-sm"><div><b>Artikel:</b> ${escapeHtml(article?.title || item.title || '—')}</div><div><b>Status:</b> ${escapeHtml(item.status || 'open')}</div><div><b>Erfasst:</b> ${dt(item.createdAt)}</div><div><b>Gekauft:</b> ${item.checkedAt ? `${dt(item.checkedAt)} · ${escapeHtml(item.checkedByName || '—')}` : '—'}</div>${item.restoredAt ? `<div><b>Wiederhergestellt:</b> ${dt(item.restoredAt)} · ${escapeHtml(item.restoredByName || '—')}</div>` : ''}${item.purchasedQuantity ? `<div><b>Gekauft-Menge:</b> ${fmtQty(item.purchasedQuantity)}</div>` : ''}</div><div class="flex flex-wrap justify-end gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="close-detail">Schließen</button>${canEditItems() ? '<button class="elb bg-red-600 text-white" data-a="delete-detail-item">Löschen</button><button class="elb a" data-a="save-detail">Speichern</button>' : ''}</div></div>`;
 }
 
 function renderArticle() {
@@ -1027,21 +1063,39 @@ async function addItem() {
         article = { id: ref.id, title, defaultQuantity: quantity, defaultUnit: state.unit, persistentNotes: [], eanCodes: [], storeIds: [...state.storeIds] };
     }
     const persistentNote = article.persistentNotes?.length ? article.persistentNotes.join(' · ') : '';
-    await addDoc(sub(state.listId, 'items'), { articleId: article.id, title, quantity, unit: state.unit, categoryId: article.categoryId || '', storeIds: [...state.storeIds], status: 'open', note: state.note || '', persistentNote, eanCodes: article.eanCodes || [], createdAt: serverTimestamp(), createdBy: uid(), createdByName: uname() });
+    await addDoc(sub(state.listId, 'items'), { articleId: article.id, title: article.title, quantity, unit: state.unit, categoryId: article.categoryId || '', storeIds: [...state.storeIds], status: 'open', note: state.note || '', persistentNote, eanCodes: article.eanCodes || [], createdAt: serverTimestamp(), createdBy: uid(), createdByName: uname() });
     await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname(), storeOrder: activeList()?.storeOrder?.length ? activeList().storeOrder : state.stores.map((s) => s.id) });
     await logActivity('Artikel hinzugefügt', { title, quantity, unit: state.unit });
     state.q = '1'; state.title = ''; state.note = ''; state.storeIds = []; render();
 }
 
 async function handleDouble(id, action) {
-    const key = `${action}:${id}`; const last = state.lastTap.get(key) || 0; const now = Date.now(); state.lastTap.set(key, now);
+    const key = `${action}:${id}`;
+    const last = state.lastTap.get(key) || 0;
+    const now = Date.now();
+    state.lastTap.set(key, now);
+    const existingTimer = doubleHintTimers.get(key);
+    if (existingTimer) {
+        clearTimeout(existingTimer);
+        doubleHintTimers.delete(key);
+    }
     if (now - last > DOUBLE_MS) {
-        if (action === 'check') alertUser('Abhaken: Schneller Doppelklick/Mengeneingabe: Langer Klick', 'info');
+        if (action === 'check') {
+            const timer = setTimeout(() => {
+                if (state.lastTap.get(key) === now) {
+                    alertUser('Abhaken: Schneller Doppelklick/Mengeneingabe: Langer Klick', 'info');
+                    state.lastTap.delete(key);
+                    doubleHintTimers.delete(key);
+                }
+            }, DOUBLE_MS);
+            doubleHintTimers.set(key, timer);
+        }
         return;
     }
+    state.lastTap.delete(key);
     if (action === 'check') { await checkItemDirect(id); return; }
     const item = state.items.find((x) => x.id === id); if (!item) return;
-    await updateDoc(doc(sub(state.listId, 'items'), id), { status: 'open', restoredAt: serverTimestamp(), restoredBy: uid(), restoredByName: uname(), checkedAt: null, checkedBy: null, checkedByName: null });
+    await updateDoc(doc(sub(state.listId, 'items'), item.id), { status: 'open', restoredAt: serverTimestamp(), restoredBy: uid(), restoredByName: uname(), checkedAt: null, checkedBy: null, checkedByName: null });
     await logActivity('Artikel wiederhergestellt', { itemId: id, title: item.title });
 }
 
@@ -1051,7 +1105,7 @@ async function checkItemDirect(id) {
     if (!canShop()) return alertUser('Keine Berechtigung zum Abhaken.', 'error');
     if (!(await acquireLock(item.id))) return;
     await updateDoc(doc(sub(state.listId, 'items'), item.id), { status: 'checked', purchasedQuantity: Number(item.quantity || 0), checkedAt: serverTimestamp(), checkedBy: uid(), checkedByName: uname() });
-    await logActivity('Artikel abgehakt', { itemId: item.id, title: item.title, quantity: item.quantity });
+    await logActivity('Artikel abgehakt', { itemId: id, title: item.title, quantity: item.quantity });
 }
 
 async function saveDetailItem() {
@@ -1066,10 +1120,11 @@ async function saveDetailItem() {
     const persistentNote = String(document.getElementById('el-d-pnote')?.value || '').trim();
     if (!title) return alertUser('Bitte Produktnamen eingeben.', 'error');
     if (!(quantity > 0)) return alertUser('Bitte eine gültige Menge eingeben.', 'error');
+    state.detailId = null;
+    render();
     await updateDoc(doc(sub(state.listId, 'items'), item.id), { title, quantity, categoryId, note, persistentNote });
     await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() });
     await logActivity('Artikel bearbeitet', { itemId: item.id, title, quantity });
-    state.detailId = null;
     render();
 }
 
@@ -1084,27 +1139,29 @@ async function moveDetailItem() {
     if (!(canAdd(targetList) || canShop(targetList))) return alertUser('Keine Berechtigung für die Ziel-Liste.', 'error');
     if (!(await acquireLock(item.id))) return;
     const { id, ...payload } = item;
+    state.detailId = null;
+    render();
     await setDoc(doc(sub(targetListId, 'items'), id), payload);
     await deleteDoc(doc(sub(state.listId, 'items'), id));
     await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() });
     await updateDoc(listDoc(targetListId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() });
     await logActivity('Artikel verschoben', { itemId: id, title: item.title, toListId: targetListId, toListName: targetList.name });
     await logActivityForList(targetListId, 'Artikel übernommen', { itemId: id, title: item.title, fromListId: state.listId, fromListName: activeList()?.name || '' });
-    state.detailId = null;
     render();
 }
 
 async function deleteDetailItem() {
     const item = state.items.find((x) => x.id === state.detailId);
     if (!item) return;
-    if (!canEditItems()) return alertUser('Keine Berechtigung zum Löschen.', 'error');
     if (!confirm(`Produkt "${item.title}" löschen?`)) return;
-    if (!(await acquireLock(item.id))) return;
-    await deleteDoc(doc(sub(state.listId, 'items'), item.id));
-    await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() });
-    await logActivity('Artikel gelöscht', { itemId: item.id, title: item.title });
-    state.detailId = null;
-    render();
+    await deleteListItem(item.id, 'Artikel gelöscht');
+}
+
+async function deleteCheckedItem(itemId) {
+    const item = state.items.find((x) => x.id === itemId);
+    if (!item) return;
+    if (!confirm(`Produkt "${item.title}" dauerhaft löschen?`)) return;
+    await deleteListItem(item.id, 'Abgehakten Artikel gelöscht');
 }
 
 function openPurchase(itemOrArticle, isScan) {
@@ -1127,6 +1184,7 @@ function resetAutoScan(isScan = state.purchase?.kind === 'scan') {
 async function confirmPurchase() {
     const p = state.purchase; if (!p) return;
     const qty = Number(p.quantity || 0); if (!(qty > 0)) return alertUser('Bitte eine Menge eingeben.', 'error');
+    closePurchaseModal();
     if (p.itemId) {
         const item = state.items.find((x) => x.id === p.itemId); if (!item) return;
         if (qty >= Number(item.quantity || 0)) {
@@ -1149,7 +1207,6 @@ async function confirmPurchase() {
         await addDoc(sub(state.listId, 'items'), { articleId: article.id, title: article.title, quantity: qty, unit: article.defaultUnit || 'Stück', categoryId: article.categoryId || '', storeIds: article.storeIds || [], status: 'checked', note: '', persistentNote: (article.persistentNotes || []).join(' · '), eanCodes: article.eanCodes || [], createdAt: serverTimestamp(), createdBy: uid(), createdByName: uname(), purchasedQuantity: qty, checkedAt: serverTimestamp(), checkedBy: uid(), checkedByName: uname() });
         await logActivity('Scan übernommen', { articleId: article.id, quantity: qty });
     }
-    state.purchase = null;
     render();
 }
 
@@ -1285,11 +1342,15 @@ async function handleScanCode(code) {
 }
 
 async function saveUnknownCode() {
-    if (!state.unknownCode || !state.unknownArticleId) return alertUser('Bitte Artikel auswählen.', 'error');
-    const article = state.articles.find((a) => a.id === state.unknownArticleId); if (!article) return;
-    await updateDoc(doc(master('articles'), article.id), { eanCodes: Array.from(new Set([...(article.eanCodes || []), state.unknownCode])), updatedAt: serverTimestamp() });
-    await logActivity('EAN zugeordnet', { articleId: article.id, code: state.unknownCode });
-    const code = state.unknownCode; state.unknownCode = ''; state.unknownArticleId = ''; render(); await handleScanCode(code);
+    if (!state.unknownCode) return;
+    if (!state.unknownArticleId) return alertUser('Bitte Artikel auswählen.', 'error');
+    const article = state.articles.find((x) => x.id === state.unknownArticleId);
+    if (!article) return alertUser('Artikel wurde nicht gefunden.', 'error');
+    const code = state.unknownCode;
+    closeUnknownModal();
+    await updateDoc(doc(master('articles'), article.id), { eanCodes: Array.from(new Set([...(article.eanCodes || []), code])), updatedAt: serverTimestamp() });
+    await logActivity('Unbekannter Code zugeordnet', { articleId: article.id, code });
+    render();
 }
 
 async function saveArticle() {
@@ -1368,13 +1429,14 @@ async function onClick(e) {
     if (a === 'check' || a === 'restore') { await handleDouble(btn.dataset.id, a); return; }
     if (a === 'detail') { state.detailId = btn.dataset.id; render(); return; }
     if (a === 'close-detail') { state.detailId = null; render(); return; }
+    if (a === 'delete-checked-item') { await deleteCheckedItem(btn.dataset.id); return; }
     if (a === 'open-scan') { if (state.scanOpen) closeScannerModal(); else openScanner(state.listMode === 'input' ? 'list-add' : 'shopping'); return; }
     if (a === 'close-scan') { closeScannerModal(); return; }
     if (a === 'manual-scan') { await submitScannerManualInputActive(); return; }
     if (a === 'save-scanned-codes') { await saveScannedCodesActive(false); return; }
     if (a === 'save-scanned-codes-next') { await saveScannedCodesActive(true); return; }
     if (a === 'remove-scanned-code') { removeScannedCodeActive(btn.dataset.id); return; }
-    if (a === 'close-unknown') { state.unknownCode = ''; state.unknownArticleId = ''; render(); return; }
+    if (a === 'close-unknown') { closeUnknownModal(); return; }
     if (a === 'save-unknown') { await saveUnknownCode(); return; }
     if (a === 'open-article') { state.articleEditor = { title: '', defaultQuantity: 1, defaultUnit: 'Stück', categoryId: '', eanCodes: [], variants: [], persistentNotes: [], storeIds: [] }; render(); return; }
     if (a === 'edit-article') { const article = state.articles.find((x) => x.id === btn.dataset.id); if (article) { state.articleEditor = JSON.parse(JSON.stringify(article)); render(); } return; }
@@ -1406,7 +1468,7 @@ async function onClick(e) {
     if (a === 'save-detail') { await saveDetailItem(); return; }
     if (a === 'move-detail') { await moveDetailItem(); return; }
     if (a === 'delete-detail-item') { await deleteDetailItem(); return; }
-    if (a === 'close-purchase') { state.purchase = null; render(); return; }
+    if (a === 'close-purchase') { closePurchaseModal(); return; }
     if (a === 'digit') { appendPurchaseInput(btn.dataset.v); renderPurchase(); resetAutoScan(); return; }
     if (a === 'back') { removePurchaseInput(); renderPurchase(); resetAutoScan(); return; }
     if (a === 'clear') { clearPurchaseInput(); renderPurchase(); resetAutoScan(); return; }
