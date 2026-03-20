@@ -1350,8 +1350,6 @@ async function deleteCollaborator(userId) {
     await logActivity('Mitbearbeiter entfernt', { userId });
 }
 
-if (false) {
-
 function renderPurchase() {
     const el = document.getElementById('el-purchase');
     if (!el) return;
@@ -1425,6 +1423,10 @@ function onKeyDown(e) {
         e.preventDefault();
         submitScannerManualInput();
     }
+}
+
+async function onClickActive(e) {
+    return onClick(e);
 }
 
 async function onClick(e) {
@@ -1631,6 +1633,4 @@ async function saveArticle() {
     await logActivity('Artikel gespeichert', { title });
     state.articleEditor = null;
     render();
-}
-
 }
