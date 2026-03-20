@@ -617,11 +617,6 @@ service cloud.firestore {
         && (
           resource.data.ownerId == einkaufslisteActorId()
           || (('memberIds' in resource.data) && resource.data.memberIds is list && einkaufslisteActorId() in resource.data.memberIds)
-          || (
-            hasEinkaufslistePermissionDoc(listId)
-            && einkaufslistePermissionData(listId).canRead == true
-            && isEinkaufslistePermissionActive(listId)
-          )
         );
       allow create: if canCreateEinkaufslisteList()
         && request.resource.data.ownerId == einkaufslisteActorId()
