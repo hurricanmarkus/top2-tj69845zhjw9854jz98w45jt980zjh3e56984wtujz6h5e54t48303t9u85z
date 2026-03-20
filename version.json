@@ -1,13 +1,22 @@
 {
-  "version": "1.4.5",
-  "buildId": "20260320-6",
+  "version": "1.4.6",
+  "buildId": "20260320-7",
   "releaseDate": "2026-03-20",
-  "releaseTime": "11:13",
+  "releaseTime": "11:24",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste Scope-Fix: onClickActive ist wieder im aktiven Modul-Scope, damit ensureRoot den Click-Listener fehlerfrei registriert.",
+  "note": "Einkaufsliste Doppeldefinition bereinigt: die doppelte renderPurchase/Scanner-Baustelle ist raus, onClickActive bleibt im aktiven Scope.",
   "commitId": "8de8f83",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.4.6",
+      "buildId": "20260320-7",
+      "releaseDate": "2026-03-20",
+      "releaseTime": "11:24",
+      "note": "Einkaufsliste Doppeldefinition bereinigt: die doppelte renderPurchase/Scanner-Baustelle ist raus, onClickActive bleibt im aktiven Scope.",
+      "commitId": "8de8f83",
+      "obligation": "false"
+    },
     {
       "version": "1.4.5",
       "buildId": "20260320-6",
