@@ -83,6 +83,7 @@ const state = {
     missingEanOnly: false,
     storeNumbers: false,
     articleSearch: '',
+    checkedMenuOpen: false,
     drafts: { category: '', store: '', remark: '', note: '' }
 };
 
@@ -722,12 +723,12 @@ function renderItem(item) {
     const locked = lock && lock.userId !== uid() && Date.now() < ((toDate(lock.expiresAt)?.getTime() || 0));
     const stores = (item.storeIds || []).map((id) => numberedStoreLabel(id)).join(', ');
     const restItem = isRestItem(item);
-    return `<div class="elitem border-t border-gray-100 ${restItem ? 'rounded-2xl border-l-4 border-l-orange-400 bg-orange-50/60 px-2' : ''}"><button type="button" class="text-left min-w-0" data-hold-item="${item.id}" title="2 Sekunden halten zum Bearbeiten"><div class="flex flex-wrap gap-2 items-center"><div class="font-bold text-sm text-gray-900 truncate flex-1">${escapeHtml(ell(item.title, 40))}</div>${restItem ? chip('REST', 'bg-orange-100 text-orange-800 ring-1 ring-orange-300') : ''}${chip(`${fmtQty(item.quantity)} ${escapeHtml(item.unit || '')}`, 'bg-indigo-50 text-indigo-700')}${state.categories.find((c) => c.id === item.categoryId) ? chip(escapeHtml(state.categories.find((c) => c.id === item.categoryId).name), 'bg-amber-50 text-amber-700') : ''}${locked ? chip(`gesperrt von ${escapeHtml(lock.userName || lock.userId)}`, 'bg-red-100 text-red-700') : ''}</div><div class="text-xs text-gray-500 mt-1">${escapeHtml(stores)}${item.restoredAt ? ` · Wiederhergestellt von ${escapeHtml(item.restoredByName || '—')} · ${dt(item.restoredAt)}` : ''}</div>${restItem ? '<div class="mt-2 text-[11px] font-semibold uppercase tracking-wide text-orange-700">Automatisch angelegter Rest-Eintrag</div>' : ''}${item.persistentNote ? `<div class="text-xs text-gray-600 mt-2">${escapeHtml(item.persistentNote)}</div>` : ''}${item.note ? `<div class="text-xs text-gray-600 mt-1">${escapeHtml(item.note)}</div>` : ''}</button><button class="elcheck" data-a="check" data-hold-check data-id="${item.id}" title="2 Sekunden halten für Mengenfenster, kurz tippen zum Abhaken">✓</button></div>`;
+    return `<div class="elitem border-t border-gray-100"><button type="button" class="text-left min-w-0" data-hold-item="${item.id}" title="2 Sekunden halten zum Bearbeiten"><div class="flex flex-wrap gap-2 items-center"><div class="font-bold text-sm text-gray-900 truncate flex-1">${escapeHtml(ell(item.title, 40))}</div>${chip(`${fmtQty(item.quantity)} ${escapeHtml(item.unit || '')}`, 'bg-indigo-50 text-indigo-700')}${state.categories.find((c) => c.id === item.categoryId) ? chip(escapeHtml(state.categories.find((c) => c.id === item.categoryId).name), 'bg-amber-50 text-amber-700') : ''}${locked ? chip(`gesperrt von ${escapeHtml(lock.userName || lock.userId)}`, 'bg-red-100 text-red-700') : ''}${restItem ? chip('Rest', 'bg-orange-100 text-orange-800 ring-1 ring-orange-300') : ''}</div><div class="text-xs text-gray-500 mt-1">${escapeHtml(stores)}${item.restoredAt ? ` · Wiederhergestellt von ${escapeHtml(item.restoredByName || '—')} · ${dt(item.restoredAt)}` : ''}</div>${item.persistentNote ? `<div class="text-xs text-gray-600 mt-2">${escapeHtml(item.persistentNote)}</div>` : ''}${item.note ? `<div class="text-xs text-gray-600 mt-1">${escapeHtml(item.note)}</div>` : ''}</button><button class="elcheck" data-a="check" data-hold-check data-id="${item.id}" title="2 Sekunden halten für Mengenfenster, kurz tippen zum Abhaken">✓</button></div>`;
 }
 
 function renderChecked() {
     const done = state.items.filter((x) => x.status === 'checked').sort((a, b) => (toDate(b.checkedAt)?.getTime() || 0) - (toDate(a.checkedAt)?.getTime() || 0));
-    return `<div class="elc space-y-3"><div class="flex flex-wrap justify-between gap-2 items-center"><div class="font-black text-sm">Abgehackt-Liste</div><div class="text-xs font-bold text-gray-600">${done.length} erledigt</div></div>${done.length ? done.map((item) => { const restItem = isRestItem(item); return `<div class="elitem border-t border-gray-100 ${restItem ? 'rounded-2xl border-l-4 border-l-orange-400 bg-orange-50/60 px-2' : ''}"><button class="text-left min-w-0" data-a="detail" data-id="${item.id}"><div class="flex flex-wrap gap-2 items-center"><div class="font-bold text-sm text-gray-800 truncate">${escapeHtml(ell(item.title, 40))}</div>${restItem ? chip('REST', 'bg-orange-100 text-orange-800 ring-1 ring-orange-300') : ''}</div><div class="text-xs text-gray-500 mt-1">Von ${escapeHtml(item.checkedByName || '—')} · ${dt(item.checkedAt)}</div>${restItem ? '<div class="mt-2 text-[11px] font-semibold uppercase tracking-wide text-orange-700">Automatisch angelegter Rest-Eintrag</div>' : ''}</button><div class="flex items-center gap-2"><button class="elcheck" data-a="restore" data-id="${item.id}" title="2x schnell = wiederherstellen">↺</button><button class="elcheck bg-red-50 text-red-700" data-a="delete-checked-item" data-id="${item.id}" title="Dauerhaft löschen">×</button></div></div>`; }).join('') : '<div class="py-2 text-sm text-gray-400">Noch nichts abgehakt.</div>'}</div>`;
+    return `<div class="elc space-y-3"><div class="flex flex-wrap justify-between gap-2 items-center"><div class="font-black text-sm">Abgehackt-Liste</div><div class="flex items-center gap-2"><div class="text-xs font-bold text-gray-600">${done.length} erledigt</div><div class="relative"><button class="elb bg-gray-100 text-gray-700 !px-2 text-base leading-none" data-a="toggle-checked-menu" title="Mehr Optionen">⋮</button>${state.checkedMenuOpen ? `<div class="absolute right-0 top-full z-20 mt-2 w-56 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl"><button class="w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-red-700 hover:bg-red-50" data-a="delete-all-checked">Alle Einträge löschen</button></div>` : ''}</div></div></div>${done.length ? done.map((item) => { const restItem = isRestItem(item); return `<div class="elitem border-t border-gray-100"><button class="text-left min-w-0" data-a="detail" data-id="${item.id}"><div class="flex flex-wrap gap-2 items-center"><div class="font-bold text-sm text-gray-800 truncate">${escapeHtml(ell(item.title, 40))}</div>${restItem ? chip('Rest', 'bg-orange-100 text-orange-800 ring-1 ring-orange-300') : ''}</div><div class="text-xs text-gray-500 mt-1">Von ${escapeHtml(item.checkedByName || '—')} · ${dt(item.checkedAt)}</div></button><div class="flex items-center gap-2"><button class="elcheck" data-a="restore" data-id="${item.id}" title="2x schnell = wiederherstellen">↺</button><button class="elcheck bg-red-50 text-red-700" data-a="delete-checked-item" data-id="${item.id}" title="Dauerhaft löschen">×</button></div></div>`; }).join('') : '<div class="py-2 text-sm text-gray-400">Noch nichts abgehakt.</div>'}</div>`;
 }
 
 function renderStoreCategoryEditor() {
@@ -1183,6 +1184,20 @@ async function deleteCheckedItem(itemId) {
     await deleteListItem(item.id, 'Abgehakten Artikel gelöscht');
 }
 
+async function deleteAllCheckedItems() {
+    const checked = state.items.filter((x) => x.status === 'checked');
+    if (!checked.length) return alertUser('Keine abgehakten Einträge vorhanden.', 'info');
+    if (!confirm(`Alle ${checked.length} abgehakten Einträge löschen?`)) return;
+    state.checkedMenuOpen = false;
+    render();
+    for (const item of checked) {
+        await deleteDoc(doc(sub(state.listId, 'items'), item.id));
+    }
+    await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() });
+    await logActivity('Alle abgehakten Einträge gelöscht', { count: checked.length });
+    render();
+}
+
 function openPurchase(itemOrArticle, isScan) {
     const item = itemOrArticle?.status ? itemOrArticle : null;
     const article = item ? state.articles.find((a) => a.id === item.articleId) : itemOrArticle;
@@ -1211,7 +1226,8 @@ async function confirmPurchase() {
         } else {
             const rest = Number((Number(item.quantity || 0) - qty).toFixed(2));
             await updateDoc(doc(sub(state.listId, 'items'), item.id), { status: 'checked', purchasedQuantity: qty, checkedAt: serverTimestamp(), checkedBy: uid(), checkedByName: uname() });
-            await addDoc(sub(state.listId, 'items'), { ...item, quantity: rest, title: `Rest von ${item.title}`, status: 'open', createdAt: serverTimestamp(), createdBy: uid(), createdByName: uname(), restoredAt: null, restoredBy: null, restoredByName: null, checkedAt: null, checkedBy: null, checkedByName: null });
+            const { id: _restItemId, ...restPayload } = item;
+            await addDoc(sub(state.listId, 'items'), { ...restPayload, quantity: rest, title: `Rest von ${item.title}`, status: 'open', createdAt: serverTimestamp(), createdBy: uid(), createdByName: uname(), restoredAt: null, restoredBy: null, restoredByName: null, checkedAt: null, checkedBy: null, checkedByName: null });
         }
         await logActivity('Artikel gekauft/abgehakt', { itemId: item.id, title: item.title, quantity: qty });
     } else {
@@ -1451,6 +1467,8 @@ async function onClick(e) {
     if (a === 'check' || a === 'restore') { await handleDouble(btn.dataset.id, a); return; }
     if (a === 'detail') { state.detailId = btn.dataset.id; render(); return; }
     if (a === 'close-detail') { state.detailId = null; render(); return; }
+    if (a === 'toggle-checked-menu') { state.checkedMenuOpen = !state.checkedMenuOpen; render(); return; }
+    if (a === 'delete-all-checked') { await deleteAllCheckedItems(); return; }
     if (a === 'delete-checked-item') { await deleteCheckedItem(btn.dataset.id); return; }
     if (a === 'open-scan') { if (state.scanOpen) closeScannerModal(); else openScanner(state.listMode === 'input' ? 'list-add' : 'shopping'); return; }
     if (a === 'close-scan') { closeScannerModal(); return; }
