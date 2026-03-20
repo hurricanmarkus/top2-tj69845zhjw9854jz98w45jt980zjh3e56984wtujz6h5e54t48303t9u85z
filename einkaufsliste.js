@@ -140,6 +140,10 @@ function ensureRoot() {
     root.addEventListener('pointercancel', finalizePointerState);
 }
 
+async function onClickActive(e) {
+    return onClick(e);
+}
+
 async function seedDefaults() {
     if (!uid() || uid() === GUEST_MODE) return;
     const batch = [];
