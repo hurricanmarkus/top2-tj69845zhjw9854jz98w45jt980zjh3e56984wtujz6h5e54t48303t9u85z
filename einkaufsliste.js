@@ -425,7 +425,7 @@ function listenActiveList() {
             render();
         }, (error) => reportListenerError('listenActiveList:permissions:self', error)));
     }
-    activeUnsubs.push(onSnapshot(query(sub(list.id, 'items'), orderBy('createdAt', 'desc')), (s) => { state.items = s.docs.map((d) => ({ id: d.id, ...d.data(), storeIds: d.data().storeIds || [], eanCodes: d.data().eanCodes || [] })); render(); }, (error) => reportListenerError('listenActiveList:items', error)));
+    activeUnsubs.push(onSnapshot(query(sub(list.id, 'items'), orderBy('createdAt', 'desc')), (s) => { state.items = s.docs.map((d) => ({ ...d.data(), id: d.id, storeIds: d.data().storeIds || [], eanCodes: d.data().eanCodes || [] })); render(); }, (error) => reportListenerError('listenActiveList:items', error)));
     activeUnsubs.push(onSnapshot(query(sub(list.id, 'presence'), orderBy('lastSeen', 'desc')), (s) => { state.presence = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((x) => Date.now() - (toDate(x.lastSeen)?.getTime() || 0) <= PRESENCE_MS); render(); }, (error) => reportListenerError('listenActiveList:presence', error)));
     activeUnsubs.push(onSnapshot(query(sub(list.id, 'activity'), orderBy('createdAt', 'desc'), limit(1)), (s) => { state.activity = s.docs[0] ? { id: s.docs[0].id, ...s.docs[0].data() } : null; render(); }, (error) => reportListenerError('listenActiveList:activity', error)));
     activeUnsubs.push(onSnapshot(sub(list.id, 'locks'), (s) => { state.locks.clear(); s.docs.forEach((d) => state.locks.set(d.id, { id: d.id, ...d.data() })); render(); }, (error) => reportListenerError('listenActiveList:locks', error)));

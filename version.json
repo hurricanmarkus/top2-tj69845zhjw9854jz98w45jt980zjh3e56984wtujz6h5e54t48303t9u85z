@@ -1,13 +1,22 @@
 {
-  "version": "1.4.11",
-  "buildId": "20260320-12",
+  "version": "1.4.12",
+  "buildId": "20260320-13",
   "releaseDate": "2026-03-20",
   "releaseTime": "16:15",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste: Rest-Eintraege wieder korrekt abhak- und loeschbar, checked-Menue mit Sammelloeschung und Rest-Badge vereinfacht.",
+  "note": "Einkaufsliste: Snapshot-Import priorisiert jetzt die Dokument-ID, damit Rest-Eintraege wieder abhak- und loeschbar sind.",
   "commitId": "",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.4.12",
+      "buildId": "20260320-13",
+      "releaseDate": "2026-03-20",
+      "releaseTime": "16:15",
+      "note": "Einkaufsliste: Snapshot-Import priorisiert jetzt die Dokument-ID, damit Rest-Eintraege wieder abhak- und loeschbar sind.",
+      "commitId": "",
+      "obligation": "false"
+    },
     {
       "version": "1.4.11",
       "buildId": "20260320-12",
