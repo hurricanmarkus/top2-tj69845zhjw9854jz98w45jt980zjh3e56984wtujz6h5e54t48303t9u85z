@@ -417,7 +417,8 @@ async function logActivityForList(listId, text, payload = {}) {
 }
 
 function groupedOpen() {
-    const items = state.items.filter((x) => x.status !== 'checked').filter((x) => !state.search.trim() || [x.title, x.note, x.persistentNote, ...(x.eanCodes || [])].filter(Boolean).some((v) => String(v).toLowerCase().includes(state.search.trim().toLowerCase())));
+    const searchTerm = state.mode === 'shop' ? String(state.search || '').trim().toLowerCase() : '';
+    const items = state.items.filter((x) => x.status !== 'checked').filter((x) => !searchTerm || [x.title, x.note, x.persistentNote, ...(x.eanCodes || [])].filter(Boolean).some((v) => String(v).toLowerCase().includes(searchTerm)));
     if (state.storeDisplay === 'combined') return [{ id: 'combined', label: 'Alle Geschäfte', note: '', items: sortItemsForShopDisplay(items) }];
     const order = activeList()?.storeOrder?.length ? activeList().storeOrder : state.stores.map((s) => s.id);
     const map = new Map(order.map((id, index) => {
@@ -438,6 +439,24 @@ function groupedOpen() {
 }
 
 function currentModeDef() { return MODES.find((m) => m.id === state.mode) || MODES[0]; }
+
+function cameraButtonClass() {
+    return state.scanOpen
+        ? 'bg-red-600 text-white animate-pulse shadow-lg shadow-red-200'
+        : 'bg-gray-100 text-gray-700';
+}
+
+function renderModeToggle() {
+    return `<div class="inline-flex rounded-full border border-slate-200 bg-slate-100 p-1"><button class="rounded-full px-3 py-1.5 text-xs font-black ${state.mode === 'shop' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600'}" data-a="quick-mode" data-v="shop">Suchen</button><button class="rounded-full px-3 py-1.5 text-xs font-black ${state.mode === 'add' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600'}" data-a="quick-mode" data-v="add">Eingeben</button></div>`;
+}
+
+function renderActionBar() {
+    if (state.mode === 'manage') return '';
+    if (state.mode === 'shop') {
+        return `<div class="elc !p-3"><div class="grid gap-3 lg:grid-cols-[auto_minmax(0,1fr)] items-center"><div class="flex justify-center lg:justify-start">${renderModeToggle()}</div><div class="mx-auto flex w-full max-w-3xl items-center gap-2"><input id="el-search" class="eli text-center" placeholder="Suchen oder scannen..." value="${escapeHtml(state.search)}"><button class="elb ${cameraButtonClass()}" data-a="open-scan" title="Scanner ${state.scanOpen ? 'deaktivieren' : 'aktivieren'}">📷</button></div></div></div>`;
+    }
+    return `<div class="elc !p-3"><div class="grid gap-3 lg:grid-cols-[auto_minmax(0,1fr)] items-start"><div class="flex justify-center lg:justify-start">${renderModeToggle()}</div><div class="mx-auto w-full max-w-5xl space-y-2"><div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center"><select id="el-store-add" class="els"><option value="">Geschäft zuordnen...</option>${state.stores.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}</select><input id="el-note" class="eli" placeholder="Anmerkung optional" value="${escapeHtml(state.note)}"><button class="elb ${cameraButtonClass()}" data-a="open-scan" title="Scanner ${state.scanOpen ? 'deaktivieren' : 'aktivieren'}">📷</button></div><div class="grid gap-2 sm:grid-cols-[110px_140px_minmax(0,1fr)_auto] items-center"><input id="el-q" class="eli" value="${escapeHtml(state.q)}" placeholder="Menge"><select id="el-unit" class="els">${UNITS.map((u) => `<option value="${u}" ${state.unit === u ? 'selected' : ''}>${u}</option>`).join('')}</select><input id="el-title" class="eli" placeholder="Artikel eingeben..." value="${escapeHtml(state.title)}"><button class="elb a" data-a="add-item" ${!canAdd() ? 'disabled' : ''}>+ Hinzufügen</button></div>${state.storeIds.length ? `<div class="elm">${state.storeIds.map((id) => chip(`${escapeHtml(state.stores.find((s) => s.id === id)?.name || id)} <button data-a="del-store" data-id="${id}">×</button>`, 'bg-orange-100 text-orange-700')).join(' ')}</div>` : '<div class="text-xs text-gray-400">Optional einem oder mehreren Geschäften zuordnen.</div>'}</div></div>`;
+}
 
 function storeNumberMap(list = activeList()) {
     const order = list?.storeOrder?.length ? list.storeOrder : state.stores.map((s) => s.id);
@@ -500,7 +519,7 @@ function openScanner(mode = 'shopping', articleId = '') {
     state.scanMode = mode;
     state.scanArticleId = articleId;
     state.scanCodes = [];
-    state.scanStatus = mode === 'article-ean' ? 'Kamera wird für die EAN-Erfassung gestartet...' : 'Kamera wird gestartet...';
+    state.scanStatus = mode === 'article-ean' ? 'Kamera wird für die EAN-Erfassung gestartet...' : mode === 'list-add' ? 'Kamera wird gestartet. Gefundene EANs werden direkt hinzugefügt...' : 'Kamera wird gestartet. Gefundene EANs öffnen die Mengenübernahme...';
     state.scanLastCode = '';
     state.scanLastAt = 0;
     render();
@@ -604,30 +623,27 @@ function removeScannedCodeActive(code) {
 }
 
 function renderListSelect() {
-    return `<div class="flex justify-center"><select id="el-list-select" class="els max-w-md text-center" ${state.lists.length ? '' : 'disabled'}>${state.lists.length ? state.lists.map((l) => `<option value="${l.id}" ${state.listId === l.id ? 'selected' : ''}>${escapeHtml(l.name || 'Liste')}</option>`).join('') : '<option value="">Keine Liste verfügbar</option>'}</select></div>`;
+    return `<div class="space-y-1"><div class="text-xs font-bold uppercase tracking-wide text-slate-500">Liste wechseln:</div><div class="flex justify-center"><select id="el-list-select" class="els max-w-md text-center" ${state.lists.length ? '' : 'disabled'}>${state.lists.length ? state.lists.map((l) => `<option value="${l.id}" ${state.listId === l.id ? 'selected' : ''}>${escapeHtml(l.name || 'Liste')}</option>`).join('') : '<option value="">Keine Liste verfügbar</option>'}</select></div></div>`;
 }
 
 function renderDetailRows(list) {
     if (!state.detailsOpen) return '';
     const activityText = state.activity && Date.now() - (toDate(state.activity.createdAt)?.getTime() || 0) <= ACTIVITY_MS ? `${escapeHtml(state.activity.actorName || 'User')} · ${dt(state.activity.createdAt)} · ${escapeHtml(state.activity.text || '')}` : 'Keine aktuelle Aktivität.';
-    return `<div class="space-y-3"><div>${renderListSelect()}</div><div class="flex flex-wrap justify-between gap-2 items-start"><div class="flex flex-wrap gap-2 text-xs">${list ? `${list.ownerId === uid() ? chip('Owner', 'bg-indigo-100 text-indigo-700') : chip(permActive(perm()) ? 'freigegeben' : 'abgelaufen', permActive(perm()) ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700')} ${chip(`Letztes Update ${dt(list.updatedAt)}`)} ${chip(`Von ${escapeHtml(list.updatedByName || list.ownerName || '—')}`)}` : '<span class="text-sm text-gray-500">Bitte zuerst eine Liste auswählen.</span>'}</div><div class="flex flex-wrap gap-2">${list ? `<button class="elb bg-gray-100 text-gray-700" data-a="store-display">${state.storeDisplay === 'split' ? 'Nach Geschäft' : 'Kombiniert'}</button><button class="elb bg-gray-100 text-gray-700" data-a="open-settings">Einstellungen</button>` : ''}</div></div><div class="flex flex-wrap justify-between gap-2 items-center"><label class="inline-flex items-center gap-2 text-xs font-bold text-gray-600"><input id="el-store-numbers" type="checkbox" ${state.storeNumbers ? 'checked' : ''}> Geschäfte nummerieren</label><div class="text-xs text-gray-400">${list ? `${state.stores.length} Geschäfte verfügbar` : 'Keine Liste ausgewählt.'}</div></div><div class="space-y-2 text-xs text-gray-600"><div>${list ? (state.presence.length ? state.presence.map((p) => chip(`${escapeHtml(p.userName || p.userId)} (${escapeHtml(p.currentArea || 'Liste')})`, 'bg-emerald-100 text-emerald-700')).join(' ') : '<span class="text-gray-400">Niemand sonst gerade aktiv.</span>') : '<span class="text-gray-400">Keine Liste ausgewählt.</span>'}</div><div class="font-semibold text-gray-600">${activityText}</div></div></div>`;
+    return `<div class="space-y-3"><div>${renderListSelect()}</div><div class="flex flex-wrap justify-between gap-2 items-start"><div class="flex flex-wrap gap-2 text-xs">${list ? `${list.ownerId === uid() ? chip('Owner', 'bg-indigo-100 text-indigo-700') : chip(permActive(perm()) ? 'freigegeben' : 'abgelaufen', permActive(perm()) ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700')} ${chip(`Letztes Update ${dt(list.updatedAt)}`)} ${chip(`Von ${escapeHtml(list.updatedByName || list.ownerName || '—')}`)}` : '<span class="text-sm text-gray-500">Bitte zuerst eine Liste auswählen.</span>'}</div><div class="flex flex-wrap gap-2">${list ? `<button class="elb bg-gray-100 text-gray-700" data-a="store-display">${state.storeDisplay === 'split' ? 'Nach Geschäft' : 'Kombiniert'}</button>` : ''}</div></div><div class="flex flex-wrap justify-between gap-2 items-center"><label class="inline-flex items-center gap-2 text-xs font-bold text-gray-600"><input id="el-store-numbers" type="checkbox" ${state.storeNumbers ? 'checked' : ''}> Geschäfte nummerieren</label><div class="text-xs text-gray-400">${list ? `${state.stores.length} Geschäfte verfügbar` : 'Keine Liste ausgewählt.'}</div></div><div class="space-y-2 text-xs text-gray-600"><div>${list ? (state.presence.length ? state.presence.map((p) => chip(`${escapeHtml(p.userName || p.userId)} (${escapeHtml(p.currentArea || 'Liste')})`, 'bg-emerald-100 text-emerald-700')).join(' ') : '<span class="text-gray-400">Niemand sonst gerade aktiv.</span>') : '<span class="text-gray-400">Keine Liste ausgewählt.</span>'}</div><div class="font-semibold text-gray-600">${activityText}</div></div></div>`;
 }
 
 function renderHeader(list) {
-    const listBoxClass = list ? (list.ownerId === uid() ? 'border-indigo-500 text-indigo-700 bg-indigo-50' : 'border-emerald-500 text-emerald-700 bg-emerald-50') : 'border-slate-300 text-slate-500 bg-slate-50';
-    const listBoxText = list?.name || 'Keine Liste';
-    const listMeta = list ? `${list.ownerId === uid() ? 'Privat/Owner' : 'Freigegeben'} · ${list.active !== false ? 'aktiv' : 'pausiert'}` : 'Bitte zuerst eine Liste auswählen';
-    return `<div class="space-y-3"><div class="border-b border-slate-200 pb-3"><div class="flex flex-wrap items-center justify-between gap-3"><button class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-700 shadow-sm" data-a="back-home">← Zurück</button><div class="min-w-0 flex-1"><div class="text-xl font-black text-indigo-700">Einkaufsliste</div><div class="text-sm text-gray-500">Listen verwalten, einkaufen und EANs pflegen.</div></div></div></div><div class="elc"><div class="flex flex-wrap items-center justify-between gap-2"><button class="elb a" data-a="open-mode-picker">${escapeHtml(currentModeDef().label)}</button><button class="elb bg-gray-100 text-gray-700" data-a="toggle-details">Details ${state.detailsOpen ? '▴' : '▾'}</button></div></div><div class="${state.mode === 'shop' ? 'grid gap-2 lg:grid-cols-[minmax(220px,320px)_minmax(0,1fr)] items-start' : 'space-y-2'}"><div class="elc !p-3"><div class="text-[11px] font-bold uppercase tracking-wide text-gray-500">Aktive Liste</div><div class="mt-1 inline-flex max-w-full items-center rounded-full border-2 px-4 py-1.5 text-sm font-bold shadow-sm ${listBoxClass}">${escapeHtml(listBoxText)}</div><div class="mt-2 text-xs font-semibold text-gray-500">${escapeHtml(listMeta)}</div></div>${state.mode === 'shop' ? `<div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2"><input id="el-search" class="eli" placeholder="Suchen oder scannen..." value="${escapeHtml(state.search)}"><button class="elb a" data-a="open-scan">📷</button></div>` : ''}</div>${state.detailsOpen ? `<div class="elc">${renderDetailRows(list)}</div>` : ''}</div>`;
+    return renderHeaderActive(list);
 }
 
 function renderHeaderActive(list) {
-    const listBoxClass = list ? (list.ownerId === uid() ? 'border-indigo-500 text-indigo-700 bg-indigo-50' : 'border-emerald-500 text-emerald-700 bg-emerald-50') : 'border-slate-300 text-slate-500 bg-slate-50';
+    const listBoxClass = list ? 'border-blue-500 text-blue-700 bg-blue-50' : 'border-slate-300 text-slate-500 bg-slate-50';
     const listBoxText = list?.name || 'Keine Liste';
-    return `<div class="space-y-3"><div class="border-b border-slate-200 pb-3"><div class="min-w-0"><div class="text-2xl font-black tracking-tight text-slate-900">Einkaufsliste</div><div class="text-sm text-slate-500">Listen verwalten, einkaufen und EANs pflegen.</div></div></div><div class="elc"><div class="flex flex-wrap items-center justify-between gap-2"><button class="elb a" data-a="open-mode-picker">${escapeHtml(currentModeDef().label)}</button><button class="elb bg-gray-100 text-gray-700" data-a="toggle-details">Details ${state.detailsOpen ? '▴' : '▾'}</button></div></div><div class="${state.mode === 'shop' ? 'grid gap-2 lg:grid-cols-[minmax(200px,280px)_minmax(0,1fr)] items-start' : 'space-y-2'}"><div class="min-w-0"><div class="inline-flex max-w-full items-center rounded-2xl border-2 px-4 py-2 text-sm font-black shadow-sm ${listBoxClass}">${escapeHtml(listBoxText)}</div></div>${state.mode === 'shop' ? `<div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2"><input id="el-search" class="eli" placeholder="Suchen oder scannen..." value="${escapeHtml(state.search)}"><button class="elb a" data-a="open-scan">📷</button></div>` : ''}</div>${state.detailsOpen ? `<div class="elc">${renderDetailRows(list)}</div>` : ''}</div>`;
+    return `<div class="space-y-3"><div class="border-b border-slate-200 pb-3"><div class="flex items-center gap-2"><button class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-700 shadow-sm" data-a="back-home">← Zurück</button><div class="min-w-0 flex-1 flex justify-center"><div class="inline-flex max-w-full items-center rounded-full border-2 px-4 py-2 text-sm font-black shadow-sm ${listBoxClass}">${escapeHtml(listBoxText)}</div></div><div class="flex items-center gap-2"><button class="elb a" data-a="toggle-manage">${state.mode === 'manage' ? 'Einkaufsmodus' : 'Verwaltung'}</button><button class="elb bg-gray-100 text-gray-700 !px-3" data-a="toggle-details" title="Menü">⋮</button></div></div></div>${state.detailsOpen ? `<div class="elc">${renderDetailRows(list)}</div>` : ''}${renderActionBar()}</div>`;
 }
 
 function renderManageSections() {
-    return `<div class="elc"><div class="elm justify-center">${MANAGE.map((s) => `<button class="elb ${state.section === s.id ? 'a' : 'bg-gray-100 text-gray-700'}" data-a="section" data-v="${s.id}">${s.label}</button>`).join('')}</div></div>`;
+    return `<div class="elc"><div class="elm justify-center">${MANAGE.map((s) => `<button class="elb ${state.section === s.id ? 'a' : 'bg-gray-100 text-gray-700'}" data-a="section" data-v="${s.id}">${s.label}</button>`).join('')}<button class="elb bg-gray-100 text-gray-700" data-a="open-settings">Einstellungen</button></div></div>`;
 }
 
 function selectList(nextId) {
@@ -683,8 +699,7 @@ function renderBody() {
 function renderBodyActive() {
     const list = activeList();
     if (!list) return '<div class="elc text-sm text-gray-500">Bitte zuerst eine Liste auswählen.</div>';
-    if (state.mode === 'add') return renderBody();
-    if (state.mode === 'shop') {
+    if (state.mode === 'shop' || state.mode === 'add') {
         return `<div class="space-y-2">${groupedOpen().map((g) => `<div class="elc !p-3 space-y-1.5"><div class="flex flex-wrap justify-between gap-2 items-center"><div class="font-black text-sm">${escapeHtml(g.label)}</div><div class="text-[11px] font-bold text-gray-600">${g.items.length} offen</div></div>${g.note ? `<div class="text-xs rounded-xl border border-orange-300 bg-orange-50 px-3 py-1.5 text-orange-800">${escapeHtml(g.note)}</div>` : ''}${g.items.length ? g.items.map(renderItem).join('') : '<div class="py-2 text-sm text-gray-400">Keine offenen Artikel.</div>'}</div>`).join('') || '<div class="elc text-sm text-gray-400">Keine Artikel gefunden.</div>'}</div>`;
     }
     if (!canManage()) return '<div class="elc text-sm text-red-700">Keine Verwaltungsberechtigung für diese Liste.</div>';
@@ -738,7 +753,10 @@ function renderScannerActive() {
     if (!state.scanOpen) { el.innerHTML = ''; stopScanner(); return; }
     const article = state.articles.find((a) => a.id === state.scanArticleId);
     const isArticleMode = state.scanMode === 'article-ean';
-    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="text-xl font-black text-gray-900">${isArticleMode ? `EAN zuordnen: ${escapeHtml(article?.title || 'Artikel')}` : 'Scanner'}</div><div class="text-sm text-gray-500">${isArticleMode ? 'Mehrere Codes können gesammelt und gemeinsam gespeichert werden.' : 'Barcode + QR live, ohne Refresh.'}</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-scan">Schließen</button></div><div class="elcam"><video id="el-video" autoplay playsinline muted></video></div><div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"><input id="el-scan-manual" class="eli" placeholder="${isArticleMode ? 'EAN/QR eingeben oder per Scanner senden' : 'EAN/QR manuell eingeben'}"><button class="elb a" data-a="manual-scan">${isArticleMode ? 'Code hinzufügen' : 'Code übernehmen'}</button></div><div id="el-scan-status" class="text-sm text-gray-500">${escapeHtml(state.scanStatus || 'Kamera wird gestartet...')}</div>${isArticleMode ? `<div class="elc space-y-2"><div class="text-xs font-bold uppercase text-gray-500">Erfasste Codes</div><div id="el-scan-collected" class="elm">${state.scanCodes.length ? state.scanCodes.map((code) => chip(`${escapeHtml(code)} <button type="button" class="elchipbtn" data-a="remove-scanned-code" data-id="${escapeHtml(code)}">×</button>`, 'bg-indigo-100 text-indigo-700')).join(' ') : '<span class="text-sm text-gray-400">Noch keine Codes erfasst.</span>'}</div></div><div class="flex flex-wrap justify-end gap-2"><button class="elb bg-emerald-600 text-white" data-a="save-scanned-codes" ${state.scanCodes.length ? '' : 'disabled'}>OK</button><button class="elb bg-indigo-600 text-white" data-a="save-scanned-codes-next" ${state.scanCodes.length && nextMissingEanArticle(state.scanArticleId) ? '' : 'disabled'}>Nächsten Artikel ohne EAN</button></div>` : ''}</div>`;
+    const scannerTitle = isArticleMode ? `EAN zuordnen: ${escapeHtml(article?.title || 'Artikel')}` : state.scanMode === 'list-add' ? 'Scanner · Hinzufügemodus' : 'Scanner · Einkaufsmodus';
+    const scannerText = isArticleMode ? 'Mehrere Codes können gesammelt und gemeinsam gespeichert werden.' : state.scanMode === 'list-add' ? 'Gefundene EANs werden direkt mit Menge, Einheit, Geschäft und Anmerkung hinzugefügt.' : 'Gefundene EANs öffnen die Mengenübernahme. Der Scan bleibt aktiv.';
+    const manualLabel = isArticleMode ? 'Code hinzufügen' : state.scanMode === 'list-add' ? 'Artikel hinzufügen' : 'Code übernehmen';
+    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="text-xl font-black text-gray-900">${scannerTitle}</div><div class="text-sm text-gray-500">${scannerText}</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-scan">Schließen</button></div><div class="elcam"><video id="el-video" autoplay playsinline muted></video></div><div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"><input id="el-scan-manual" class="eli" placeholder="${isArticleMode ? 'EAN/QR eingeben oder per Scanner senden' : 'EAN/QR manuell eingeben'}"><button class="elb a" data-a="manual-scan">${manualLabel}</button></div><div id="el-scan-status" class="text-sm text-gray-500">${escapeHtml(state.scanStatus || 'Kamera wird gestartet...')}</div>${isArticleMode ? `<div class="elc space-y-2"><div class="text-xs font-bold uppercase text-gray-500">Erfasste Codes</div><div id="el-scan-collected" class="elm">${state.scanCodes.length ? state.scanCodes.map((code) => chip(`${escapeHtml(code)} <button type="button" class="elchipbtn" data-a="remove-scanned-code" data-id="${escapeHtml(code)}">×</button>`, 'bg-indigo-100 text-indigo-700')).join(' ') : '<span class="text-sm text-gray-400">Noch keine Codes erfasst.</span>'}</div></div><div class="flex flex-wrap justify-end gap-2"><button class="elb bg-emerald-600 text-white" data-a="save-scanned-codes" ${state.scanCodes.length ? '' : 'disabled'}>OK</button><button class="elb bg-indigo-600 text-white" data-a="save-scanned-codes-next" ${state.scanCodes.length && nextMissingEanArticle(state.scanArticleId) ? '' : 'disabled'}>Nächsten Artikel ohne EAN</button></div>` : ''}</div>`;
     startScannerActive();
     focusInputById('el-scan-manual');
 }
@@ -849,10 +867,15 @@ function setPurchaseToTarget() {
 }
 
 function onKeyDownActive(e) {
-    if (!state.scanOpen) return;
-    if (e.key === 'Enter' && document.activeElement?.id === 'el-scan-manual') {
+    const activeId = document.activeElement?.id || '';
+    if (state.scanOpen && e.key === 'Enter' && activeId === 'el-scan-manual') {
         e.preventDefault();
         submitScannerManualInputActive();
+        return;
+    }
+    if (state.mode === 'add' && e.key === 'Enter' && !e.shiftKey && ['el-title', 'el-q', 'el-note'].includes(activeId)) {
+        e.preventDefault();
+        addItem();
     }
 }
 
@@ -1010,6 +1033,8 @@ async function onClickActive(e) {
     const clickKey = btn.dataset.id ? `${a}:${btn.dataset.id}` : a;
     if (holdConsumedKey === clickKey && Date.now() - holdConsumedAt < 900) { holdConsumedKey = ''; return; }
     if (a === 'back-home') { navigate('home'); return; }
+    if (a === 'toggle-manage') { state.mode = state.mode === 'manage' ? 'shop' : 'manage'; saveUserSetting(EL_MODE_KEY, state.mode); touchPresence(); render(); return; }
+    if (a === 'quick-mode') { state.mode = btn.dataset.v === 'add' ? 'add' : 'shop'; saveUserSetting(EL_MODE_KEY, state.mode); touchPresence(); render(); return; }
     if (a === 'open-mode-picker') { state.modePickerOpen = true; render(); return; }
     if (a === 'close-mode-picker') { state.modePickerOpen = false; render(); return; }
     if (a === 'toggle-details') { state.detailsOpen = !state.detailsOpen; render(); return; }
@@ -1024,7 +1049,7 @@ async function onClickActive(e) {
     if (a === 'check' || a === 'restore') { await handleDouble(btn.dataset.id, a); return; }
     if (a === 'detail') { state.detailId = btn.dataset.id; render(); return; }
     if (a === 'close-detail') { state.detailId = null; render(); return; }
-    if (a === 'open-scan') { openScanner('shopping'); return; }
+    if (a === 'open-scan') { if (state.scanOpen) closeScannerModal(); else openScanner(state.mode === 'add' ? 'list-add' : 'shopping'); return; }
     if (a === 'close-scan') { closeScannerModal(); return; }
     if (a === 'manual-scan') { await submitScannerManualInputActive(); return; }
     if (a === 'save-scanned-codes') { await saveScannedCodesActive(false); return; }
@@ -1247,9 +1272,22 @@ async function processScannerCodeActive(rawCode) {
         focusInputById('el-scan-manual');
         return true;
     }
-    closeScannerModal();
     await handleScanCode(code);
     return true;
+}
+
+async function addScannedArticleToList(article, code = '') {
+    if (!article) return;
+    if (!canAdd()) return alertUser('Keine Berechtigung zum Hinzufügen.', 'error');
+    const quantity = parseQty(state.q || String(article.defaultQuantity || '1')) || Number(article.defaultQuantity || 1) || 1;
+    const unit = String(state.unit || article.defaultUnit || 'Stück') || 'Stück';
+    const storeIds = state.storeIds.length ? [...state.storeIds] : [...(article.storeIds || [])];
+    const persistentNote = article.persistentNotes?.length ? article.persistentNotes.join(' · ') : '';
+    await addDoc(sub(state.listId, 'items'), { articleId: article.id, title: article.title, quantity, unit, categoryId: article.categoryId || '', storeIds, status: 'open', note: state.note || '', persistentNote, eanCodes: article.eanCodes || [], createdAt: serverTimestamp(), createdBy: uid(), createdByName: uname() });
+    await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname(), storeOrder: activeList()?.storeOrder?.length ? activeList().storeOrder : state.stores.map((s) => s.id) });
+    await logActivity('Artikel per Scan hinzugefügt', { articleId: article.id, title: article.title, code, quantity, unit });
+    state.scanStatus = `Hinzugefügt: ${article.title}`;
+    updateScannerDynamicUi();
 }
 
 async function saveScannedCodesActive(openNext = false) {
@@ -1323,8 +1361,18 @@ async function startScanner() {
 
 async function handleScanCode(code) {
     const article = state.articles.find((a) => (a.eanCodes || []).includes(code) || (a.variants || []).some((v) => (v.eanCodes || []).includes(code)));
-    if (!article) { state.unknownCode = code; state.unknownArticleId = ''; render(); return; }
-    if (state.purchase) state.purchase = null;
+    if (!article) {
+        state.scanStatus = `EAN nicht gefunden: ${code}`;
+        updateScannerDynamicUi();
+        alertUser('Kein Artikel zu diesem EAN-Code gefunden.', 'error');
+        return;
+    }
+    if (state.scanMode === 'list-add') {
+        await addScannedArticleToList(article, code);
+        return;
+    }
+    state.scanStatus = `Gefunden: ${article.title}`;
+    updateScannerDynamicUi();
     openPurchase(article, true);
 }
 
