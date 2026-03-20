@@ -31,6 +31,7 @@ let presenceTimer = null;
 let scanStream = null;
 let scanTimer = null;
 let autoScanTimer = null;
+let scanFlashTimer = null;
 let holdTimer = null;
 let holdPayload = null;
 let holdConsumedKey = '';
@@ -148,6 +149,7 @@ function ensureStyle() {
     s.id = 'el-style';
     s.textContent = '.elc{background:#fff;border:1px solid #e5e7eb;border-radius:1rem;padding:.8rem;box-shadow:0 10px 24px rgba(15,23,42,.06)}.elb{border-radius:.8rem;padding:.5rem .75rem;font-size:.78rem;font-weight:800}.elb.a{background:linear-gradient(135deg,#4338ca,#6d28d9);color:#fff}.eli,.els,.elt{width:100%;border:1px solid #d1d5db;border-radius:.8rem;background:#fff;padding:.62rem .75rem;font-size:.83rem}.elt{min-height:82px;resize:vertical}.elm{display:flex;flex-wrap:wrap;gap:.45rem;align-items:center}.elitem{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.6rem;align-items:start;padding:.72rem 0}.elcheck{width:2.25rem;height:2.25rem;border-radius:.8rem;border:1px solid #cbd5e1;background:#fff;font-weight:900}.elmodal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:center;justify-content:center;padding:.8rem;z-index:120}.elmodal.o{display:flex}.elpanel{width:min(100%,760px);max-height:92vh;overflow:auto;background:#fff;border-radius:1.2rem;box-shadow:0 24px 60px rgba(15,23,42,.28)}.elkey{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.45rem}.elkey button{border-radius:.8rem;min-height:2.35rem;border:1px solid #d1d5db;background:#f8fafc;font-weight:800}.elcam{background:#020617;border-radius:1rem;overflow:hidden;position:relative;aspect-ratio:4/3}.elcam video{width:100%;height:100%;object-fit:cover}.elcam:after{content:"";position:absolute;inset:14%;border:3px solid rgba(255,255,255,.85);border-radius:1rem}.elstat{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem}.elstat>div{background:#f8fafc;border:1px solid #e5e7eb;border-radius:.85rem;padding:.55rem}@media(max-width:480px){.elstat{grid-template-columns:repeat(2,minmax(0,1fr))}}';
     s.textContent += '.elitem{padding:.56rem 0}.elstorecat-row{touch-action:none}.elstorecat-row.dragging{opacity:.58;transform:scale(.985)}.elstorecat-row.drop-before{box-shadow:inset 0 4px 0 #6366f1}.elstorecat-row.drop-after{box-shadow:inset 0 -4px 0 #6366f1}.elchipbtn{display:inline-flex;align-items:center;justify-content:center;width:1rem;height:1rem;border-radius:999px;background:rgba(255,255,255,.7);font-size:.72rem;font-weight:900;line-height:1;margin-left:.15rem}';
+    s.textContent += '.el-scan-flash{position:fixed;inset:0;background:rgba(34,197,94,.32);opacity:0;pointer-events:none;z-index:9999;transition:opacity 90ms linear}.el-scan-flash.o{opacity:1}';
     document.head.appendChild(s);
 }
 
@@ -560,6 +562,7 @@ function canConfirmPurchase(p = state.purchase) {
 }
 
 function openScanner(mode = 'shopping', articleId = '') {
+    document.activeElement?.blur?.();
     state.scanOpen = true;
     state.scanMode = mode;
     state.scanArticleId = articleId;
@@ -586,6 +589,23 @@ function closeUnknownModal() {
     state.unknownCode = '';
     state.unknownArticleId = '';
     render();
+}
+
+function flashScanSuccess() {
+    const existing = document.getElementById('el-scan-flash');
+    if (existing) existing.remove();
+    if (scanFlashTimer) clearTimeout(scanFlashTimer);
+    const overlay = document.createElement('div');
+    overlay.id = 'el-scan-flash';
+    overlay.className = 'el-scan-flash';
+    document.body.appendChild(overlay);
+    const steps = [0, 120, 240, 360];
+    const states = [true, false, true, false];
+    steps.forEach((delay, index) => setTimeout(() => overlay.classList.toggle('o', states[index]), delay));
+    scanFlashTimer = setTimeout(() => {
+        overlay.remove();
+        scanFlashTimer = null;
+    }, 520);
 }
 
 function updateScannerDynamicUi() {
@@ -748,7 +768,6 @@ function renderScannerActive() {
         el.className = '';
     }
     startScannerActive();
-    focusInputById('el-scan-manual');
 }
 
 function renderModePicker() {
@@ -1244,7 +1263,7 @@ async function processScannerCodeActive(rawCode) {
         state.scanCodes = Array.from(new Set([...(state.scanCodes || []), code]));
         state.scanStatus = `${state.scanCodes.length} Code(s) erfasst.`;
         updateScannerDynamicUi();
-        focusInputById('el-scan-manual');
+        flashScanSuccess();
         return true;
     }
     await handleScanCode(code);
@@ -1263,6 +1282,7 @@ async function addScannedArticleToList(article, code = '') {
     await logActivity('Artikel per Scan hinzugefügt', { articleId: article.id, title: article.title, code, quantity, unit });
     state.scanStatus = `Hinzugefügt: ${article.title}`;
     updateScannerDynamicUi();
+    flashScanSuccess();
 }
 
 async function saveScannedCodesActive(openNext = false) {
@@ -1272,6 +1292,7 @@ async function saveScannedCodesActive(openNext = false) {
     const eanCodes = Array.from(new Set([...(article.eanCodes || []), ...state.scanCodes]));
     await updateDoc(doc(master('articles'), article.id), { eanCodes, updatedAt: serverTimestamp() });
     await logActivity('EANs zum Artikel hinzugefügt', { articleId: article.id, count: state.scanCodes.length });
+    flashScanSuccess();
     if (openNext) {
         const nextArticle = nextMissingEanArticle(article.id);
         if (nextArticle) {
@@ -1338,6 +1359,7 @@ async function handleScanCode(code) {
     }
     state.scanStatus = `Gefunden: ${article.title}`;
     updateScannerDynamicUi();
+    flashScanSuccess();
     openPurchase(article, true);
 }
 
