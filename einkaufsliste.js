@@ -1,6 +1,6 @@
 import { alertUser, appId, auth, currentUser, db, escapeHtml, GUEST_MODE, navigate, USERS } from './haupteingang.js';
 import { getUserSetting, saveUserSetting } from './log-InOut.js';
-import { addDoc, collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, or, query, runTransaction, serverTimestamp, setDoc, Timestamp, updateDoc, where } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, or, query, runTransaction, serverTimestamp, setDoc, Timestamp, updateDoc, where } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
 const MODES = [{ id: 'manage', label: 'Verwaltung' }, { id: 'shop', label: 'Listenmodus' }];
 const MANAGE = [{ id: 'general', label: 'Allgemein' }, { id: 'stores', label: 'Geschäftewartung' }, { id: 'articles', label: 'Artikelwartung' }, { id: 'categories', label: 'Kategorienwartung' }, { id: 'remarks', label: 'Anmerkungswartung' }, { id: 'notes', label: 'Notizwartung' }];
@@ -139,10 +139,6 @@ function ensureRoot() {
     root.addEventListener('pointerup', finalizePointerState);
     root.addEventListener('pointerleave', finalizePointerState);
     root.addEventListener('pointercancel', finalizePointerState);
-}
-
-async function onClickActive(e) {
-    return onClick(e);
 }
 
 async function seedDefaults() {
@@ -296,11 +292,11 @@ function subscribeLists() {
         alertUser('Einkaufsliste konnte nicht geladen werden (listenLists). Bitte neu anmelden.', 'error');
         render();
     }));
-    unsubs.push(onSnapshot(query(collectionGroup(db, 'permissions'), where('userId', '==', uid())), (snap) => {
+    unsubs.push(onSnapshot(query(listsRef(), where('memberIds', 'array-contains', uid())), (snap) => {
         const sharedListIds = snap.docs.map((d) => d.data()?.listId).filter(Boolean);
         syncSharedListDocs(sharedListIds);
     }, (error) => {
-        reportListenerError('listenLists:sharedPermissions', error);
+        reportListenerError('listenLists:sharedLists', error);
         stopSharedListDocListeners();
         applyListDocs([...ownListDocs]);
     }));

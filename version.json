@@ -1,13 +1,22 @@
 {
-  "version": "1.4.3",
-  "buildId": "20260320-4",
+  "version": "1.4.4",
+  "buildId": "20260320-5",
   "releaseDate": "2026-03-20",
-  "releaseTime": "10:19",
+  "releaseTime": "10:57",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste Shared-Listen laden jetzt ueber permissions-Dokumente statt problematischer Member-Listenquery; Store-Kategorie-Dropdown wurde parallel gegen Drag/Drop-Fehler gehaertet.",
+  "note": "Einkaufsliste Buttons laufen wieder: onClick ist wieder im aktiven Scope, und Shared-Listen laden zur Sicherheit wieder ueber memberIds statt der fehlerhaften permissions-CollectionGroup-Query.",
   "commitId": "8de8f83",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.4.4",
+      "buildId": "20260320-5",
+      "releaseDate": "2026-03-20",
+      "releaseTime": "10:57",
+      "note": "Einkaufsliste Buttons laufen wieder: onClick ist wieder im aktiven Scope, und Shared-Listen laden zur Sicherheit wieder ueber memberIds statt der fehlerhaften permissions-CollectionGroup-Query.",
+      "commitId": "8de8f83",
+      "obligation": "false"
+    },
     {
       "version": "1.4.3",
       "buildId": "20260320-4",
