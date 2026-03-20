@@ -1,13 +1,22 @@
 {
-  "version": "1.4.8",
-  "buildId": "20260320-9",
+  "version": "1.4.9",
+  "buildId": "20260320-10",
   "releaseDate": "2026-03-20",
   "releaseTime": "16:15",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste: UTF-8 Encoding komplett repariert (CP1252-aware), sharedLists Firestore-Regel und Query gefixt (Permission-Error behoben).",
+  "note": "Einkaufsliste: Long-Press auf Checkbox oeffnet Mengenfenster, Scanner-/Eingabelayout verbreitert und Home-Reihenfolge angepasst.",
   "commitId": "",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.4.9",
+      "buildId": "20260320-10",
+      "releaseDate": "2026-03-20",
+      "releaseTime": "16:15",
+      "note": "Einkaufsliste: Long-Press auf Checkbox oeffnet Mengenfenster, Scanner-/Eingabelayout verbreitert und Home-Reihenfolge angepasst.",
+      "commitId": "",
+      "obligation": "false"
+    },
     {
       "version": "1.4.8",
       "buildId": "20260320-9",
