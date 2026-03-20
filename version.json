@@ -1,13 +1,22 @@
 {
-  "version": "1.4.2",
-  "buildId": "20260320-3",
+  "version": "1.4.3",
+  "buildId": "20260320-4",
   "releaseDate": "2026-03-20",
-  "releaseTime": "09:10",
+  "releaseTime": "10:19",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste umgestellt auf Listenmodus statt Einkaufsmodus, Hauptmodus ohne Hinzufuegemodus und funktionierenden Suchen/Eingeben-Umschalter.",
-  "commitId": "663d45e",
+  "note": "Einkaufsliste Shared-Listen laden jetzt ueber permissions-Dokumente statt problematischer Member-Listenquery; Store-Kategorie-Dropdown wurde parallel gegen Drag/Drop-Fehler gehaertet.",
+  "commitId": "8de8f83",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.4.3",
+      "buildId": "20260320-4",
+      "releaseDate": "2026-03-20",
+      "releaseTime": "10:19",
+      "note": "Einkaufsliste Shared-Listen laden jetzt ueber permissions-Dokumente statt problematischer Member-Listenquery; Store-Kategorie-Dropdown wurde parallel gegen Drag/Drop-Fehler gehaertet.",
+      "commitId": "8de8f83",
+      "obligation": "false"
+    },
     {
       "version": "1.4.2",
       "buildId": "20260320-3",

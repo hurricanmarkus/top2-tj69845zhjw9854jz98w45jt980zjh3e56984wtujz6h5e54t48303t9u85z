@@ -1,6 +1,6 @@
 import { alertUser, appId, auth, currentUser, db, escapeHtml, GUEST_MODE, navigate, USERS } from './haupteingang.js';
 import { getUserSetting, saveUserSetting } from './log-InOut.js';
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, or, query, runTransaction, serverTimestamp, setDoc, Timestamp, updateDoc, where } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+import { addDoc, collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, or, query, runTransaction, serverTimestamp, setDoc, Timestamp, updateDoc, where } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
 const MODES = [{ id: 'manage', label: 'Verwaltung' }, { id: 'shop', label: 'Listenmodus' }];
 const MANAGE = [{ id: 'general', label: 'Allgemein' }, { id: 'stores', label: 'Geschäftewartung' }, { id: 'articles', label: 'Artikelwartung' }, { id: 'categories', label: 'Kategorienwartung' }, { id: 'remarks', label: 'Anmerkungswartung' }, { id: 'notes', label: 'Notizwartung' }];
@@ -296,11 +296,11 @@ function subscribeLists() {
         alertUser('Einkaufsliste konnte nicht geladen werden (listenLists). Bitte neu anmelden.', 'error');
         render();
     }));
-    unsubs.push(onSnapshot(query(listsRef(), where('memberIds', 'array-contains', uid())), (snap) => {
-        sharedListDocs = snap.docs.filter((d) => d.data()?.ownerId !== uid());
-        applyListDocs([...ownListDocs, ...sharedListDocs]);
+    unsubs.push(onSnapshot(query(collectionGroup(db, 'permissions'), where('userId', '==', uid())), (snap) => {
+        const sharedListIds = snap.docs.map((d) => d.data()?.listId).filter(Boolean);
+        syncSharedListDocs(sharedListIds);
     }, (error) => {
-        reportListenerError('listenLists:sharedLists', error);
+        reportListenerError('listenLists:sharedPermissions', error);
         stopSharedListDocListeners();
         applyListDocs([...ownListDocs]);
     }));
@@ -922,23 +922,87 @@ function onKeyDownActive(e) {
      openPurchase(item, false);
  }
 
- function onPointerMoveActive() {}
-
- function onDown(e) {
-     const row = e.target.closest('[data-hold-item]');
-     if (!row) return;
-     clearHold();
-     holdPayload = { action: 'edit-item', id: row.dataset.holdItem };
-     holdTimer = setTimeout(() => {
-         if (holdPayload) onHold(holdPayload);
-     }, HOLD_MS);
+ function onPointerMoveActive(e) {
+     updateStoreCategoryDrag(e);
  }
 
- function finishStoreCategoryDrag() {
-     if (!state.dragStoreCategory) return;
-     state.dragStoreCategory = null;
-     renderStoreCategoryEditorActive();
- }
+ function startStoreCategoryDrag(catId, event) {
+    const editor = state.storeCategoryEditor;
+    if (!editor || !catId) return;
+    const currentIndex = editor.categoryOrder.indexOf(catId);
+    if (currentIndex < 0) return;
+    state.dragStoreCategory = {
+        id: catId,
+        fromIndex: currentIndex,
+        overId: catId,
+        after: false
+    };
+    if (event) event.preventDefault();
+}
+
+function updateStoreCategoryDrag(event) {
+    const drag = state.dragStoreCategory;
+    const editor = state.storeCategoryEditor;
+    if (!drag || !editor || !event) return;
+
+    const target = document.elementFromPoint(event.clientX, event.clientY);
+    const row = target?.closest?.('[data-store-category-row]');
+    const nextOverId = row?.dataset?.id || drag.id;
+    const rect = row?.getBoundingClientRect?.();
+    const nextAfter = !!(row && rect && event.clientY > rect.top + (rect.height / 2));
+
+    if (drag.overId === nextOverId && drag.after === nextAfter) return;
+    drag.overId = nextOverId;
+    drag.after = nextAfter;
+    renderStoreCategoryEditorActive();
+}
+
+function onDown(e) {
+    const dragHandle = e.target.closest('[data-drag-store-category]');
+    if (dragHandle) {
+        startStoreCategoryDrag(dragHandle.dataset.id, e);
+        return;
+    }
+    const row = e.target.closest('[data-hold-item]');
+    if (!row) return;
+    clearHold();
+    holdPayload = { action: 'edit-item', id: row.dataset.holdItem };
+    holdTimer = setTimeout(() => {
+        if (holdPayload) onHold(holdPayload);
+    }, HOLD_MS);
+}
+
+function finishStoreCategoryDrag() {
+    const drag = state.dragStoreCategory;
+    const editor = state.storeCategoryEditor;
+    if (!drag || !editor) {
+        state.dragStoreCategory = null;
+        return;
+    }
+    const currentOrder = Array.isArray(editor.categoryOrder) ? [...editor.categoryOrder] : [];
+    const sourceIndex = currentOrder.indexOf(drag.id);
+    if (sourceIndex < 0) {
+        state.dragStoreCategory = null;
+        renderStoreCategoryEditorActive();
+        return;
+    }
+    const next = currentOrder.filter((id) => id !== drag.id);
+    const targetId = drag.overId && drag.overId !== drag.id ? drag.overId : null;
+    if (targetId) {
+        const targetIndex = next.indexOf(targetId);
+        if (targetIndex >= 0) {
+            const insertAt = Math.max(0, Math.min(targetIndex + (drag.after ? 1 : 0), next.length));
+            next.splice(insertAt, 0, drag.id);
+        } else {
+            next.splice(Math.max(0, Math.min(sourceIndex, next.length)), 0, drag.id);
+        }
+    } else {
+        next.splice(Math.max(0, Math.min(sourceIndex, next.length)), 0, drag.id);
+    }
+    editor.categoryOrder = next;
+    state.dragStoreCategory = null;
+    renderStoreCategoryEditorActive();
+}
 
  function finalizePointerState() {
      clearHold();
