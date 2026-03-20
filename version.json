@@ -1,13 +1,22 @@
 {
-  "version": "1.4.1",
-  "buildId": "20260320-2",
+  "version": "1.4.2",
+  "buildId": "20260320-3",
   "releaseDate": "2026-03-20",
-  "releaseTime": "08:41",
+  "releaseTime": "09:10",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste UI nachgeschliffen: Moduswahl als grauer Statusbutton, Inline-Kamera unter der Leiste, kompakter Listenwechsel und verdichteter Eingabemodus.",
-  "commitId": "43bb868",
+  "note": "Einkaufsliste umgestellt auf Listenmodus statt Einkaufsmodus, Hauptmodus ohne Hinzufuegemodus und funktionierenden Suchen/Eingeben-Umschalter.",
+  "commitId": "663d45e",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.4.2",
+      "buildId": "20260320-3",
+      "releaseDate": "2026-03-20",
+      "releaseTime": "09:10",
+      "note": "Einkaufsliste umgestellt auf Listenmodus statt Einkaufsmodus, Hauptmodus ohne Hinzufuegemodus und funktionierenden Suchen/Eingeben-Umschalter.",
+      "commitId": "663d45e",
+      "obligation": "false"
+    },
     {
       "version": "1.4.1",
       "buildId": "20260320-2",
