@@ -771,9 +771,14 @@ export function renderChecklistSettingsItems(listId) {
 
 function renderDeletedListsModal() {
     const container = document.getElementById('deletedListsContainer');
+    if (!container) return;
     container.innerHTML = ''; // Leeren
 
-    const deletedLists = Object.values(DELETED_CHECKLISTS).sort((a, b) => b.deletedAt - a.deletedAt);
+    const deletedLists = Object.values(DELETED_CHECKLISTS).sort((a, b) => {
+        const timeA = a?.deletedAt?.seconds || 0;
+        const timeB = b?.deletedAt?.seconds || 0;
+        return timeB - timeA;
+    });
 
     if (deletedLists.length === 0) {
         container.innerHTML = '<p class="text-gray-500">Keine gelöschten Listen vorhanden.</p>';
@@ -795,7 +800,7 @@ function renderDeletedListsModal() {
     });
 
     const deletedListsContainer = document.getElementById('deletedListsContainer');
-    if (deletedListsContainer) {
+    if (deletedListsContainer && !deletedListsContainer.dataset.listenerAttached) {
         deletedListsContainer.addEventListener('click', async (e) => {
             const restoreBtn = e.target.closest('.restore-checklist-btn');
             if (restoreBtn) {
@@ -804,6 +809,7 @@ function renderDeletedListsModal() {
                 alertUser("Liste wurde aus dem Papierkorb wiederhergestellt.", "success");
             }
         });
+        deletedListsContainer.dataset.listenerAttached = 'true';
     }
     setupPermanentDeleteModalListeners();
 }
@@ -839,21 +845,100 @@ function renderArchivedListsModal() {
     });
 }
 
+function renderCategoryEditor(groupId) {
+    const content = document.getElementById('category-content');
+    if (!content) return;
+
+    if (!groupId || !CHECKLIST_GROUPS[groupId]) {
+        content.innerHTML = '<p class="text-sm text-center text-gray-500">Bitte wählen Sie eine Gruppe.</p>';
+        return;
+    }
+
+    const categories = (CHECKLIST_CATEGORIES[groupId] || []).slice().sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''), 'de'));
+    const paletteEntries = Object.entries(COLOR_PALETTE || {});
+    const defaultColor = categories[0]?.color && COLOR_PALETTE?.[categories[0].color] ? categories[0].color : (paletteEntries[0]?.[0] || 'gray');
+
+    const paletteHtml = paletteEntries.map(([colorKey, colorMeta]) => `
+        <button
+            type="button"
+            class="category-color-dot h-7 w-7 rounded-full border-2 ${colorMeta.border} ${colorMeta.bg} ${colorKey === defaultColor ? 'ring-2 ring-blue-500' : ''}"
+            data-color="${colorKey}"
+            title="${escapeHtml(colorMeta.name || colorKey)}">
+        </button>
+    `).join('');
+
+    const categoriesHtml = categories.length
+        ? categories.map(category => {
+            const colorKey = category.color && COLOR_PALETTE?.[category.color] ? category.color : 'gray';
+            const colorMeta = COLOR_PALETTE?.[colorKey] || COLOR_PALETTE.gray;
+            const colorChoices = paletteEntries.map(([key, meta]) => `
+                <button
+                    type="button"
+                    class="color-dot h-6 w-6 rounded-full border-2 ${meta.border} ${meta.bg} ${key === colorKey ? 'ring-2 ring-blue-500' : ''}"
+                    data-category-id="${category.id}"
+                    data-color="${key}"
+                    title="${escapeHtml(meta.name || key)}">
+                </button>
+            `).join('');
+
+            return `
+                <div class="p-3 bg-white border rounded-lg space-y-3" data-category-id="${category.id}">
+                    <div class="cat-display-content flex items-start justify-between gap-3">
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold border ${colorMeta.bg} ${colorMeta.text} ${colorMeta.border}">${escapeHtml(colorMeta.name || colorKey)}</span>
+                                <span class="font-semibold text-gray-800 break-words">${escapeHtml(category.name || 'Unbenannte Kategorie')}</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 flex-shrink-0">
+                            <button type="button" class="edit-category-btn py-1 px-2 text-xs font-semibold text-blue-600 hover:bg-blue-50 rounded">Bearbeiten</button>
+                            <button type="button" class="delete-category-btn py-1 px-2 text-xs font-semibold text-red-600 hover:bg-red-50 rounded">Löschen</button>
+                        </div>
+                    </div>
+                    <div class="cat-edit-content hidden space-y-3">
+                        <input type="text" class="edit-category-name-input w-full p-2 border rounded-lg" value="${escapeHtml(category.name || '')}">
+                        <div class="flex flex-wrap gap-2">${colorChoices}</div>
+                        <div class="flex justify-end">
+                            <button type="button" class="save-category-btn hidden py-1.5 px-3 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700">Speichern</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('')
+        : '<p class="text-sm text-center text-gray-500">Für diese Gruppe sind noch keine Kategorien vorhanden.</p>';
+
+    content.innerHTML = `
+        <div class="space-y-4">
+            <div class="p-3 bg-white border rounded-lg space-y-3">
+                <h5 class="font-semibold text-gray-800">Neue Kategorie erstellen</h5>
+                <input type="text" id="new-category-name" class="w-full p-2 border rounded-lg" placeholder="Name der Kategorie...">
+                <input type="hidden" id="new-category-selected-color" value="${defaultColor}">
+                <div id="new-category-color-palette" class="flex flex-wrap gap-2">${paletteHtml}</div>
+                <button type="button" id="create-category-btn" class="w-full py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Kategorie erstellen</button>
+            </div>
+            <div class="space-y-2">${categoriesHtml}</div>
+        </div>
+    `;
+}
+
 function updateCategoryDropdowns() {
     // Baut die HTML-Optionen für die Kategorien neu auf, basierend auf den aktuellen Daten
     const categoryOptions = `<option value="">Keine Kategorie</option>` + Object.values(CHECKLIST_GROUPS).map(group => {
         const categoriesInGroup = CHECKLIST_CATEGORIES[group.id] || [];
         if (categoriesInGroup.length === 0) return '';
-        return `<optgroup label="${group.name}">${categoriesInGroup.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('')}</optgroup>`;
+        return `<optgroup label="${escapeHtml(group.name)}">${categoriesInGroup.map(cat => `<option value="${cat.id}">${escapeHtml(cat.name)}</option>`).join('')}</optgroup>`;
     }).join('');
 
-    // Findet das Dropdown-Feld im "Vorlagen"-Tab
-    const templateCategorySelect = document.getElementById('new-template-item-category');
-    if (templateCategorySelect) {
-        const selectedValue = templateCategorySelect.value; // Merkt sich die aktuelle Auswahl
-        templateCategorySelect.innerHTML = categoryOptions; // Füllt das Dropdown mit den neuen Daten
-        templateCategorySelect.value = selectedValue; // Versucht, die alte Auswahl wiederherzustellen
-    }
+    const categorySelects = [
+        document.getElementById('new-template-item-category'),
+        document.getElementById('checklist-settings-add-category')
+    ].filter(Boolean);
+
+    categorySelects.forEach(select => {
+        const selectedValue = select.value;
+        select.innerHTML = categoryOptions;
+        select.value = selectedValue;
+    });
 
     // Falls du zukünftig weitere Kategorie-Dropdowns hinzufügst, können sie hier ebenfalls aktualisiert werden.
 }
@@ -2200,6 +2285,7 @@ function renderChecklistSettingsView(editListId = null) {
   if (templateAssignee) {
       templateAssignee.innerHTML = `<option value="">Zuweisen...</option>` + Object.values(USERS || {}).map(u => `<option value="${u.id}">${escapeHtml(u.name||u.displayName||'')}</option>`).join('');
   }
+  updateCategoryDropdowns();
 
   // --- Helper für Gruppen-Anzeige im Editor ---
   function updateCurrentGroupDisplay(listId) {
@@ -2277,17 +2363,13 @@ function renderChecklistSettingsView(editListId = null) {
       });
   }
 
-  // 4. Kategorie Gruppe Wechsel
   const catGroupSelector = view.querySelector('#category-group-selector');
   if (catGroupSelector) {
-      catGroupSelector.addEventListener('change', (e) => {
-          view.dataset.selectedCategoryIdForRender = e.target.value;
-          if (typeof renderCategoryEditor === 'function') renderCategoryEditor(e.target.value);
-      });
-      if(view.dataset.selectedCategoryIdForRender) {
-        catGroupSelector.value = view.dataset.selectedCategoryIdForRender;
-        if (typeof renderCategoryEditor === 'function') renderCategoryEditor(view.dataset.selectedCategoryIdForRender);
+      const initialCategoryGroupId = view.dataset.selectedCategoryIdForRender || catGroupSelector.value || '';
+      if (initialCategoryGroupId) {
+          catGroupSelector.value = initialCategoryGroupId;
       }
+      renderCategoryEditor(catGroupSelector.value || '');
   }
 
   // 5. Tabs Logik
@@ -2336,7 +2418,8 @@ function renderChecklistSettingsView(editListId = null) {
           view.querySelector('#group-display-container')?.classList.add('hidden');
           view.querySelector('#group-edit-container')?.classList.remove('hidden');
           
-          const currentList = (listToEditId && CHECKLISTS) ? CHECKLISTS[listToEditId] : null;
+          const currentListId = view.dataset.editingListId || listToEditId;
+          const currentList = (currentListId && CHECKLISTS) ? CHECKLISTS[currentListId] : null;
           if (currentList && currentList.groupId) {
               const assignSwitcher = view.querySelector('#checklist-group-assign-switcher');
               if (assignSwitcher) assignSwitcher.value = currentList.groupId;
@@ -2350,15 +2433,22 @@ function renderChecklistSettingsView(editListId = null) {
       saveGroupBtn.addEventListener('click', async () => {
           const assignSwitcher = view.querySelector('#checklist-group-assign-switcher');
           const newGroupId = assignSwitcher ? assignSwitcher.value : null;
+          const currentListId = view.dataset.editingListId || listToEditId;
           
-          if (!listToEditId || !newGroupId) return alertUser('Fehler: Liste oder Gruppe nicht gefunden.', 'error');
+          if (!currentListId || !newGroupId) return alertUser('Fehler: Liste oder Gruppe nicht gefunden.', 'error');
           
           const newGroupName = (newGroupId && CHECKLIST_GROUPS && CHECKLIST_GROUPS[newGroupId]) ? CHECKLIST_GROUPS[newGroupId].name : null;
           
           try {
               if (typeof updateDoc === 'function' && typeof doc === 'function' && typeof checklistsCollectionRef !== 'undefined') {
-                  await updateDoc(doc(checklistsCollectionRef, listToEditId), { groupId: newGroupId, groupName: newGroupName });
+                  await updateDoc(doc(checklistsCollectionRef, currentListId), { groupId: newGroupId, groupName: newGroupName });
               }
+              if (CHECKLISTS?.[currentListId]) {
+                  CHECKLISTS[currentListId].groupId = newGroupId;
+                  CHECKLISTS[currentListId].groupName = newGroupName;
+              }
+              updateCurrentGroupDisplay(currentListId);
+              buildEditorSwitcherOptions();
               
               alertUser('Gruppenzuweisung gespeichert.', 'success');
               view.querySelector('#group-display-container')?.classList.remove('hidden');
@@ -2440,6 +2530,7 @@ function setupCategoryManagementListeners(view) {
                         await addDoc(checklistCategoriesCollectionRef, { name: newName, groupId: currentGroupId, color });
                     } else { /* lokales Fallback */ }
                     nameInput.value = '';
+                    updateCategoryDropdowns();
                     if (typeof alertUser === 'function') alertUser('Kategorie gespeichert.', 'success');
                     
                     // Wichtig: Editor neu rendern, um die neue Kategorie anzuzeigen
@@ -2478,6 +2569,7 @@ function setupCategoryManagementListeners(view) {
                     if (typeof updateDoc === 'function') {
                         await updateDoc(doc(checklistCategoriesCollectionRef, catId), { name: newName });
                     }
+                    updateCategoryDropdowns();
                     if (typeof alertUser === 'function') alertUser('Kategorie umbenannt.', 'success');
                     renderCategoryEditor(groupIdForRender); // Editor für die gemerkte Gruppe neu rendern
                     // Gruppe wieder auswählen nach dem Rendern
@@ -2500,6 +2592,7 @@ function setupCategoryManagementListeners(view) {
                     if (typeof deleteDoc === 'function') {
                         await deleteDoc(doc(checklistCategoriesCollectionRef, catId));
                     } else { /* lokales Fallback */ }
+                    updateCategoryDropdowns();
                     if (typeof alertUser === 'function') alertUser('Kategorie gelöscht.', 'success');
                     renderCategoryEditor(groupIdForRender); // Editor für die gemerkte Gruppe neu rendern
                     // Gruppe wieder auswählen nach dem Rendern

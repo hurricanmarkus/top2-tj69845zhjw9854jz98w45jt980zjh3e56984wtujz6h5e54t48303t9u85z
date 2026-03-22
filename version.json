@@ -1,13 +1,22 @@
 {
-  "version": "1.4.15",
-  "buildId": "20260322-3",
+  "version": "1.4.16",
+  "buildId": "20260322-4",
   "releaseDate": "2026-03-22",
-  "releaseTime": "11:14",
+  "releaseTime": "11:31",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste: fehlenden Pointer-Move-Handler ergaenzt, damit die Store-Kategorien wieder ohne ReferenceError sortierbar sind.",
-  "commitId": "",
+  "note": "Checkliste: Kategorien-Editor repariert, Dropdown-/Gruppenzuweisungsfehler behoben und Modal-/Papierkorbpfade stabilisiert.",
+  "commitId": "397f073",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.4.16",
+      "buildId": "20260322-4",
+      "releaseDate": "2026-03-22",
+      "releaseTime": "11:31",
+      "note": "Checkliste: Kategorien-Editor repariert, Dropdown-/Gruppenzuweisungsfehler behoben und Modal-/Papierkorbpfade stabilisiert.",
+      "commitId": "397f073",
+      "obligation": "false"
+    },
     {
       "version": "1.4.15",
       "buildId": "20260322-3",
