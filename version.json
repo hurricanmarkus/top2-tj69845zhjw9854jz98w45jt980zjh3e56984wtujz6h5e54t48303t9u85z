@@ -1,13 +1,22 @@
 {
-  "version": "1.4.14",
-  "buildId": "20260322-2",
+  "version": "1.4.15",
+  "buildId": "20260322-3",
   "releaseDate": "2026-03-22",
-  "releaseTime": "11:07",
+  "releaseTime": "11:14",
   "timezone": "Europe/Vienna",
-  "note": "Checkliste: Schiff-Terminologie vervollstaendigt, Container-Schiff-Kompatibilitaet auf shipId/stackId gehaertet und Rest-Selektoren bereinigt.",
-  "commitId": "2417212",
+  "note": "Einkaufsliste: fehlenden Pointer-Move-Handler ergaenzt, damit die Store-Kategorien wieder ohne ReferenceError sortierbar sind.",
+  "commitId": "",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.4.15",
+      "buildId": "20260322-3",
+      "releaseDate": "2026-03-22",
+      "releaseTime": "11:14",
+      "note": "Einkaufsliste: fehlenden Pointer-Move-Handler ergaenzt, damit die Store-Kategorien wieder ohne ReferenceError sortierbar sind.",
+      "commitId": "",
+      "obligation": "false"
+    },
     {
       "version": "1.4.14",
       "buildId": "20260322-2",

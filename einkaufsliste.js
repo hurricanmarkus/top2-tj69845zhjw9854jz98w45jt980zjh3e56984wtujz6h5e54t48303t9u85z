@@ -1018,6 +1018,30 @@ function onDown(e) {
     }
 }
 
+function startStoreCategoryDrag(catId, e) {
+    const editor = state.storeCategoryEditor;
+    if (!editor || !catId) return;
+    state.dragStoreCategory = { id: catId, pointerId: e.pointerId, overId: catId, after: false };
+    if (typeof e.preventDefault === 'function') e.preventDefault();
+    renderStoreCategoryEditorActive();
+}
+
+function onPointerMoveActive(e) {
+    const drag = state.dragStoreCategory;
+    const editor = state.storeCategoryEditor;
+    if (!drag || !editor) return;
+    const row = e.target.closest('[data-store-category-row]');
+    if (!row) return;
+    const overId = row.dataset.id;
+    if (!overId || overId === drag.id) return;
+    const rect = row.getBoundingClientRect();
+    const after = e.clientY > rect.top + rect.height / 2;
+    if (drag.overId === overId && drag.after === after) return;
+    drag.overId = overId;
+    drag.after = after;
+    renderStoreCategoryEditorActive();
+}
+
 function finishStoreCategoryDrag() {
     const drag = state.dragStoreCategory;
     const editor = state.storeCategoryEditor;
