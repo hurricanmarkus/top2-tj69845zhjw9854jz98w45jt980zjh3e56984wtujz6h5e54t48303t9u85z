@@ -32,6 +32,14 @@ let scanStream = null;
 let scanTimer = null;
 let autoScanTimer = null;
 let scanFlashTimer = null;
+const itemActionTimers = new Map();
+const itemActionVisible = new Set();
+const quantityActionTimers = new Map();
+const quantityActionVisible = new Set();
+const scanRecentCodes = new Map();
+const ITEM_ACTION_MS = 5000;
+const QUANTITY_ACTION_MS = 5000;
+const SCAN_LOCKOUT_MS = 10000;
 let holdTimer = null;
 let holdPayload = null;
 let holdConsumedKey = '';
@@ -144,13 +152,58 @@ function closeDetailModal() {
     render();
 }
 
+function scheduleTimedVisibility(visibleSet, timerMap, id, durationMs) {
+    if (!id) return;
+    const existing = timerMap.get(id);
+    if (existing) clearTimeout(existing);
+    visibleSet.add(id);
+    render();
+    const timer = setTimeout(() => {
+        visibleSet.delete(id);
+        timerMap.delete(id);
+        render();
+    }, durationMs);
+    timerMap.set(id, timer);
+}
+
+function clearTimedVisibility(visibleSet, timerMap, id) {
+    if (!id) return;
+    const existing = timerMap.get(id);
+    if (existing) clearTimeout(existing);
+    timerMap.delete(id);
+    visibleSet.delete(id);
+}
+
+function showItemActionButtons(id) {
+    scheduleTimedVisibility(itemActionVisible, itemActionTimers, id, ITEM_ACTION_MS);
+}
+
+function showQuantityActionButton(id) {
+    scheduleTimedVisibility(quantityActionVisible, quantityActionTimers, id, QUANTITY_ACTION_MS);
+}
+
+function hideItemActionButtons(id) {
+    clearTimedVisibility(itemActionVisible, itemActionTimers, id);
+}
+
+function hideQuantityActionButton(id) {
+    clearTimedVisibility(quantityActionVisible, quantityActionTimers, id);
+}
+
+function isItemActionVisible(id) {
+    return itemActionVisible.has(id);
+}
+
+function isQuantityActionVisible(id) {
+    return quantityActionVisible.has(id);
+}
+
 function ensureStyle() {
     if (document.getElementById('el-style')) return;
     const s = document.createElement('style');
     s.id = 'el-style';
     s.textContent = '.elc{background:#fff;border:1px solid #e5e7eb;border-radius:1rem;padding:.8rem;box-shadow:0 10px 24px rgba(15,23,42,.06)}.elb{border-radius:.8rem;padding:.5rem .75rem;font-size:.78rem;font-weight:800}.elb.a{background:linear-gradient(135deg,#4338ca,#6d28d9);color:#fff}.eli,.els,.elt{width:100%;border:1px solid #d1d5db;border-radius:.8rem;background:#fff;padding:.62rem .75rem;font-size:.83rem}.elt{min-height:82px;resize:vertical}.elm{display:flex;flex-wrap:wrap;gap:.45rem;align-items:center}.elitem{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.6rem;align-items:start;padding:.72rem 0}.elcheck{width:2.25rem;height:2.25rem;border-radius:.8rem;border:1px solid #cbd5e1;background:#fff;font-weight:900}.elmodal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:center;justify-content:center;padding:.8rem;z-index:120}.elmodal.o{display:flex}.elpanel{width:min(100%,760px);max-height:92vh;overflow:auto;background:#fff;border-radius:1.2rem;box-shadow:0 24px 60px rgba(15,23,42,.28)}.elkey{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.45rem}.elkey button{border-radius:.8rem;min-height:2.35rem;border:1px solid #d1d5db;background:#f8fafc;font-weight:800}.elcam{background:#020617;border-radius:1rem;overflow:hidden;position:relative;aspect-ratio:4/3}.elcam video{width:100%;height:100%;object-fit:cover}.elcam:after{content:"";position:absolute;inset:14%;border:3px solid rgba(255,255,255,.85);border-radius:1rem}.elstat{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem}.elstat>div{background:#f8fafc;border:1px solid #e5e7eb;border-radius:.85rem;padding:.55rem}@media(max-width:480px){.elstat{grid-template-columns:repeat(2,minmax(0,1fr))}}';
-    s.textContent += '.elitem{padding:.56rem 0}.elstorecat-row{touch-action:none}.elstorecat-row.dragging{opacity:.58;transform:scale(.985)}.elstorecat-row.drop-before{box-shadow:inset 0 4px 0 #6366f1}.elstorecat-row.drop-after{box-shadow:inset 0 -4px 0 #6366f1}.elchipbtn{display:inline-flex;align-items:center;justify-content:center;width:1rem;height:1rem;border-radius:999px;background:rgba(255,255,255,.7);font-size:.72rem;font-weight:900;line-height:1;margin-left:.15rem}';
-    s.textContent += '.el-scan-flash{position:fixed;inset:0;background:rgba(34,197,94,.32);opacity:0;pointer-events:none;z-index:9999;transition:opacity 90ms linear}.el-scan-flash.o{opacity:1}';
+    s.textContent += '.elitem{padding:.56rem 0}.elstorecat-row{touch-action:none}.elstorecat-row.dragging{opacity:.58;transform:scale(.985)}.elstorecat-row.drop-before{box-shadow:inset 0 4px 0 #6366f1}.elstorecat-row.drop-after{box-shadow:inset 0 -4px 0 #6366f1}.elchipbtn{display:inline-flex;align-items:center;justify-content:center;width:1rem;height:1rem;border-radius:999px;background:rgba(255,255,255,.7);font-size:.72rem;font-weight:900;line-height:1;margin-left:.15rem}.elaction{display:inline-flex;align-items:center;justify-content:center;min-height:2.25rem;min-width:2.25rem;border:1px solid #cbd5e1;border-radius:.8rem;background:#fff;padding:.35rem .55rem;font-size:.78rem;font-weight:900;line-height:1;transition:transform .12s ease,background-color .12s ease,border-color .12s ease}.elaction:active{transform:scale(.96)}.elaction-gear{background:#eef2ff;border-color:#c7d2fe;color:#4338ca}.elaction-trash{background:#fef2f2;border-color:#fecaca;color:#b91c1c}.elaction-qty{background:#ecfdf5;border-color:#a7f3d0;color:#047857;min-width:7.8rem}@media(max-width:480px){.elitem{padding:.48rem 0}.elaction{min-height:2rem;min-width:2rem;padding:.28rem .42rem;font-size:.72rem}.elaction-qty{min-width:auto;max-width:100%}}.elcam.el-scan-success{animation:elcamScanSuccess 520ms ease-in-out 1;box-shadow:0 0 0 4px rgba(34,197,94,.82),0 0 0 12px rgba(34,197,94,.24)}@keyframes elcamScanSuccess{0%{box-shadow:0 0 0 0 rgba(34,197,94,0)}15%{box-shadow:0 0 0 4px rgba(34,197,94,.82),0 0 0 12px rgba(34,197,94,.22)}30%{box-shadow:0 0 0 0 rgba(34,197,94,0)}55%{box-shadow:0 0 0 4px rgba(34,197,94,.82),0 0 0 12px rgba(34,197,94,.22)}70%{box-shadow:0 0 0 0 rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}';
     document.head.appendChild(s);
 }
 
@@ -494,8 +547,8 @@ function renderScannerPanelActive(embedded = false) {
     const manualLabel = isArticleMode ? 'Code hinzufügen' : state.scanMode === 'list-add' ? 'Artikel hinzufügen' : 'Code übernehmen';
     const shellClass = embedded ? 'mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 space-y-3' : 'elpanel p-4 sm:p-5 space-y-4';
     const titleClass = embedded ? 'text-base font-black text-gray-900' : 'text-xl font-black text-gray-900';
-    const videoWrapClass = embedded ? 'elcam mx-auto w-full sm:max-w-[70%]' : 'elcam';
-    return `<div class="${shellClass}"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="${titleClass}">${scannerTitle}</div><div class="text-sm text-gray-500">${scannerText}</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-scan">Schließen</button></div><div class="${videoWrapClass}"><video id="el-video" autoplay playsinline muted></video></div><div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"><input id="el-scan-manual" class="eli" placeholder="${isArticleMode ? 'EAN/QR eingeben oder per Scanner senden' : 'EAN/QR manuell eingeben'}"><button class="elb a" data-a="manual-scan">${manualLabel}</button></div><div id="el-scan-status" class="text-sm text-gray-500">${escapeHtml(state.scanStatus || 'Kamera wird gestartet...')}</div>${isArticleMode ? `<div class="elc space-y-2"><div class="text-xs font-bold uppercase text-gray-500">Erfasste Codes</div><div id="el-scan-collected" class="elm">${state.scanCodes.length ? state.scanCodes.map((code) => chip(`${escapeHtml(code)} <button type="button" class="elchipbtn" data-a="remove-scanned-code" data-id="${escapeHtml(code)}">×</button>`, 'bg-indigo-100 text-indigo-700')).join(' ') : '<span class="text-sm text-gray-400">Noch keine Codes erfasst.</span>'}</div></div><div class="flex flex-wrap justify-end gap-2"><button class="elb bg-emerald-600 text-white" data-a="save-scanned-codes" ${state.scanCodes.length ? '' : 'disabled'}>OK</button><button class="elb bg-indigo-600 text-white" data-a="save-scanned-codes-next" ${state.scanCodes.length && nextMissingEanArticle(state.scanArticleId) ? '' : 'disabled'}>Nächsten Artikel ohne EAN</button></div>` : ''}</div>`;
+    const videoWrapClass = embedded ? 'elcam mx-auto w-full max-w-[92vw] sm:max-w-[70%]' : 'elcam';
+    return `<div class="${shellClass}"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="${titleClass}">${scannerTitle}</div><div class="text-sm text-gray-500">${scannerText}</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-scan">Schließen</button></div><div class="${videoWrapClass}"><video id="el-video" autoplay playsinline muted></video></div><div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"><input id="el-scan-manual" class="eli" placeholder="${isArticleMode ? 'EAN/QR eingeben oder per Scanner senden' : 'EAN/QR manuell eingeben'}"><button class="elb a w-full sm:w-auto" data-a="manual-scan">${manualLabel}</button></div><div id="el-scan-status" class="text-sm text-gray-500">${escapeHtml(state.scanStatus || 'Kamera wird gestartet...')}</div>${isArticleMode ? `<div class="elc space-y-2"><div class="text-xs font-bold uppercase text-gray-500">Erfasste Codes</div><div id="el-scan-collected" class="elm">${state.scanCodes.length ? state.scanCodes.map((code) => chip(`${escapeHtml(code)} <button type="button" class="elchipbtn" data-a="remove-scanned-code" data-id="${escapeHtml(code)}">×</button>`, 'bg-indigo-100 text-indigo-700')).join(' ') : '<span class="text-sm text-gray-400">Noch keine Codes erfasst.</span>'}</div></div><div class="flex flex-col sm:flex-row justify-end gap-2"><button class="elb bg-emerald-600 text-white w-full sm:w-auto" data-a="save-scanned-codes" ${state.scanCodes.length ? '' : 'disabled'}>OK</button><button class="elb bg-indigo-600 text-white w-full sm:w-auto" data-a="save-scanned-codes-next" ${state.scanCodes.length && nextMissingEanArticle(state.scanArticleId) ? '' : 'disabled'}>Nächsten Artikel ohne EAN</button></div>` : ''}</div>`;
 }
 
 function renderActionBar() {
@@ -593,20 +646,19 @@ function closeUnknownModal() {
 }
 
 function flashScanSuccess() {
-    const existing = document.getElementById('el-scan-flash');
-    if (existing) existing.remove();
+    if (navigator.vibrate) navigator.vibrate(30);
+    const cams = Array.from(document.querySelectorAll('.elcam'));
+    if (!cams.length) return;
     if (scanFlashTimer) clearTimeout(scanFlashTimer);
-    const overlay = document.createElement('div');
-    overlay.id = 'el-scan-flash';
-    overlay.className = 'el-scan-flash';
-    document.body.appendChild(overlay);
-    const steps = [0, 120, 240, 360];
-    const states = [true, false, true, false];
-    steps.forEach((delay, index) => setTimeout(() => overlay.classList.toggle('o', states[index]), delay));
+    cams.forEach((cam) => {
+        cam.classList.remove('el-scan-success');
+        void cam.offsetWidth;
+        cam.classList.add('el-scan-success');
+    });
     scanFlashTimer = setTimeout(() => {
-        overlay.remove();
+        cams.forEach((cam) => cam.classList.remove('el-scan-success'));
         scanFlashTimer = null;
-    }, 520);
+    }, 540);
 }
 
 function updateScannerDynamicUi() {
@@ -723,7 +775,12 @@ function renderItem(item) {
     const locked = lock && lock.userId !== uid() && Date.now() < ((toDate(lock.expiresAt)?.getTime() || 0));
     const stores = (item.storeIds || []).map((id) => numberedStoreLabel(id)).join(', ');
     const restItem = isRestItem(item);
-    return `<div class="elitem border-t border-gray-100"><button type="button" class="text-left min-w-0" data-hold-item="${item.id}" title="2 Sekunden halten zum Bearbeiten"><div class="flex flex-wrap gap-2 items-center"><div class="font-bold text-sm text-gray-900 truncate flex-1">${escapeHtml(ell(item.title, 40))}</div>${chip(`${fmtQty(item.quantity)} ${escapeHtml(item.unit || '')}`, 'bg-indigo-50 text-indigo-700')}${state.categories.find((c) => c.id === item.categoryId) ? chip(escapeHtml(state.categories.find((c) => c.id === item.categoryId).name), 'bg-amber-50 text-amber-700') : ''}${locked ? chip(`gesperrt von ${escapeHtml(lock.userName || lock.userId)}`, 'bg-red-100 text-red-700') : ''}${restItem ? chip('Rest', 'bg-orange-100 text-orange-800 ring-1 ring-orange-300') : ''}</div><div class="text-xs text-gray-500 mt-1">${escapeHtml(stores)}${item.restoredAt ? ` · Wiederhergestellt von ${escapeHtml(item.restoredByName || '—')} · ${dt(item.restoredAt)}` : ''}</div>${item.persistentNote ? `<div class="text-xs text-gray-600 mt-2">${escapeHtml(item.persistentNote)}</div>` : ''}${item.note ? `<div class="text-xs text-gray-600 mt-1">${escapeHtml(item.note)}</div>` : ''}</button><button class="elcheck" data-a="check" data-hold-check data-id="${item.id}" title="2 Sekunden halten für Mengenfenster, kurz tippen zum Abhaken">✓</button></div>`;
+    const itemActionsVisible = isItemActionVisible(item.id);
+    const qtyActionVisible = isQuantityActionVisible(item.id);
+    const controls = itemActionsVisible
+        ? `<button class="elaction elaction-trash" data-a="delete-item-direct" data-id="${item.id}" title="Eintrag ohne Rückfrage löschen">🗑</button><button class="elaction elaction-gear" data-a="open-detail-item" data-id="${item.id}" title="Produkt bearbeiten">⚙</button>`
+        : `<button class="elcheck" data-a="check" data-id="${item.id}" title="Abhaken">✓</button>`;
+    return `<div class="elitem border-t border-gray-100"><button type="button" class="text-left min-w-0 flex-1" data-a="edit-item" data-id="${item.id}" title="Doppelklick für Bearbeitungsaktionen"><div class="flex flex-wrap gap-2 items-center"><div class="font-bold text-sm text-gray-900 truncate flex-1">${escapeHtml(ell(item.title, 40))}</div>${chip(`${fmtQty(item.quantity)} ${escapeHtml(item.unit || '')}`, 'bg-indigo-50 text-indigo-700')}${state.categories.find((c) => c.id === item.categoryId) ? chip(escapeHtml(state.categories.find((c) => c.id === item.categoryId).name), 'bg-amber-50 text-amber-700') : ''}${locked ? chip(`gesperrt von ${escapeHtml(lock.userName || lock.userId)}`, 'bg-red-100 text-red-700') : ''}${restItem ? chip('Rest', 'bg-orange-100 text-orange-800 ring-1 ring-orange-300') : ''}</div><div class="text-xs text-gray-500 mt-1">${escapeHtml(stores)}${item.restoredAt ? ` · Wiederhergestellt von ${escapeHtml(item.restoredByName || '—')} · ${dt(item.restoredAt)}` : ''}</div>${item.persistentNote ? `<div class="text-xs text-gray-600 mt-2">${escapeHtml(item.persistentNote)}</div>` : ''}${item.note ? `<div class="text-xs text-gray-600 mt-1">${escapeHtml(item.note)}</div>` : ''}</button><div class="flex items-center justify-end gap-1 sm:gap-2 flex-wrap sm:flex-nowrap">${qtyActionVisible ? `<button class="elaction elaction-qty text-[11px] sm:text-xs px-2 sm:px-3 whitespace-nowrap" data-a="quantity" data-id="${item.id}" title="Menge übernehmen"><span class="sm:hidden">Menge</span><span class="hidden sm:inline">Menge übernehmen</span></button>` : ''}${controls}</div></div>`;
 }
 
 function renderChecked() {
@@ -810,7 +867,7 @@ function renderDetail() {
     const otherLists = state.lists.filter((x) => x.id !== state.listId).filter((x) => canAdd(x) || canShop(x));
     el.className = `elmodal ${item ? 'o' : ''}`;
     if (!item) { el.innerHTML = ''; return; }
-    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-start"><div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><div class="text-xl font-black text-gray-900">Produkt bearbeiten</div>${isRestItem(item) ? chip('REST', 'bg-orange-100 text-orange-800 ring-1 ring-orange-300') : ''}</div><div class="text-sm text-gray-500">${isRestItem(item) ? `Automatisch angelegt als Rest von ${escapeHtml(String(item.title || '').replace(/^Rest von\s+/i, '').trim() || item.title || 'Artikel')}.` : 'Langer Klick auf den Namen öffnet dieses Fenster.'}</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-detail">Schließen</button></div>${isRestItem(item) ? '<div class="rounded-2xl border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-800">Dieser Eintrag ist ein automatisch erzeugter Rest-Eintrag und kann wie jeder andere Eintrag bearbeitet oder gelöscht werden.</div>' : ''}<div class="grid gap-3 sm:grid-cols-2"><input id="el-d-title" class="eli" value="${escapeHtml(item.title || '')}" ${!canEditItems() ? 'disabled' : ''}><input id="el-d-qty" class="eli" value="${escapeHtml(formatEditableQty(item.quantity || '1'))}" ${!canEditItems() ? 'disabled' : ''}></div><div class="grid gap-3 sm:grid-cols-2"><select id="el-d-cat" class="els" ${!canEditItems() ? 'disabled' : ''}><option value="">Kategorie wählen...</option>${state.categories.map((c) => `<option value="${c.id}" ${item.categoryId === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}</select><div class="flex items-center rounded-2xl border border-gray-200 bg-slate-50 px-3 text-sm font-bold text-gray-600">Einheit: ${escapeHtml(item.unit || 'Stück')}</div></div><textarea id="el-d-note" class="elt" placeholder="Anmerkung für diese Position" ${!canEditItems() ? 'disabled' : ''}>${escapeHtml(item.note || '')}</textarea><textarea id="el-d-pnote" class="elt" placeholder="Gespeicherte Anmerkung" ${!canEditItems() ? 'disabled' : ''}>${escapeHtml(item.persistentNote || '')}</textarea><div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]"><select id="el-d-move-list" class="els" ${!otherLists.length || !canEditItems() ? 'disabled' : ''}><option value="">Auf andere Liste verschieben...</option>${otherLists.map((list) => `<option value="${list.id}">${escapeHtml(list.name)}</option>`).join('')}</select><button class="elb bg-gray-100 text-gray-700" data-a="move-detail" ${!otherLists.length || !canEditItems() ? 'disabled' : ''}>Verschieben</button></div><div class="elc space-y-2 bg-slate-50 text-sm"><div><b>Artikel:</b> ${escapeHtml(article?.title || item.title || '—')}</div><div><b>Status:</b> ${escapeHtml(item.status || 'open')}</div><div><b>Erfasst:</b> ${dt(item.createdAt)}</div><div><b>Gekauft:</b> ${item.checkedAt ? `${dt(item.checkedAt)} · ${escapeHtml(item.checkedByName || '—')}` : '—'}</div>${item.restoredAt ? `<div><b>Wiederhergestellt:</b> ${dt(item.restoredAt)} · ${escapeHtml(item.restoredByName || '—')}</div>` : ''}${item.purchasedQuantity ? `<div><b>Gekauft-Menge:</b> ${fmtQty(item.purchasedQuantity)}</div>` : ''}</div><div class="flex flex-wrap justify-end gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="close-detail">Schließen</button>${canEditItems() ? '<button class="elb bg-red-600 text-white" data-a="delete-detail-item">Löschen</button><button class="elb a" data-a="save-detail">Speichern</button>' : ''}</div></div>`;
+    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-start"><div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><div class="text-xl font-black text-gray-900">Produkt bearbeiten</div>${isRestItem(item) ? chip('REST', 'bg-orange-100 text-orange-800 ring-1 ring-orange-300') : ''}</div><div class="text-sm text-gray-500">${isRestItem(item) ? `Automatisch angelegt als Rest von ${escapeHtml(String(item.title || '').replace(/^Rest von\s+/i, '').trim() || item.title || 'Artikel')}.` : 'Über das Zahnradsymbol des Eintrags wird dieses Fenster geöffnet.'}</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-detail">Schließen</button></div>${isRestItem(item) ? '<div class="rounded-2xl border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-800">Dieser Eintrag ist ein automatisch erzeugter Rest-Eintrag und kann wie jeder andere Eintrag bearbeitet oder gelöscht werden.</div>' : ''}<div class="grid gap-3 sm:grid-cols-2"><input id="el-d-title" class="eli" value="${escapeHtml(item.title || '')}" ${!canEditItems() ? 'disabled' : ''}><input id="el-d-qty" class="eli" value="${escapeHtml(formatEditableQty(item.quantity || '1'))}" ${!canEditItems() ? 'disabled' : ''}></div><div class="grid gap-3 sm:grid-cols-2"><select id="el-d-cat" class="els" ${!canEditItems() ? 'disabled' : ''}><option value="">Kategorie wählen...</option>${state.categories.map((c) => `<option value="${c.id}" ${item.categoryId === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}</select><div class="flex items-center rounded-2xl border border-gray-200 bg-slate-50 px-3 text-sm font-bold text-gray-600">Einheit: ${escapeHtml(item.unit || 'Stück')}</div></div><textarea id="el-d-note" class="elt" placeholder="Anmerkung für diese Position" ${!canEditItems() ? 'disabled' : ''}>${escapeHtml(item.note || '')}</textarea><textarea id="el-d-pnote" class="elt" placeholder="Gespeicherte Anmerkung" ${!canEditItems() ? 'disabled' : ''}>${escapeHtml(item.persistentNote || '')}</textarea><div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]"><select id="el-d-move-list" class="els" ${!otherLists.length || !canEditItems() ? 'disabled' : ''}><option value="">Auf andere Liste verschieben...</option>${otherLists.map((list) => `<option value="${list.id}">${escapeHtml(list.name)}</option>`).join('')}</select><button class="elb bg-gray-100 text-gray-700" data-a="move-detail" ${!otherLists.length || !canEditItems() ? 'disabled' : ''}>Verschieben</button></div><div class="elc space-y-2 bg-slate-50 text-sm"><div><b>Artikel:</b> ${escapeHtml(article?.title || item.title || '—')}</div><div><b>Status:</b> ${escapeHtml(item.status || 'open')}</div><div><b>Erfasst:</b> ${dt(item.createdAt)}</div><div><b>Gekauft:</b> ${item.checkedAt ? `${dt(item.checkedAt)} · ${escapeHtml(item.checkedByName || '—')}` : '—'}</div>${item.restoredAt ? `<div><b>Wiederhergestellt:</b> ${dt(item.restoredAt)} · ${escapeHtml(item.restoredByName || '—')}</div>` : ''}${item.purchasedQuantity ? `<div><b>Gekauft-Menge:</b> ${fmtQty(item.purchasedQuantity)}</div>` : ''}</div><div class="flex flex-wrap justify-end gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="close-detail">Schließen</button>${canEditItems() ? '<button class="elb bg-red-600 text-white" data-a="delete-detail-item">Löschen</button><button class="elb a" data-a="save-detail">Speichern</button>' : ''}</div></div>`;
 }
 
 function renderArticle() {
@@ -928,84 +985,29 @@ function onKeyDownActive(e) {
  }
 
  function openStoreCategoryEditor(storeId) {
-     const store = state.stores.find((s) => s.id === storeId);
-     if (!store) return;
-     state.storeCategoryEditor = { storeId, categoryOrder: [...(store.categoryOrder || [])] };
-     state.dragStoreCategory = null;
-     render();
- }
-
- function toggleStoreCategoryDraft(catId) {
-     const editor = state.storeCategoryEditor;
-     if (!editor) return;
-     editor.categoryOrder = editor.categoryOrder.includes(catId) ? editor.categoryOrder.filter((id) => id !== catId) : [...editor.categoryOrder, catId];
-     renderStoreCategoryEditorActive();
- }
-
- function moveStoreCategoryDraft(catId, dir) {
-     const editor = state.storeCategoryEditor;
-     if (!editor) return;
-     const from = editor.categoryOrder.indexOf(catId);
-     const to = from + dir;
-     if (from < 0 || to < 0 || to >= editor.categoryOrder.length) return;
-     const next = [...editor.categoryOrder];
-     [next[from], next[to]] = [next[to], next[from]];
-     editor.categoryOrder = next;
-     renderStoreCategoryEditorActive();
- }
-
- function clearHold() {
-     if (holdTimer) clearTimeout(holdTimer);
-     holdTimer = null;
-     holdPayload = null;
- }
-
- function onHold(payload) {
-     holdConsumedKey = `${payload.action}:${payload.id}`;
-     holdConsumedAt = Date.now();
-     if (payload.action === 'edit-item') {
-         state.detailId = payload.id;
-         render();
-         return;
-     }
-     const item = state.items.find((x) => x.id === payload.id);
-     if (!item) return;
-     if (navigator.vibrate) navigator.vibrate(30);
-     openPurchase(item, false);
- }
-
- function onPointerMoveActive(e) {
-     updateStoreCategoryDrag(e);
- }
-
- function startStoreCategoryDrag(catId, event) {
-    const editor = state.storeCategoryEditor;
-    if (!editor || !catId) return;
-    const currentIndex = editor.categoryOrder.indexOf(catId);
-    if (currentIndex < 0) return;
-    state.dragStoreCategory = {
-        id: catId,
-        fromIndex: currentIndex,
-        overId: catId,
-        after: false
-    };
-    if (event) event.preventDefault();
+    const store = state.stores.find((s) => s.id === storeId);
+    if (!store) return;
+    state.storeCategoryEditor = { storeId, categoryOrder: [...(store.categoryOrder || [])] };
+    state.dragStoreCategory = null;
+    render();
 }
 
-function updateStoreCategoryDrag(event) {
-    const drag = state.dragStoreCategory;
+function toggleStoreCategoryDraft(catId) {
     const editor = state.storeCategoryEditor;
-    if (!drag || !editor || !event) return;
+    if (!editor) return;
+    editor.categoryOrder = editor.categoryOrder.includes(catId) ? editor.categoryOrder.filter((id) => id !== catId) : [...editor.categoryOrder, catId];
+    renderStoreCategoryEditorActive();
+}
 
-    const target = document.elementFromPoint(event.clientX, event.clientY);
-    const row = target?.closest?.('[data-store-category-row]');
-    const nextOverId = row?.dataset?.id || drag.id;
-    const rect = row?.getBoundingClientRect?.();
-    const nextAfter = !!(row && rect && event.clientY > rect.top + (rect.height / 2));
-
-    if (drag.overId === nextOverId && drag.after === nextAfter) return;
-    drag.overId = nextOverId;
-    drag.after = nextAfter;
+function moveStoreCategoryDraft(catId, dir) {
+    const editor = state.storeCategoryEditor;
+    if (!editor) return;
+    const from = editor.categoryOrder.indexOf(catId);
+    const to = from + dir;
+    if (from < 0 || to < 0 || to >= editor.categoryOrder.length) return;
+    const next = [...editor.categoryOrder];
+    [next[from], next[to]] = [next[to], next[from]];
+    editor.categoryOrder = next;
     renderStoreCategoryEditorActive();
 }
 
@@ -1013,24 +1015,7 @@ function onDown(e) {
     const dragHandle = e.target.closest('[data-drag-store-category]');
     if (dragHandle) {
         startStoreCategoryDrag(dragHandle.dataset.id, e);
-        return;
     }
-    const checkButton = e.target.closest('[data-hold-check]');
-    if (checkButton) {
-        clearHold();
-        holdPayload = { action: 'check', id: checkButton.dataset.id };
-        holdTimer = setTimeout(() => {
-            if (holdPayload) onHold(holdPayload);
-        }, HOLD_MS);
-        return;
-    }
-    const row = e.target.closest('[data-hold-item]');
-    if (!row) return;
-    clearHold();
-    holdPayload = { action: 'edit-item', id: row.dataset.holdItem };
-    holdTimer = setTimeout(() => {
-        if (holdPayload) onHold(holdPayload);
-    }, HOLD_MS);
 }
 
 function finishStoreCategoryDrag() {
@@ -1065,17 +1050,26 @@ function finishStoreCategoryDrag() {
     renderStoreCategoryEditorActive();
 }
 
- function finalizePointerState() {
-     clearHold();
-     finishStoreCategoryDrag();
- }
+function finalizePointerState() {
+    finishStoreCategoryDrag();
+}
 
-async function addMaster(name, value, key) { const v = String(value || '').trim(); if (!v) return; await addDoc(master(name), { [key]: v, createdBy: uid(), createdByName: uname(), createdAt: serverTimestamp(), updatedAt: serverTimestamp() }); }
-async function addFree(ref, value) { const v = String(value || '').trim(); if (!v) return; await addDoc(ref, { text: v, createdBy: uid(), createdByName: uname(), createdAt: serverTimestamp(), updatedAt: serverTimestamp() }); }
+async function addMaster(name, value, key) {
+    const v = String(value || '').trim();
+    if (!v) return;
+    await addDoc(master(name), { [key]: v, createdBy: uid(), createdByName: uname(), createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+}
+
+async function addFree(ref, value) {
+    const v = String(value || '').trim();
+    if (!v) return;
+    await addDoc(ref, { text: v, createdBy: uid(), createdByName: uname(), createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+}
 
 async function addItem() {
     if (!canAdd()) return alertUser('Keine Berechtigung zum Hinzufügen.', 'error');
-    const title = String(state.title || '').trim(); if (!title) return alertUser('Bitte Artikel eingeben.', 'error');
+    const title = String(state.title || '').trim();
+    if (!title) return alertUser('Bitte Artikel eingeben.', 'error');
     const quantity = parseQty(state.q || '1') || 1;
     let article = state.articles.find((a) => a.title?.trim().toLowerCase() === title.toLowerCase());
     if (!article) {
@@ -1089,45 +1083,6 @@ async function addItem() {
     state.q = '1'; state.title = ''; state.note = ''; state.storeIds = []; render();
 }
 
-async function handleDouble(id, action) {
-    const key = `${action}:${id}`;
-    const last = state.lastTap.get(key) || 0;
-    const now = Date.now();
-    state.lastTap.set(key, now);
-    const existingTimer = doubleHintTimers.get(key);
-    if (existingTimer) {
-        clearTimeout(existingTimer);
-        doubleHintTimers.delete(key);
-    }
-    if (now - last > DOUBLE_MS) {
-        if (action === 'check') {
-            const timer = setTimeout(() => {
-                if (state.lastTap.get(key) === now) {
-                    alertUser('Abhaken: Schneller Doppelklick/Mengeneingabe: Langer Klick', 'info');
-                    state.lastTap.delete(key);
-                    doubleHintTimers.delete(key);
-                }
-            }, DOUBLE_MS);
-            doubleHintTimers.set(key, timer);
-        }
-        return;
-    }
-    state.lastTap.delete(key);
-    if (action === 'check') { await checkItemDirect(id); return; }
-    const item = state.items.find((x) => x.id === id); if (!item) return;
-    await updateDoc(doc(sub(state.listId, 'items'), item.id), { status: 'open', restoredAt: serverTimestamp(), restoredBy: uid(), restoredByName: uname(), checkedAt: null, checkedBy: null, checkedByName: null });
-    await logActivity('Artikel wiederhergestellt', { itemId: id, title: item.title });
-}
-
-async function checkItemDirect(id) {
-    const item = state.items.find((x) => x.id === id);
-    if (!item) return;
-    if (!canShop()) return alertUser('Keine Berechtigung zum Abhaken.', 'error');
-    if (!(await acquireLock(item.id))) return;
-    await updateDoc(doc(sub(state.listId, 'items'), item.id), { status: 'checked', purchasedQuantity: Number(item.quantity || 0), checkedAt: serverTimestamp(), checkedBy: uid(), checkedByName: uname() });
-    await logActivity('Artikel abgehakt', { itemId: id, title: item.title, quantity: item.quantity });
-}
-
 async function saveDetailItem() {
     const item = state.items.find((x) => x.id === state.detailId);
     if (!item) return;
@@ -1139,35 +1094,41 @@ async function saveDetailItem() {
     const note = String(document.getElementById('el-d-note')?.value || '').trim();
     const persistentNote = String(document.getElementById('el-d-pnote')?.value || '').trim();
     if (!title) return alertUser('Bitte Produktnamen eingeben.', 'error');
-    if (!(quantity > 0)) return alertUser('Bitte eine gültige Menge eingeben.', 'error');
-    state.detailId = null;
-    render();
-    await updateDoc(doc(sub(state.listId, 'items'), item.id), { title, quantity, categoryId, note, persistentNote });
+    const unit = String(document.getElementById('el-d-unit')?.value || '');
+    const itemData = { title, quantity, categoryId, note, persistentNote, unit };
+    await updateDoc(doc(sub(state.listId, 'items'), item.id), itemData);
     await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() });
     await logActivity('Artikel bearbeitet', { itemId: item.id, title, quantity });
     render();
 }
 
-async function moveDetailItem() {
-    const item = state.items.find((x) => x.id === state.detailId);
+async function handleDouble(id, action) {
+    const key = `${action}:${id}`;
+    const last = state.lastTap.get(key) || 0;
+    const now = Date.now();
+    state.lastTap.set(key, now);
+    if (now - last > DOUBLE_MS) {
+        if (action === 'check') showQuantityActionButton(id);
+        return;
+    }
+    state.lastTap.delete(key);
+    if (action === 'check') { hideQuantityActionButton(id); await checkItemDirect(id); return; }
+    if (action === 'edit-item') { showItemActionButtons(id); return; }
+    if (action === 'quantity') { hideQuantityActionButton(id); const item = state.items.find((x) => x.id === id); if (item) openPurchase(item, false); return; }
+    const item = state.items.find((x) => x.id === id); if (!item) return;
+    await updateDoc(doc(sub(state.listId, 'items'), item.id), { status: 'open', restoredAt: serverTimestamp(), restoredBy: uid(), restoredByName: uname(), checkedAt: null, checkedBy: null, checkedByName: null });
+    await logActivity('Artikel wiederhergestellt', { itemId: id, title: item.title });
+}
+
+async function checkItemDirect(id) {
+    const item = state.items.find((x) => x.id === id);
     if (!item) return;
-    if (!canEditItems()) return alertUser('Keine Berechtigung zum Verschieben.', 'error');
-    const targetListId = document.getElementById('el-d-move-list')?.value || '';
-    if (!targetListId) return alertUser('Bitte Ziel-Liste auswählen.', 'error');
-    const targetList = state.lists.find((x) => x.id === targetListId);
-    if (!targetList) return alertUser('Ziel-Liste wurde nicht gefunden.', 'error');
-    if (!(canAdd(targetList) || canShop(targetList))) return alertUser('Keine Berechtigung für die Ziel-Liste.', 'error');
+    if (!canShop()) return alertUser('Keine Berechtigung zum Abhaken.', 'error');
     if (!(await acquireLock(item.id))) return;
-    const { id, ...payload } = item;
-    state.detailId = null;
-    render();
-    await setDoc(doc(sub(targetListId, 'items'), id), payload);
-    await deleteDoc(doc(sub(state.listId, 'items'), id));
-    await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() });
-    await updateDoc(listDoc(targetListId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() });
-    await logActivity('Artikel verschoben', { itemId: id, title: item.title, toListId: targetListId, toListName: targetList.name });
-    await logActivityForList(targetListId, 'Artikel übernommen', { itemId: id, title: item.title, fromListId: state.listId, fromListName: activeList()?.name || '' });
-    render();
+    hideItemActionButtons(id);
+    hideQuantityActionButton(id);
+    await updateDoc(doc(sub(state.listId, 'items'), item.id), { status: 'checked', purchasedQuantity: Number(item.quantity || 0), checkedAt: serverTimestamp(), checkedBy: uid(), checkedByName: uname() });
+    await logActivity('Artikel abgehakt', { itemId: id, title: item.title, quantity: item.quantity });
 }
 
 async function deleteDetailItem() {
@@ -1181,6 +1142,8 @@ async function deleteCheckedItem(itemId) {
     const item = state.items.find((x) => x.id === itemId);
     if (!item) return;
     if (!confirm(`Produkt "${item.title}" dauerhaft löschen?`)) return;
+    hideItemActionButtons(itemId);
+    hideQuantityActionButton(itemId);
     await deleteListItem(item.id, 'Abgehakten Artikel gelöscht');
 }
 
@@ -1191,6 +1154,8 @@ async function deleteAllCheckedItems() {
     state.checkedMenuOpen = false;
     render();
     for (const item of checked) {
+        hideItemActionButtons(item.id);
+        hideQuantityActionButton(item.id);
         await deleteDoc(doc(sub(state.listId, 'items'), item.id));
     }
     await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() });
@@ -1221,6 +1186,8 @@ async function confirmPurchase() {
     closePurchaseModal();
     if (p.itemId) {
         const item = state.items.find((x) => x.id === p.itemId); if (!item) return;
+        hideItemActionButtons(item.id);
+        hideQuantityActionButton(item.id);
         if (qty >= Number(item.quantity || 0)) {
             await updateDoc(doc(sub(state.listId, 'items'), item.id), { status: 'checked', purchasedQuantity: qty, checkedAt: serverTimestamp(), checkedBy: uid(), checkedByName: uname() });
         } else {
@@ -1272,7 +1239,12 @@ async function processScannerCodeActive(rawCode) {
     const code = String(rawCode || '').trim();
     if (!code) return false;
     const now = Date.now();
-    if (state.scanLastCode === code && now - state.scanLastAt < 1200) return false;
+    for (const [scannedCode, scannedAt] of scanRecentCodes.entries()) {
+        if (now - scannedAt >= SCAN_LOCKOUT_MS) scanRecentCodes.delete(scannedCode);
+    }
+    const lastSeen = scanRecentCodes.get(code) || 0;
+    if (now - lastSeen < SCAN_LOCKOUT_MS) return false;
+    scanRecentCodes.set(code, now);
     state.scanLastCode = code;
     state.scanLastAt = now;
     if (state.scanMode === 'article-ean') {
@@ -1464,7 +1436,11 @@ async function onClick(e) {
     if (a === 'close-settings') { state.settingsOpen = false; render(); return; }
     if (a === 'del-store') { state.storeIds = state.storeIds.filter((x) => x !== btn.dataset.id); render(); return; }
     if (a === 'add-item') { await addItem(); return; }
+    if (a === 'edit-item') { await handleDouble(btn.dataset.id, 'edit-item'); return; }
+    if (a === 'open-detail-item') { hideItemActionButtons(btn.dataset.id); state.detailId = btn.dataset.id; render(); return; }
+    if (a === 'delete-item-direct') { hideItemActionButtons(btn.dataset.id); hideQuantityActionButton(btn.dataset.id); await deleteListItem(btn.dataset.id, 'Artikel gelöscht'); return; }
     if (a === 'check' || a === 'restore') { await handleDouble(btn.dataset.id, a); return; }
+    if (a === 'quantity') { await handleDouble(btn.dataset.id, 'quantity'); return; }
     if (a === 'detail') { state.detailId = btn.dataset.id; render(); return; }
     if (a === 'close-detail') { state.detailId = null; render(); return; }
     if (a === 'toggle-checked-menu') { state.checkedMenuOpen = !state.checkedMenuOpen; render(); return; }

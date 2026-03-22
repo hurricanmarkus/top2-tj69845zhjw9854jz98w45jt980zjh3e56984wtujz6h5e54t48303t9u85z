@@ -12,7 +12,7 @@ import { toggleAdminSection, rememberAdminScroll, restoreAdminScrollIfAny, rende
 import { initializeEssensberechnungView } from './essensberechnung.js';
 import { IFTTT_URL, initializeNotrufSettingsView, ensureModalListeners, renderApiTokenBook, openNachrichtencenterContactBook } from './notfall.js';
 import { PUSHOVER_TOKEN } from './pushbenachrichtigung.js';
-import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists, listenForChecklistCategories, openTemplateModal, renderChecklistView, renderChecklistSettingsView, listenForTemplates, listenForStacks } from './checklist.js';
+import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists, listenForChecklistCategories, openTemplateModal, renderChecklistView, renderChecklistSettingsView, listenForTemplates, listenForSchiffe } from './checklist.js';
 import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.js';
 import { renderUserKeyList } from './admin_benutzersteuerung.js';
 // NEU: Wir importieren die Start-Funktion aus deiner neuen Datei
@@ -92,7 +92,8 @@ export const PERMISSIONS_CONFIG = {
 export let USERS = {};
 export let CHECKLISTS = {};
 export let ARCHIVED_CHECKLISTS = {};
-export let CHECKLIST_STACKS = {};
+export let CHECKLIST_SHIPS = {};
+export { CHECKLIST_SHIPS as CHECKLIST_STACKS };
 export let CHECKLIST_ITEMS = {};
 export let DELETED_CHECKLISTS = {};
 export let PENDING_REQUESTS = {}
@@ -128,7 +129,8 @@ export let checklistCategoriesCollectionRef;
 export let auth;
 export let usersCollectionRef, rolesCollectionRef, roleChangeRequestsCollectionRef, settingsDocRef, auditLogCollectionRef, votesCollectionRef, pushoverProgramsCollectionRef, pushoverGrantsBySenderCollectionRef, pushoverGrantsByRecipientCollectionRef;
 export let activeDisplayMode = 'gesamt';
-export let checklistStacksCollectionRef;
+export let checklistShipsCollectionRef;
+export { checklistShipsCollectionRef as checklistStacksCollectionRef };
 export let checklistTemplatesCollectionRef;
 let editingPortionId = null;
 
@@ -310,7 +312,7 @@ function startGlobalListeners() {
         listenForChecklistGroups();
         listenForChecklistCategories();
         listenForTemplates();
-        listenForStacks();
+        listenForSchiffe();
     } catch (error) {
         console.error("initializeFirebase: FEHLER beim Starten globaler Listener:", error);
         alertUser("Fehler beim Initialisieren der globalen Daten-Listener.", "error");
@@ -1333,7 +1335,7 @@ async function initializeFirebase() {
         checklistGroupsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-groups');
         checklistCategoriesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-categories');
         approvalRequestsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'approval-requests');
-        checklistStacksCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-stacks');
+        checklistShipsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-stacks');
         checklistTemplatesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-templates');
         // Diese Zeile MUSS hier sein
         votesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'votes');

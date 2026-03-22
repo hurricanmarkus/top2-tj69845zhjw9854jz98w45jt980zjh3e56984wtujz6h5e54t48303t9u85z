@@ -1,13 +1,31 @@
 {
-  "version": "1.4.12",
-  "buildId": "20260320-13",
-  "releaseDate": "2026-03-20",
-  "releaseTime": "16:15",
+  "version": "1.4.14",
+  "buildId": "20260322-2",
+  "releaseDate": "2026-03-22",
+  "releaseTime": "11:07",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste: Snapshot-Import priorisiert jetzt die Dokument-ID, damit Rest-Eintraege wieder abhak- und loeschbar sind.",
-  "commitId": "",
+  "note": "Checkliste: Schiff-Terminologie vervollstaendigt, Container-Schiff-Kompatibilitaet auf shipId/stackId gehaertet und Rest-Selektoren bereinigt.",
+  "commitId": "2417212",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.4.14",
+      "buildId": "20260322-2",
+      "releaseDate": "2026-03-22",
+      "releaseTime": "11:07",
+      "note": "Checkliste: Schiff-Terminologie vervollstaendigt, Container-Schiff-Kompatibilitaet auf shipId/stackId gehaertet und Rest-Selektoren bereinigt.",
+      "commitId": "2417212",
+      "obligation": "false"
+    },
+    {
+      "version": "1.4.13",
+      "buildId": "20260322-1",
+      "releaseDate": "2026-03-22",
+      "releaseTime": "10:43",
+      "note": "Einkaufsliste: Scan-Vibration, lokaler Kamera-Blitz, 10s-Scan-Sperre sowie doppelklickbasierte Eintragsaktionen und Menge-Button eingefuehrt.",
+      "commitId": "",
+      "obligation": "false"
+    },
     {
       "version": "1.4.12",
       "buildId": "20260320-13",

@@ -19,9 +19,9 @@ import {
     USERS,
     currentUser, // <--- WICHTIG: Das hat gefehlt!
     settingsDocRef,
-    checklistStacksCollectionRef,
+    checklistShipsCollectionRef,
     checklistTemplatesCollectionRef,
-    CHECKLIST_STACKS,
+    CHECKLIST_SHIPS,
     COLOR_PALETTE,
     escapeHtml
 } from './haupteingang.js';
@@ -57,6 +57,41 @@ let TEMPLATE_ITEMS = {}; // Hier speichern wir die Items der Vorlagen
 // Kurz-Helper: sicherer Zugriff auf Firestore-Funktionen (falls vorhanden)
 const hasFirestore = typeof addDoc === 'function' && typeof updateDoc === 'function' && typeof deleteDoc === 'function';
 
+const getTemplateShipId = (template) => template?.shipId || template?.stackId || null;
+const getTemplateShipName = (template) => template?.shipName || template?.stackName || null;
+
+const PERSON_BADGE_CLASSES = [
+  'bg-sky-100 text-sky-800 border-sky-200',
+  'bg-emerald-100 text-emerald-800 border-emerald-200',
+  'bg-violet-100 text-violet-800 border-violet-200',
+  'bg-amber-100 text-amber-900 border-amber-200',
+  'bg-rose-100 text-rose-800 border-rose-200',
+  'bg-cyan-100 text-cyan-800 border-cyan-200',
+  'bg-lime-100 text-lime-900 border-lime-200',
+  'bg-fuchsia-100 text-fuchsia-800 border-fuchsia-200',
+];
+
+function getCurrentActorName() {
+  const user = currentUser || window.currentUser || {};
+  const candidate = user.displayName || user.name || user.fullName || user.username || user.email || window.currentUser?.displayName || window.currentUser?.name;
+  const normalized = typeof candidate === 'string' ? candidate.trim() : '';
+  return normalized || 'Unbekannt';
+}
+
+function getActiveTemplateId() {
+  return document.getElementById('template-item-editor')?.dataset.templateId || selectedTemplateId || null;
+}
+
+function getPersonBadgeClass(personKey) {
+  const key = String(personKey || '').trim().toLowerCase();
+  if (!key) return PERSON_BADGE_CLASSES[0];
+  let hash = 0;
+  for (let i = 0; i < key.length; i += 1) {
+    hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  }
+  return PERSON_BADGE_CLASSES[hash % PERSON_BADGE_CLASSES.length];
+}
+
 
 function renderTemplateList() {
     const container = document.getElementById('template-list-container');
@@ -86,50 +121,50 @@ export function renderContainerList() {
   if (!editorDiv) return;
   editorDiv.innerHTML = `<h3 class="font-bold text-gray-800 mb-2 mt-6">Bestehende Container verwalten</h3>`;
 
-  const stacks = Object.values(CHECKLIST_STACKS || {});
+  const ships = Object.values(CHECKLIST_SHIPS || {});
   const containers = Object.values(TEMPLATES || {});
-  const stackOptions = `<option value="">Keinen Stack zuweisen</option>` + stacks.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  const shipOptions = `<option value="">Keinem Schiff zuweisen</option>` + ships.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
 
   if (!containers.length) {
     editorDiv.innerHTML += `<p class="text-sm text-center text-gray-400">Keine Container gefunden.</p>`;
     return;
   }
 
-  // group by stack
-  const byStack = {};
+  // group by ship
+  const byShip = {};
   containers.forEach(c => {
-    const sid = c.stackId || '__nostack';
-    byStack[sid] = byStack[sid] || [];
-    byStack[sid].push(c);
+    const sid = getTemplateShipId(c) || '__noship';
+    byShip[sid] = byShip[sid] || [];
+    byShip[sid].push(c);
   });
 
-  // render stacks first
-  Object.keys(byStack).forEach(sid => {
-    if (sid === '__nostack') return;
-    const stack = CHECKLIST_STACKS[sid] || {};
-    editorDiv.innerHTML += `<h4 class="font-semibold text-sm text-gray-600 mt-4 mb-1">${stack.name || 'Unbenannter Stack'}</h4>`;
-    byStack[sid].forEach(c => editorDiv.innerHTML += createContainerHTML(c, stackOptions));
+  // render ships first
+  Object.keys(byShip).forEach(sid => {
+    if (sid === '__noship') return;
+    const ship = CHECKLIST_SHIPS[sid] || {};
+    editorDiv.innerHTML += `<h4 class="font-semibold text-sm text-gray-600 mt-4 mb-1">${ship.name || 'Unbenanntes Schiff'}</h4>`;
+    byShip[sid].forEach(c => editorDiv.innerHTML += createContainerHTML(c, shipOptions));
   });
 
-  // render without stack
-  if (byStack['__nostack'] && byStack['__nostack'].length) {
-    editorDiv.innerHTML += `<h4 class="font-semibold text-sm text-gray-600 mt-4 mb-1">Ohne Stack</h4>`;
-    byStack['__nostack'].forEach(c => editorDiv.innerHTML += createContainerHTML(c, stackOptions));
+  // render without ship
+  if (byShip['__noship'] && byShip['__noship'].length) {
+    editorDiv.innerHTML += `<h4 class="font-semibold text-sm text-gray-600 mt-4 mb-1">Ohne Schiff</h4>`;
+    byShip['__noship'].forEach(c => editorDiv.innerHTML += createContainerHTML(c, shipOptions));
   }
 
-  function createContainerHTML(container, stackOptionsHtml) {
-    const currentStackName = container.stackName || 'Kein Stack zugewiesen';
+  function createContainerHTML(container, shipOptionsHtml) {
+    const currentShipName = getTemplateShipName(container) || 'Kein Schiff zugewiesen';
     return `
       <div data-template-id="${container.id}" class="template-selection-item p-2 border rounded-md bg-white cursor-pointer hover:bg-gray-100 mb-2">
         <p class="font-semibold">${container.name}</p>
         <div class="mt-2 p-2 bg-gray-50 rounded-lg">
-          <div id="stack-display-container-${container.id}" class="flex justify-between items-center">
-            <p class="text-sm">Aktueller Stack: <span class="font-bold text-teal-800">${currentStackName}</span></p>
-            <button data-container-id="${container.id}" class="change-stack-btn text-sm font-semibold text-blue-600 hover:underline">ändern</button>
+          <div id="ship-display-container-${container.id}" class="flex justify-between items-center">
+            <p class="text-sm">Aktuelles Schiff: <span class="font-bold text-teal-800">${currentShipName}</span></p>
+            <button data-container-id="${container.id}" class="change-ship-btn text-sm font-semibold text-blue-600 hover:underline">ändern</button>
           </div>
-          <div id="stack-edit-container-${container.id}" class="hidden flex gap-2 items-center mt-2">
-            <select class="stack-assign-switcher flex-grow p-1 border rounded-lg bg-white text-sm">${stackOptionsHtml}</select>
-            <button data-container-id="${container.id}" class="save-stack-assignment-btn py-1 px-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 text-xs">Speichern</button>
+          <div id="ship-edit-container-${container.id}" class="hidden flex gap-2 items-center mt-2">
+            <select class="ship-assign-switcher flex-grow p-1 border rounded-lg bg-white text-sm">${shipOptionsHtml}</select>
+            <button data-container-id="${container.id}" class="save-ship-assignment-btn py-1 px-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 text-xs">Speichern</button>
           </div>
         </div>
       </div>
@@ -171,7 +206,7 @@ export async function applyTemplateLogic() {
         categoryId: cb.dataset.categoryId || null,
         categoryName: cb.dataset.categoryName || null,
         categoryColor: cb.dataset.categoryColor || null,
-        addedBy: window.currentUser?.displayName || 'Unbekannt',
+        addedBy: getCurrentActorName(),
         addedAt: typeof serverTimestamp === 'function' ? serverTimestamp() : null
       };
       if (hasFirestore && typeof addDoc === 'function') {
@@ -209,14 +244,14 @@ function listenForTemplates() {
   }
 }
 
-export function listenForStacks() {
-  if (typeof onSnapshot !== 'function' || !checklistStacksCollectionRef) return;
+export function listenForSchiffe() {
+  if (typeof onSnapshot !== 'function' || !checklistShipsCollectionRef) return;
   try {
-    onSnapshot(query(checklistStacksCollectionRef, orderBy('name')), (snapshot) => {
+    onSnapshot(query(checklistShipsCollectionRef, orderBy('name')), (snapshot) => {
       // Leere das globale Objekt, bevor du es neu füllst
-      Object.keys(CHECKLIST_STACKS).forEach(k => delete CHECKLIST_STACKS[k]);
+      Object.keys(CHECKLIST_SHIPS).forEach(k => delete CHECKLIST_SHIPS[k]);
       snapshot.forEach(docSnap => { 
-          CHECKLIST_STACKS[docSnap.id] = { id: docSnap.id, ...docSnap.data() }; 
+          CHECKLIST_SHIPS[docSnap.id] = { id: docSnap.id, ...docSnap.data() }; 
       });
       
       // WICHTIG: UI neu rendern, wenn die Einstellungsseite offen ist
@@ -228,7 +263,7 @@ export function listenForStacks() {
       }
     });
   } catch (err) {
-    console.error('listenForStacks error:', err);
+    console.error('listenForSchiffe error:', err);
   }
 }
 
@@ -534,7 +569,7 @@ export function renderChecklistItems(listId) {
   function getBadgesHTML(item) {
       let html = '';
       if (item.assignedToName) {
-          html += `<span class="text-[10px] bg-gray-200 px-1.5 py-0.5 rounded text-gray-600 mr-1 font-semibold">${escapeHtml(item.assignedToName)}</span>`;
+          html += `<span class="text-[10px] px-1.5 py-0.5 rounded-full border mr-1 font-semibold ${getPersonBadgeClass(item.assignedTo || item.assignedToName)}">${escapeHtml(item.assignedToName)}</span>`;
       }
       if (item.categoryName) {
           const styleClass = item.categoryColor && item.categoryColor !== 'gray' ? 'bg-indigo-50 text-indigo-700 border-indigo-100' : 'bg-blue-50 text-blue-600 border-blue-100';
@@ -650,7 +685,7 @@ export function renderChecklistItems(listId) {
               const itemId = cb.dataset.itemId;
               const checked = cb.checked;
               
-              const userName = currentUser.displayName || currentUser.name || 'Unbekannt';
+              const userName = currentUser?.displayName || currentUser?.name || window.currentUser?.displayName || window.currentUser?.name || 'Unbekannt';
               let actionUser = userName;
               
               if (!checked) {
@@ -704,7 +739,7 @@ export function renderChecklistSettingsItems(listId) {
 
   container.innerHTML = items.map((item, idx) => {
     const impClass = item.important ? 'bg-yellow-50 border-l-4 border-yellow-400' : 'bg-white';
-    const assigned = item.assignedToName ? `<span class="ml-2 text-[10px] bg-gray-200 text-gray-700 py-0.5 px-2 rounded-full">${escapeHtml(item.assignedToName)}</span>` : '';
+    const assigned = item.assignedToName ? `<span class="ml-2 text-[10px] py-0.5 px-2 rounded-full border ${getPersonBadgeClass(item.assignedTo || item.assignedToName)}">${escapeHtml(item.assignedToName)}</span>` : '';
     const cat = item.categoryName ? `<span class="ml-2 text-[10px] bg-blue-50 text-blue-600 border border-blue-100 py-0.5 px-2 rounded-full">${escapeHtml(item.categoryName)}</span>` : '';
     
     return `
@@ -716,14 +751,14 @@ export function renderChecklistSettingsItems(listId) {
               <p class="font-semibold text-sm item-text text-gray-800 break-words">${escapeHtml(item.text)}</p>
               <div class="flex flex-wrap gap-1 mt-1 items-center">
                 ${assigned} ${cat}
-                <span class="text-[10px] text-gray-400 ml-1">von: ${escapeHtml(item.addedBy)}</span>
+                <span class="text-[10px] text-gray-400 ml-1">von: ${escapeHtml(item.addedBy || 'Unbekannt')}</span>
               </div>
             </div>
           </div>
         </div>
         <div class="flex flex-col items-end gap-2 ml-2">
-          <button class="edit-checklist-item-btn p-1 text-blue-500 hover:bg-blue-50 rounded" title="Bearbeiten">✎</button>
-          <button class="delete-checklist-item-btn p-1 text-red-500 hover:bg-red-50 rounded" title="Löschen">🗑</button>
+          <button class="edit-checklist-item-btn p-1 text-blue-500 hover:bg-blue-100 rounded" title="Bearbeiten">✎</button>
+          <button class="delete-checklist-item-btn p-1 text-red-500 hover:bg-red-100 rounded" title="Löschen">🗑</button>
         </div>
       </div>
     `;
@@ -804,52 +839,6 @@ function renderArchivedListsModal() {
     });
 }
 
-function renderCategoryEditor(groupId) {
-    const categoryContent = document.getElementById('category-content');
-    if (!categoryContent) return;
-    if (!groupId) {
-        categoryContent.innerHTML = '<p class="text-sm text-center text-gray-500">Bitte wählen Sie eine Gruppe, um deren Kategorien zu verwalten.</p>';
-        return;
-    }
-
-    const categories = (CHECKLIST_CATEGORIES[groupId] || []).slice();
-
-    // Baue Color-Palette HTML (einfaches Set)
-    const colorKeys = Object.keys(COLOR_PALETTE || { gray: { bg: 'bg-gray-100', text: 'text-gray-700' } });
-    const colorDots = colorKeys.map(colorKey => `<div data-color="${colorKey}" class="category-color-dot h-6 w-6 rounded-full cursor-pointer ${ (COLOR_PALETTE[colorKey] && COLOR_PALETTE[colorKey].bg) ? COLOR_PALETTE[colorKey].bg.replace('100','300') : 'bg-gray-300'}" title="${colorKey}"></div>`).join('');
-
-    const listHtml = categories.length === 0 ? '<p class="text-xs text-center text-gray-500">Für diese Gruppe existieren keine Kategorien.</p>' :
-        categories.map(cat => {
-            const colorKey = cat.color || 'gray';
-            const colorClass = (COLOR_PALETTE && COLOR_PALETTE[colorKey]) ? COLOR_PALETTE[colorKey].bg.replace('100','400') : 'bg-gray-300';
-            return `
-                <div class="flex justify-between items-center p-2 bg-white rounded-md border mb-2" data-category-id="${cat.id}">
-                    <div class="cat-display-content flex items-center gap-2">
-                        <div class="h-4 w-4 rounded-full ${colorClass} border"></div>
-                        <span class="cat-name">${cat.name}</span>
-                    </div>
-                    <div class="cat-edit-content hidden flex-grow mr-2">
-                        <input type="text" class="w-full p-1 border rounded-md edit-category-name-input" value="${cat.name}">
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <button class="edit-category-btn p-1 text-blue-500 hover:bg-blue-100 rounded" title="Bearbeiten">✎</button>
-                        <button class="save-category-btn p-1 text-green-500 hover:bg-green-100 rounded hidden" title="Speichern">✓</button>
-                        <button class="delete-category-btn p-1 text-red-500 hover:bg-red-100 rounded" title="Löschen">🗑</button>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-    categoryContent.innerHTML = `
-        <div id="category-list-container">${listHtml}</div>
-        <div class="flex flex-col gap-2 pt-2 border-t mt-3">
-            <input type="text" id="new-category-name" class="w-full p-2 border rounded-lg" placeholder="Name für neue Kategorie...">
-            <div id="new-category-color-palette" class="flex gap-2 items-center">${colorDots}<input type="hidden" id="new-category-selected-color" value="gray"></div>
-            <button id="create-category-btn" class="py-2 px-3 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition">Erstellen</button>
-        </div>
-    `;
-}
-
 function updateCategoryDropdowns() {
     // Baut die HTML-Optionen für die Kategorien neu auf, basierend auf den aktuellen Daten
     const categoryOptions = `<option value="">Keine Kategorie</option>` + Object.values(CHECKLIST_GROUPS).map(group => {
@@ -928,7 +917,7 @@ function setupListAndItemManagementListeners(view) {
         text, 
         status: 'open', 
         important, 
-        addedBy: window.currentUser?.displayName || 'Unbekannt', 
+        addedBy: getCurrentActorName(), 
         addedAt: serverTimestamp(), 
         assignedTo: assignee, 
         assignedToName: (assignee && USERS[assignee]?.name) ? USERS[assignee].name : null, 
@@ -1033,7 +1022,7 @@ function setupListAndItemManagementListeners(view) {
          const name = nameInput?.value.trim(); 
          const groupId = groupSelector?.value; 
          
-         if (!name || !groupId) return alertUser('Bitte Name und Gruppe angeben.', 'error');
+         if (!name || !groupId) return alertUser("Bitte Name und Gruppe angeben.", "error");
          
          try { 
              const docRef = await addDoc(checklistsCollectionRef, { 
@@ -1217,97 +1206,97 @@ function setupGroupManagementListeners(view, currentUserData) {
 
 // Ersetze DIESE Funktion komplett
 // Ersetze NUR diese Funktion in checklist.js
-function setupStackAndContainerManagementListeners(view) {
+function setupSchiffAndContainerManagementListeners(view) {
     if (!view) {
-        console.error("setupStackAndContainerManagementListeners: 'view' wurde nicht übergeben.");
+        console.error("setupSchiffAndContainerManagementListeners: 'view' wurde nicht übergeben.");
         return;
     }
     const templatesCard = view.querySelector('#card-templates');
     if (!templatesCard) {
-         console.error("setupStackAndContainerManagementListeners: Konnte #card-templates nicht finden.");
+         console.error("setupSchiffAndContainerManagementListeners: Konnte #card-templates nicht finden.");
          return;
     }
 
     // --- NEUE PRÜFUNG ---
     // Prüfen, ob das Attribut direkt existiert
     if (templatesCard.hasAttribute('data-primary-listener-attached')) {
-        console.log("setupStackAndContainerManagementListeners: Listener bereits vorhanden (via Attribut-Check), breche ab.");
+        console.log("setupSchiffAndContainerManagementListeners: Listener bereits vorhanden (via Attribut-Check), breche ab.");
         return; // Verhindert doppelte Listener zuverlässiger
     }
     // Attribut setzen, um zu markieren
     templatesCard.setAttribute('data-primary-listener-attached', 'true');
     // --- ENDE NEUE PRÜFUNG ---
 
-    console.log("setupStackAndContainerManagementListeners: Hänge PRIMÄREN Listener an #card-templates an.");
+    console.log("setupSchiffAndContainerManagementListeners: Hänge PRIMÄREN Listener an #card-templates an.");
 
     templatesCard.addEventListener('click', async (e) => {
         // Der Rest der Funktion bleibt genau gleich wie in der letzten Version
-        // ... (Logik für Stack erstellen, Stack löschen, Container erstellen, Container auswählen, Stack zuweisen, Eintrag hinzufügen, Container löschen) ...
+        // ... (Logik für Schiff erstellen, Schiff löschen, Container erstellen, Container auswählen, Schiff zuweisen, Eintrag hinzufügen, Container löschen) ...
 
         // --- Aktionen AUSSERHALB des Editors ---
 
-        // Neues Stack erstellen
-        if (e.target.closest('#checklist-settings-create-stack-btn')) {
-            console.log("... Klick auf Stack erstellen verarbeitet.");
-            const nameInput = view.querySelector('#checklist-settings-new-stack-name');
+        // Neues Schiff erstellen
+        if (e.target.closest('#checklist-settings-create-ship-btn')) {
+            console.log("... Klick auf Schiff erstellen verarbeitet.");
+            const nameInput = view.querySelector('#checklist-settings-new-ship-name');
             if (!nameInput) return;
             const newName = (nameInput.value || '').trim();
             if (!newName) return alertUser && alertUser('Bitte Namen eingeben.', 'error');
             try {
-                if (typeof addDoc === 'function' && checklistStacksCollectionRef) {
-                    await addDoc(checklistStacksCollectionRef, { name: newName });
-                } else { throw new Error("addDoc oder checklistStacksCollectionRef fehlt"); }
+                if (typeof addDoc === 'function' && checklistShipsCollectionRef) {
+                    await addDoc(checklistShipsCollectionRef, { name: newName });
+                } else { throw new Error("addDoc oder checklistShipsCollectionRef fehlt"); }
                 nameInput.value = '';
-                if (typeof alertUser === 'function') alertUser('Stack erstellt.', 'success');
+                if (typeof alertUser === 'function') alertUser('Schiff erstellt.', 'success');
             } catch (err) {
-                console.error('Fehler beim Erstellen des Stacks:', err);
-                if (typeof alertUser === 'function') alertUser('Fehler beim Erstellen des Stacks.', 'error');
+                console.error('Fehler beim Erstellen des Schiffs:', err);
+                if (typeof alertUser === 'function') alertUser('Fehler beim Erstellen des Schiffs.', 'error');
             }
             return;
         }
 
         // Button zum Anzeigen/Verstecken des Lösch-Bereichs
-        if (e.target.closest('#show-delete-stack-form-btn')) {
-            console.log("... Klick auf 'Stack löschen...' Button verarbeitet.");
-            const deleteSection = view.querySelector('#delete-stack-section');
+        if (e.target.closest('#show-delete-ship-form-btn')) {
+            console.log("... Klick auf 'Schiff löschen...' Button verarbeitet.");
+            const deleteSection = view.querySelector('#delete-ship-section');
             if (deleteSection) {
                 deleteSection.classList.toggle('hidden');
                  if (!deleteSection.classList.contains('hidden')) {
-                     const deleteStackSelector = view.querySelector('#delete-stack-selector');
-                     if (deleteStackSelector) {
-                         const stackOpts = Object.values(CHECKLIST_STACKS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
-                         deleteStackSelector.innerHTML = `<option value="">Stack zum Löschen auswählen...</option>` + stackOpts;
+                     const deleteShipSelector = view.querySelector('#delete-ship-selector');
+                     if (deleteShipSelector) {
+                         const shipOpts = Object.values(CHECKLIST_SHIPS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+                         deleteShipSelector.innerHTML = `<option value="">Schiff zum Löschen auswählen...</option>` + shipOpts;
                      }
                  }
             }
             return;
         }
 
-        // Stack löschen (im roten Bereich)
-        if (e.target.closest('#delete-stack-btn')) {
-            console.log("... Klick auf Stack löschen (roter Button) verarbeitet.");
-            const selector = view.querySelector('#delete-stack-selector');
-            const stackIdToDelete = selector ? selector.value : null;
+        // Schiff löschen (im roten Bereich)
+        if (e.target.closest('#delete-ship-btn')) {
+            console.log("... Klick auf Schiff löschen (roter Button) verarbeitet.");
+            const selector = view.querySelector('#delete-ship-selector');
+            const shipIdToDelete = selector ? selector.value : null;
 
-            if (!stackIdToDelete) {
-                return alertUser && alertUser("Bitte zuerst einen Stack zum Löschen auswählen.", "warning");
+            if (!shipIdToDelete) {
+                return alertUser && alertUser("Bitte zuerst ein Schiff zum Löschen auswählen.", "warning");
             }
 
-            const containersInStack = Object.values(TEMPLATES || {}).filter(t => t.stackId === stackIdToDelete);
-            if (containersInStack.length > 0) {
-                 return alertUser && alertUser(`Der Stack "${CHECKLIST_STACKS[stackIdToDelete]?.name || 'Unbekannt'}" kann nicht gelöscht werden, da er noch ${containersInStack.length} Container enthält. Bitte verschieben oder löschen Sie diese zuerst.`, "error");
+            const containersInShip = Object.values(TEMPLATES || {}).filter(t => getTemplateShipId(t) === shipIdToDelete);
+            if (containersInShip.length > 0) {
+                 return alertUser && alertUser(`Das Schiff "${CHECKLIST_SHIPS[shipIdToDelete]?.name || 'Unbekannt'}" kann nicht gelöscht werden, da es noch ${containersInShip.length} Container enthält. Bitte verschieben oder löschen Sie diese zuerst.`, "error");
             }
 
-            if (confirm(`Möchten Sie den leeren Stack "${CHECKLIST_STACKS[stackIdToDelete]?.name || 'Unbekannt'}" wirklich unwiderruflich löschen?`)) {
+            if (confirm(`Möchten Sie das leere Schiff "${CHECKLIST_SHIPS[shipIdToDelete]?.name || 'Unbekannt'}" wirklich unwiderruflich löschen?`)) {
                 try {
-                    if (!checklistStacksCollectionRef) throw new Error("checklistStacksCollectionRef ist nicht definiert!");
-                    const stackRef = doc(checklistStacksCollectionRef, stackIdToDelete);
-                    await deleteDoc(stackRef);
-                    alertUser && alertUser("Stack gelöscht.", "success");
-                    view.querySelector('#delete-stack-section')?.classList.add('hidden');
+                    if (!checklistShipsCollectionRef) throw new Error("checklistShipsCollectionRef ist nicht definiert!");
+                    const shipRef = doc(checklistShipsCollectionRef, shipIdToDelete);
+                    await deleteDoc(shipRef);
+                    alertUser && alertUser("Schiff gelöscht.", "success");
+                    view.querySelector('#delete-ship-section')?.classList.add('hidden');
                 } catch (err) {
-                     console.error("Fehler beim Löschen des Stacks:", err);
-                     alertUser && alertUser(`Fehler beim Löschen des Stacks: ${err.message}`, "error");
+                     console.error("Fehler beim Löschen des Schiffs:", err);
+                     alertUser && alertUser(`Fehler beim Löschen des Schiffs: ${err.message}`, "error");
                 }
             }
             return;
@@ -1318,15 +1307,22 @@ function setupStackAndContainerManagementListeners(view) {
         if (e.target.closest('#checklist-settings-create-container-btn')) {
              console.log("... Klick auf Container erstellen verarbeitet.");
             const newName = view.querySelector('#checklist-settings-new-container-name')?.value.trim();
-            const stackId = view.querySelector('#checklist-settings-new-stack-selector')?.value;
+            const shipId = view.querySelector('#checklist-settings-new-ship-selector')?.value;
             if (!newName) return alertUser && alertUser('Bitte Containername eingeben.', 'error');
-            if (!stackId) return alertUser && alertUser('Bitte Stack wählen.', 'error');
+            if (!shipId) return alertUser && alertUser('Bitte Schiff wählen.', 'error');
             try {
                 if (typeof addDoc === 'function' && checklistTemplatesCollectionRef) {
-                    await addDoc(checklistTemplatesCollectionRef, { name: newName, stackId, stackName: CHECKLIST_STACKS[stackId]?.name || null, createdAt: serverTimestamp ? serverTimestamp() : null });
+                    await addDoc(checklistTemplatesCollectionRef, {
+                        name: newName,
+                        shipId,
+                        shipName: CHECKLIST_SHIPS[shipId]?.name || null,
+                        stackId: shipId,
+                        stackName: CHECKLIST_SHIPS[shipId]?.name || null,
+                        createdAt: serverTimestamp ? serverTimestamp() : null
+                    });
                 } else { throw new Error("addDoc oder checklistTemplatesCollectionRef fehlt"); }
                 view.querySelector('#checklist-settings-new-container-name').value = '';
-                view.querySelector('#checklist-settings-new-stack-selector').value = '';
+                view.querySelector('#checklist-settings-new-ship-selector').value = '';
                 if (typeof alertUser === 'function') alertUser('Container erstellt.', 'success');
             } catch (err) {
                 console.error('Fehler beim Erstellen des Containers:', err);
@@ -1353,11 +1349,12 @@ function setupStackAndContainerManagementListeners(view) {
                  editor.classList.remove('hidden');
                  if (typeof unsubscribeTemplateItems === 'function') unsubscribeTemplateItems();
                  if (typeof onSnapshot === 'function' && checklistTemplatesCollectionRef) {
-                     const itemsSubCollectionRef = collection(checklistTemplatesCollectionRef, selectedTemplateId, 'template-items');
+                     const templateId = clickedTemplateId;
+                     const itemsSubCollectionRef = collection(checklistTemplatesCollectionRef, templateId, 'template-items');
                      unsubscribeTemplateItems = onSnapshot(query(itemsSubCollectionRef, orderBy('text')), (snapshot) => {
-                         TEMPLATE_ITEMS[selectedTemplateId] = [];
-                         snapshot.forEach(doc => TEMPLATE_ITEMS[selectedTemplateId].push({ id: doc.id, ...doc.data() }));
-                         renderTemplateItemsEditor();
+                         TEMPLATE_ITEMS[templateId] = [];
+                         snapshot.forEach(doc => TEMPLATE_ITEMS[templateId].push({ id: doc.id, ...doc.data() }));
+                         renderTemplateItemsEditor(templateId);
                      }, console.error);
                  }
              }
@@ -1365,28 +1362,33 @@ function setupStackAndContainerManagementListeners(view) {
              return;
          }
 
-        // Stack-Zuweisung ändern (Knopf "ändern")
-        if (e.target.closest('.change-stack-btn')) {
-             console.log("... Klick auf Stack-Zuweisung ändern verarbeitet.");
-            const cid = e.target.closest('.change-stack-btn').dataset.containerId;
-            document.getElementById(`stack-display-container-${cid}`)?.classList.add('hidden');
-            document.getElementById(`stack-edit-container-${cid}`)?.classList.remove('hidden');
+        // Schiff-Zuweisung ändern (Knopf "ändern")
+        if (e.target.closest('.change-ship-btn')) {
+             console.log("... Klick auf Schiff-Zuweisung ändern verarbeitet.");
+            const cid = e.target.closest('.change-ship-btn').dataset.containerId;
+            document.getElementById(`ship-display-container-${cid}`)?.classList.add('hidden');
+            document.getElementById(`ship-edit-container-${cid}`)?.classList.remove('hidden');
             return;
         }
-        // Stack-Zuweisung speichern (Knopf "Speichern")
-        if (e.target.closest('.save-stack-assignment-btn')) {
-             console.log("... Klick auf Stack-Zuweisung speichern verarbeitet.");
-            const cid = e.target.closest('.save-stack-assignment-btn').dataset.containerId;
-            const editContainer = document.getElementById(`stack-edit-container-${cid}`);
-            const newStackId = editContainer?.querySelector('.stack-assign-switcher')?.value || null;
+        // Schiff-Zuweisung speichern (Knopf "Speichern")
+        if (e.target.closest('.save-ship-assignment-btn')) {
+             console.log("... Klick auf Schiff-Zuweisung speichern verarbeitet.");
+            const cid = e.target.closest('.save-ship-assignment-btn').dataset.containerId;
+            const editContainer = document.getElementById(`ship-edit-container-${cid}`);
+            const newShipId = editContainer?.querySelector('.ship-assign-switcher')?.value || null;
             try {
                 if (typeof updateDoc === 'function' && checklistTemplatesCollectionRef) {
-                    await updateDoc(doc(checklistTemplatesCollectionRef, cid), { stackId: newStackId || null, stackName: newStackId ? CHECKLIST_STACKS[newStackId]?.name : null });
+                    await updateDoc(doc(checklistTemplatesCollectionRef, cid), {
+                        shipId: newShipId || null,
+                        shipName: newShipId ? CHECKLIST_SHIPS[newShipId]?.name : null,
+                        stackId: newShipId || null,
+                        stackName: newShipId ? CHECKLIST_SHIPS[newShipId]?.name : null
+                    });
                 } else { throw new Error("updateDoc oder checklistTemplatesCollectionRef fehlt"); }
-                if (typeof alertUser === 'function') alertUser('Stack-Zuweisung gespeichert.', 'success');
+                if (typeof alertUser === 'function') alertUser('Schiff-Zuweisung gespeichert.', 'success');
                  renderContainerList();
             } catch (err) {
-                console.error('Fehler beim Speichern der Stack-Zuweisung:', err);
+                console.error('Fehler beim Speichern der Schiff-Zuweisung:', err);
                 if (typeof alertUser === 'function') alertUser('Fehler beim Speichern.', 'error');
             }
             return;
@@ -1395,25 +1397,27 @@ function setupStackAndContainerManagementListeners(view) {
         // --- Aktionen INNERHALB des Editors ---
 
         // "+ Eintrag hinzufügen" Button im Editor
-        if (e.target.closest('#add-template-item-btn') && selectedTemplateId) {
+        if (e.target.closest('#add-template-item-btn')) {
              console.log("... Klick auf '+ Eintrag hinzufügen' (im Editor) verarbeitet.");
             const textInput = document.getElementById('new-template-item-text');
             const assigneeSelect = document.getElementById('new-template-item-assignee');
             const categorySelect = document.getElementById('new-template-item-category');
             const importantCheckbox = document.getElementById('new-template-item-important');
+            const activeTemplateId = getActiveTemplateId();
             if (!textInput || !assigneeSelect || !categorySelect || !importantCheckbox) {
                 console.error("Fehler: Elemente zum Hinzufügen von Template-Items nicht gefunden.");
                 return alertUser("Fehler: UI-Elemente nicht gefunden.", "error");
             }
+            if (!activeTemplateId) return alertUser("Bitte zuerst einen Container auswählen.", "error");
             const text = textInput.value.trim();
             if (!text) return alertUser("Bitte Text eingeben.", "error");
             const assignedTo = assigneeSelect.value;
             const assignedToName = assignedTo ? assigneeSelect.options[assigneeSelect.selectedIndex].text : null;
             const categoryId = categorySelect.value;
             const categoryName = categoryId ? categorySelect.options[categorySelect.selectedIndex].text : null;
-            const newItemData = { text, important: importantCheckbox.checked, assignedTo: assignedTo || null, assignedToName, categoryId: categoryId || null, categoryName };
+            const newItemData = { text, important: importantCheckbox.checked, assignedTo: assignedTo || null, assignedToName, categoryId: categoryId || null, categoryName, addedBy: getCurrentActorName(), addedAt: typeof serverTimestamp === 'function' ? serverTimestamp() : null };
             try {
-                const itemsSubCollectionRef = collection(checklistTemplatesCollectionRef, selectedTemplateId, 'template-items');
+                const itemsSubCollectionRef = collection(checklistTemplatesCollectionRef, activeTemplateId, 'template-items');
                 await addDoc(itemsSubCollectionRef, newItemData);
                 textInput.value = '';
                 assigneeSelect.value = '';
@@ -1431,15 +1435,18 @@ function setupStackAndContainerManagementListeners(view) {
         const deleteTemplateBtn = e.target.closest('#delete-template-btn');
         if (deleteTemplateBtn && selectedTemplateId) {
              console.log("... Klick auf 'Diesen Container löschen' (im Editor) verarbeitet.");
-            const containerName = TEMPLATES[selectedTemplateId]?.name || 'Unbekannt';
+            const activeTemplateId = getActiveTemplateId();
+            const containerName = activeTemplateId ? (TEMPLATES[activeTemplateId]?.name || 'Unbekannt') : 'Unbekannt';
             if (confirm(`Möchten Sie den Container "${containerName}" wirklich unwiderruflich löschen?`)) {
-                const idToDelete = selectedTemplateId;
+                const idToDelete = activeTemplateId;
                 try {
                     if (!checklistTemplatesCollectionRef) throw new Error("checklistTemplatesCollectionRef ist nicht definiert!");
                     const templateRef = doc(checklistTemplatesCollectionRef, idToDelete);
                     await deleteDoc(templateRef);
                     alertUser && alertUser('Container gelöscht.', 'success');
                     selectedTemplateId = null;
+                    const editor = document.getElementById('template-item-editor');
+                    if (editor) editor.dataset.templateId = '';
                     if (unsubscribeTemplateItems) unsubscribeTemplateItems();
                     renderChecklistSettingsView();
                 } catch (err) {
@@ -1450,7 +1457,7 @@ function setupStackAndContainerManagementListeners(view) {
             return;
         }
 
-        console.log("setupStackAndContainerManagementListeners: Klick wurde vom primären Listener erkannt, aber keiner der spezifischen Fälle passte.");
+        console.log("setupSchiffAndContainerManagementListeners: Klick wurde vom primären Listener erkannt, aber keiner der spezifischen Fälle passte.");
 
     }); // Ende addEventListener für templatesCard
 }
@@ -1485,7 +1492,7 @@ function renderChecklistSettingsView(editListId = null) {
         <button data-target-card="card-default-list" class="settings-tab-btn p-2 text-sm font-semibold rounded-md text-gray-600">Standard</button>
         <button data-target-card="card-manage-lists" class="settings-tab-btn p-2 text-sm font-semibold rounded-md text-gray-600">Gruppen & Listen</button>
         <button data-target-card="card-categories" class="settings-tab-btn p-2 text-sm font-semibold rounded-md text-gray-600">Kategorien</button>
-        <button data-target-card="card-templates" class="settings-tab-btn p-2 text-sm font-semibold rounded-md text-gray-600">Stack & Container</button>
+        <button data-target-card="card-templates" class="settings-tab-btn p-2 text-sm font-semibold rounded-md text-gray-600">Schiff & Container</button>
       </div>
     </div>
     <div id="card-default-list" class="settings-card hidden p-4 bg-white rounded-lg mb-4 space-y-3">
@@ -1546,28 +1553,27 @@ function renderChecklistSettingsView(editListId = null) {
     <div id="card-templates" class="settings-card hidden p-4 bg-white rounded-lg mb-4 space-y-4">
       <div class="p-3 bg-gray-50 rounded-lg space-y-2">
         <div class="flex justify-between items-center mb-1">
-            <h4 class="font-bold text-gray-800">Neuen Stack erstellen</h4>
-            <button id="show-delete-stack-form-btn" class="text-xs text-red-600 font-semibold hover:underline">Stack löschen...</button>
+            <h4 class="font-bold text-gray-800">Neues Schiff erstellen</h4>
+            <button id="show-delete-ship-form-btn" class="text-xs text-red-600 font-semibold hover:underline">Schiff löschen...</button>
         </div>
         <div class="flex gap-2">
-          <input type="text" id="checklist-settings-new-stack-name" class="flex-grow p-2 border rounded-lg" placeholder="Name für neuen Stack...">
-          <button id="checklist-settings-create-stack-btn" class="py-2 px-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Erstellen</button>
+          <input type="text" id="checklist-settings-new-ship-name" class="flex-grow p-2 border rounded-lg" placeholder="Name für neues Schiff...">
+          <button id="checklist-settings-create-ship-btn" class="py-2 px-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Erstellen</button>
         </div>
         </div>
 
-      <div id="delete-stack-section" class="hidden p-3 bg-red-50 border border-red-200 rounded-lg space-y-2">
-        <h4 class="font-bold text-red-800">Stack löschen</h4>
-        <p class="text-xs text-red-700">Hinweis: Ein Stack kann nur gelöscht werden, wenn keine Container mehr darin enthalten sind.</p>
-        <select id="delete-stack-selector" class="w-full p-2 border rounded-lg bg-white border-red-300">
-            <option value="">Stack zum Löschen auswählen...</option>
-            ${Object.values(CHECKLIST_STACKS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}
+      <div id="delete-ship-section" class="hidden p-3 bg-red-50 border border-red-200 rounded-lg space-y-2">
+        <h4 class="font-bold text-red-800">Schiff löschen</h4>
+        <select id="delete-ship-selector" class="w-full p-2 border rounded-lg bg-white border-red-300">
+            <option value="">Schiff zum Löschen auswählen...</option>
+            ${Object.values(CHECKLIST_SHIPS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}
         </select>
-        <button id="delete-stack-btn" class="w-full py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700">Ausgewählten Stack löschen</button>
+        <button id="delete-ship-btn" class="w-full py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700">Ausgewähltes Schiff löschen</button>
       </div>
       <div class="p-3 bg-gray-50 rounded-lg space-y-2">
         <h4 class="font-bold text-gray-800">Neuen Container erstellen</h4>
         <input type="text" id="checklist-settings-new-container-name" class="w-full p-2 border rounded-lg" placeholder="Name für neuen Container...">
-        <select id="checklist-settings-new-stack-selector" class="w-full p-2 border rounded-lg bg-white"><option value="">Stack zuweisen...</option></select>
+        <select id="checklist-settings-new-ship-selector" class="w-full p-2 border rounded-lg bg-white"><option value="">Schiff zuweisen...</option></select>
         <button id="checklist-settings-create-container-btn" class="w-full py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700">Container erstellen</button>
       </div>
       <div id="container-list-editor" class="space-y-2">
@@ -1779,15 +1785,15 @@ function renderChecklistSettingsView(editListId = null) {
       saveDefaultBtn.dataset.listenerAttached = '1';
   }
 
-  const stackSelector = view.querySelector('#checklist-settings-new-stack-selector');
-  if (stackSelector) {
-      const stackOpts = Object.values(CHECKLIST_STACKS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
-      stackSelector.innerHTML = `<option value="">Stack wählen...</option>` + stackOpts;
+  const shipSelector = view.querySelector('#checklist-settings-new-ship-selector');
+  if (shipSelector) {
+      const shipOpts = Object.values(CHECKLIST_SHIPS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+      shipSelector.innerHTML = `<option value="">Schiff wählen...</option>` + shipOpts;
   }
-  const deleteStackSelector = view.querySelector('#delete-stack-selector');
-  if (deleteStackSelector) {
-        const stackOpts = Object.values(CHECKLIST_STACKS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
-        deleteStackSelector.innerHTML = `<option value="">Stack zum Löschen auswählen...</option>` + stackOpts;
+  const deleteShipSelector = view.querySelector('#delete-ship-selector');
+  if (deleteShipSelector) {
+        const shipOpts = Object.values(CHECKLIST_SHIPS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+        deleteShipSelector.innerHTML = `<option value="">Schiff zum Löschen auswählen...</option>` + shipOpts;
   }
 
   const templateAssignee = view.querySelector('#new-template-item-assignee');
@@ -1807,8 +1813,8 @@ function renderChecklistSettingsView(editListId = null) {
   if (typeof setupCategoryManagementListeners === 'function') {
       setupCategoryManagementListeners(view);
   }
-  if (typeof setupStackAndContainerManagementListeners === 'function') {
-      setupStackAndContainerManagementListeners(view);
+  if (typeof setupSchiffAndContainerManagementListeners === 'function') {
+      setupSchiffAndContainerManagementListeners(view);
   }
   if (typeof setupTemplateEditorListeners === 'function') {
       setupTemplateEditorListeners();
@@ -1958,7 +1964,7 @@ function renderChecklistSettingsView(editListId = null) {
         <button data-target-card="card-default-list" class="settings-tab-btn p-2 text-sm font-semibold rounded-md text-gray-600">Standard</button>
         <button data-target-card="card-manage-lists" class="settings-tab-btn p-2 text-sm font-semibold rounded-md text-gray-600">Gruppen & Listen</button>
         <button data-target-card="card-categories" class="settings-tab-btn p-2 text-sm font-semibold rounded-md text-gray-600">Kategorien</button>
-        <button data-target-card="card-templates" class="settings-tab-btn p-2 text-sm font-semibold rounded-md text-gray-600">Stack & Container</button>
+        <button data-target-card="card-templates" class="settings-tab-btn p-2 text-sm font-semibold rounded-md text-gray-600">Schiff & Container</button>
       </div>
     </div>
 
@@ -2023,26 +2029,27 @@ function renderChecklistSettingsView(editListId = null) {
     <div id="card-templates" class="settings-card hidden p-4 bg-white rounded-lg mb-4 space-y-4">
       <div class="p-3 bg-gray-50 rounded-lg space-y-2">
         <div class="flex justify-between items-center mb-1">
-            <h4 class="font-bold text-gray-800">Neuen Stack erstellen</h4>
-            <button id="show-delete-stack-form-btn" class="text-xs text-red-600 font-semibold hover:underline">Stack löschen...</button>
+            <h4 class="font-bold text-gray-800">Neues Schiff erstellen</h4>
+            <button id="show-delete-ship-form-btn" class="text-xs text-red-600 font-semibold hover:underline">Schiff löschen...</button>
         </div>
         <div class="flex gap-2">
-          <input type="text" id="checklist-settings-new-stack-name" class="flex-grow p-2 border rounded-lg" placeholder="Name für neuen Stack...">
-          <button id="checklist-settings-create-stack-btn" class="py-2 px-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Erstellen</button>
+          <input type="text" id="checklist-settings-new-ship-name" class="flex-grow p-2 border rounded-lg" placeholder="Name für neues Schiff...">
+          <button id="checklist-settings-create-ship-btn" class="py-2 px-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Erstellen</button>
         </div>
         </div>
 
-      <div id="delete-stack-section" class="hidden p-3 bg-red-50 border border-red-200 rounded-lg space-y-2">
-        <h4 class="font-bold text-red-800">Stack löschen</h4>
-        <select id="delete-stack-selector" class="w-full p-2 border rounded-lg bg-white border-red-300">
-            <option value="">Stack zum Löschen auswählen...</option>
+      <div id="delete-ship-section" class="hidden p-3 bg-red-50 border border-red-200 rounded-lg space-y-2">
+        <h4 class="font-bold text-red-800">Schiff löschen</h4>
+        <select id="delete-ship-selector" class="w-full p-2 border rounded-lg bg-white border-red-300">
+            <option value="">Schiff zum Löschen auswählen...</option>
+            ${Object.values(CHECKLIST_SHIPS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}
         </select>
-        <button id="delete-stack-btn" class="w-full py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700">Ausgewählten Stack löschen</button>
+        <button id="delete-ship-btn" class="w-full py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700">Ausgewähltes Schiff löschen</button>
       </div>
       <div class="p-3 bg-gray-50 rounded-lg space-y-2">
         <h4 class="font-bold text-gray-800">Neuen Container erstellen</h4>
         <input type="text" id="checklist-settings-new-container-name" class="w-full p-2 border rounded-lg" placeholder="Name für neuen Container...">
-        <select id="checklist-settings-new-stack-selector" class="w-full p-2 border rounded-lg bg-white"><option value="">Stack zuweisen...</option></select>
+        <select id="checklist-settings-new-ship-selector" class="w-full p-2 border rounded-lg bg-white"><option value="">Schiff zuweisen...</option></select>
         <button id="checklist-settings-create-container-btn" class="w-full py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700">Container erstellen</button>
       </div>
       <div id="container-list-editor" class="space-y-2"></div>
@@ -2178,15 +2185,15 @@ function renderChecklistSettingsView(editListId = null) {
   populateDropdownsWithSeparators('#category-group-selector', true);
   populateDropdownsWithSeparators('#default-group-selector', true);
 
-  const stackSelector = view.querySelector('#checklist-settings-new-stack-selector');
-  if (stackSelector) {
-      const stackOpts = Object.values(CHECKLIST_STACKS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
-      stackSelector.innerHTML = `<option value="">Stack wählen...</option>` + stackOpts;
+  const shipSelector = view.querySelector('#checklist-settings-new-ship-selector');
+  if (shipSelector) {
+      const shipOpts = Object.values(CHECKLIST_SHIPS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+      shipSelector.innerHTML = `<option value="">Schiff wählen...</option>` + shipOpts;
   }
-  const deleteStackSelector = view.querySelector('#delete-stack-selector');
-  if (deleteStackSelector) {
-        const stackOpts = Object.values(CHECKLIST_STACKS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
-        deleteStackSelector.innerHTML = `<option value="">Stack zum Löschen auswählen...</option>` + stackOpts;
+  const deleteShipSelector = view.querySelector('#delete-ship-selector');
+  if (deleteShipSelector) {
+        const shipOpts = Object.values(CHECKLIST_SHIPS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+        deleteShipSelector.innerHTML = `<option value="">Schiff zum Löschen auswählen...</option>` + shipOpts;
   }
 
   const templateAssignee = view.querySelector('#new-template-item-assignee');
@@ -2368,7 +2375,7 @@ function renderChecklistSettingsView(editListId = null) {
   if (typeof setupListAndItemManagementListeners === 'function') setupListAndItemManagementListeners(view);
   if (typeof setupGroupManagementListeners === 'function') setupGroupManagementListeners(view, window.currentUser);
   if (typeof setupCategoryManagementListeners === 'function') setupCategoryManagementListeners(view);
-  if (typeof setupStackAndContainerManagementListeners === 'function') setupStackAndContainerManagementListeners(view);
+  if (typeof setupSchiffAndContainerManagementListeners === 'function') setupSchiffAndContainerManagementListeners(view);
   if (typeof setupTemplateEditorListeners === 'function') setupTemplateEditorListeners();
 
   // 7. Initial List Render
@@ -2633,7 +2640,7 @@ function getItemBadges(item) {
     let badgesHTML = '';
     // Die Kategorie wird jetzt als Überschrift angezeigt, daher hier entfernt.
     if (item.assignedToName) {
-        badgesHTML += `<span class="text-xs font-semibold py-0.5 px-2 rounded-full whitespace-nowrap bg-gray-200 text-gray-700">${item.assignedToName}</span>`;
+        badgesHTML += `<span class="text-xs font-semibold py-0.5 px-2 rounded-full whitespace-nowrap border ${getPersonBadgeClass(item.assignedTo || item.assignedToName)}">${escapeHtml(item.assignedToName)}</span>`;
     }
     // Reduziertes Margin für ein kompakteres Layout
     return `<div class="flex items-center gap-2 flex-wrap mt-1">${badgesHTML}</div>`;
@@ -2782,20 +2789,20 @@ function openTemplateModal(targetListId) {
     
     if (type === 'Container') {
       // Bug 6: Mobilfreundliche Optgroups
-      const stacks = Object.values(CHECKLIST_STACKS || {});
-      stacks.forEach(stack => {
-          const containers = Object.values(TEMPLATES || {}).filter(t => t.stackId === stack.id);
+      const ships = Object.values(CHECKLIST_SHIPS || {});
+      ships.forEach(ship => {
+          const containers = Object.values(TEMPLATES || {}).filter(t => getTemplateShipId(t) === ship.id);
           if (containers.length > 0) {
-              templateSelect.innerHTML += `<option disabled class="bg-gray-100 font-bold text-gray-900">━━ ${escapeHtml(stack.name)} ━━</option>`;
+              templateSelect.innerHTML += `<option disabled class="bg-gray-100 font-bold text-gray-900">━━ ${escapeHtml(ship.name)} ━━</option>`;
               containers.forEach(c => {
                   templateSelect.innerHTML += `<option value="${c.id}">&nbsp;&nbsp;${escapeHtml(c.name)}</option>`;
               });
           }
       });
-      // Ohne Stack
-      const without = Object.values(TEMPLATES || {}).filter(t => !t.stackId);
+      // Ohne Schiff
+      const without = Object.values(TEMPLATES || {}).filter(t => !getTemplateShipId(t));
       if (without.length > 0) {
-          templateSelect.innerHTML += `<option disabled class="bg-gray-100 font-bold text-gray-900">━━ Ohne Stack ━━</option>`;
+          templateSelect.innerHTML += `<option disabled class="bg-gray-100 font-bold text-gray-900">━━ Ohne Schiff ━━</option>`;
           without.forEach(t => {
               templateSelect.innerHTML += `<option value="${t.id}">&nbsp;&nbsp;${escapeHtml(t.name)}</option>`;
           });
