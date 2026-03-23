@@ -1315,6 +1315,21 @@ function setupSchiffAndContainerManagementListeners(view) {
 
     console.log("setupSchiffAndContainerManagementListeners: Hänge PRIMÄREN Listener an #card-templates an.");
 
+    const syncManagedShipForm = () => {
+        const shipSelector = view.querySelector('#delete-ship-selector');
+        if (!shipSelector) return;
+        const currentValue = shipSelector.value;
+        const shipOpts = Object.values(CHECKLIST_SHIPS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+        shipSelector.innerHTML = `<option value="">Schiff auswählen...</option>` + shipOpts;
+        if (currentValue && CHECKLIST_SHIPS[currentValue]) {
+            shipSelector.value = currentValue;
+        }
+        const manageShipNameInput = view.querySelector('#manage-ship-name');
+        if (manageShipNameInput) {
+            manageShipNameInput.value = shipSelector.value ? (CHECKLIST_SHIPS[shipSelector.value]?.name || '') : '';
+        }
+    };
+
     const applyTemplateItemFormSelection = () => {
         const assigneeSelect = document.getElementById('new-template-item-assignee');
         if (assigneeSelect) {
@@ -1397,17 +1412,78 @@ function setupSchiffAndContainerManagementListeners(view) {
 
         // Button zum Anzeigen/Verstecken des Lösch-Bereichs
         if (e.target.closest('#show-delete-ship-form-btn')) {
-            console.log("... Klick auf 'Schiff löschen...' Button verarbeitet.");
+            console.log("... Klick auf 'Schiff verwalten...' Button verarbeitet.");
             const deleteSection = view.querySelector('#delete-ship-section');
             if (deleteSection) {
                 deleteSection.classList.toggle('hidden');
-                 if (!deleteSection.classList.contains('hidden')) {
-                     const deleteShipSelector = view.querySelector('#delete-ship-selector');
-                     if (deleteShipSelector) {
-                         const shipOpts = Object.values(CHECKLIST_SHIPS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
-                         deleteShipSelector.innerHTML = `<option value="">Schiff zum Löschen auswählen...</option>` + shipOpts;
-                     }
-                 }
+                if (!deleteSection.classList.contains('hidden')) {
+                    syncManagedShipForm();
+                }
+            }
+            return;
+        }
+
+        if (e.target.closest('#rename-ship-btn')) {
+            const selector = view.querySelector('#delete-ship-selector');
+            const shipIdToRename = selector ? selector.value : null;
+            const manageShipNameInput = view.querySelector('#manage-ship-name');
+            const newShipName = manageShipNameInput ? manageShipNameInput.value.trim() : '';
+
+            if (!shipIdToRename) {
+                return alertUser && alertUser("Bitte zuerst ein Schiff auswählen.", "warning");
+            }
+            if (!newShipName) {
+                return alertUser && alertUser("Bitte einen neuen Schiffsnamen eingeben.", "error");
+            }
+            const currentShipName = CHECKLIST_SHIPS[shipIdToRename]?.name || '';
+            if (newShipName === currentShipName) {
+                return alertUser && alertUser("Bitte einen anderen Namen eingeben.", "info");
+            }
+            const duplicateShip = Object.values(CHECKLIST_SHIPS || {}).find(ship => ship.id !== shipIdToRename && (ship.name || '').trim().toLowerCase() === newShipName.toLowerCase());
+            if (duplicateShip) {
+                return alertUser && alertUser("Ein Schiff mit diesem Namen existiert bereits.", "error");
+            }
+
+            try {
+                if (!checklistShipsCollectionRef) throw new Error("checklistShipsCollectionRef ist nicht definiert!");
+                await updateDoc(doc(checklistShipsCollectionRef, shipIdToRename), { name: newShipName });
+
+                if (typeof getDocs === 'function' && typeof writeBatch === 'function' && checklistTemplatesCollectionRef) {
+                    const shipSnapshots = await Promise.all([
+                        getDocs(query(checklistTemplatesCollectionRef, where('shipId', '==', shipIdToRename))),
+                        getDocs(query(checklistTemplatesCollectionRef, where('stackId', '==', shipIdToRename)))
+                    ]);
+                    const templateRefs = new Map();
+                    shipSnapshots.forEach(snapshot => {
+                        snapshot.forEach(docSnap => {
+                            templateRefs.set(docSnap.id, docSnap.ref);
+                        });
+                    });
+                    if (templateRefs.size > 0) {
+                        const batch = writeBatch(db);
+                        templateRefs.forEach(ref => {
+                            batch.update(ref, { shipName: newShipName, stackName: newShipName });
+                        });
+                        await batch.commit();
+                    }
+                }
+
+                if (CHECKLIST_SHIPS[shipIdToRename]) {
+                    CHECKLIST_SHIPS[shipIdToRename].name = newShipName;
+                }
+                Object.values(TEMPLATES || {}).forEach(template => {
+                    if (getTemplateShipId(template) === shipIdToRename) {
+                        template.shipName = newShipName;
+                        template.stackName = newShipName;
+                    }
+                });
+
+                syncManagedShipForm();
+                renderContainerList();
+                if (typeof alertUser === 'function') alertUser('Schiff umbenannt.', 'success');
+            } catch (err) {
+                console.error("Fehler beim Umbenennen des Schiffs:", err);
+                if (typeof alertUser === 'function') alertUser('Fehler beim Umbenennen des Schiffs.', 'error');
             }
             return;
         }
@@ -1434,6 +1510,8 @@ function setupSchiffAndContainerManagementListeners(view) {
                     await deleteDoc(shipRef);
                     alertUser && alertUser("Schiff gelöscht.", "success");
                     view.querySelector('#delete-ship-section')?.classList.add('hidden');
+                    const manageShipNameInput = view.querySelector('#manage-ship-name');
+                    if (manageShipNameInput) manageShipNameInput.value = '';
                 } catch (err) {
                      console.error("Fehler beim Löschen des Schiffs:", err);
                      alertUser && alertUser(`Fehler beim Löschen des Schiffs: ${err.message}`, "error");
@@ -1574,6 +1652,15 @@ function setupSchiffAndContainerManagementListeners(view) {
 
     }); // Ende addEventListener für templatesCard
 
+    templatesCard.addEventListener('change', (e) => {
+        if (e.target.matches('#delete-ship-selector')) {
+            const manageShipNameInput = view.querySelector('#manage-ship-name');
+            if (manageShipNameInput) {
+                manageShipNameInput.value = e.target.value ? (CHECKLIST_SHIPS[e.target.value]?.name || '') : '';
+            }
+        }
+    });
+
     templatesCard.addEventListener('keydown', async (e) => {
         const textInput = e.target.closest('#new-template-item-text');
         if (!textInput || e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
@@ -1674,7 +1761,7 @@ function renderChecklistSettingsView(editListId = null) {
       <div class="p-3 bg-gray-50 rounded-lg space-y-2">
         <div class="flex justify-between items-center mb-1">
             <h4 class="font-bold text-gray-800">Neues Schiff erstellen</h4>
-            <button id="show-delete-ship-form-btn" class="text-xs text-red-600 font-semibold hover:underline">Schiff löschen...</button>
+            <button id="show-delete-ship-form-btn" class="text-xs text-blue-600 font-semibold hover:underline">Schiff verwalten...</button>
         </div>
         <div class="flex gap-2">
           <input type="text" id="checklist-settings-new-ship-name" class="flex-grow p-2 border rounded-lg" placeholder="Name für neues Schiff...">
@@ -1682,13 +1769,17 @@ function renderChecklistSettingsView(editListId = null) {
         </div>
         </div>
 
-      <div id="delete-ship-section" class="hidden p-3 bg-red-50 border border-red-200 rounded-lg space-y-2">
-        <h4 class="font-bold text-red-800">Schiff löschen</h4>
+      <div id="delete-ship-section" class="hidden p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+        <h4 class="font-bold text-blue-800">Schiff verwalten</h4>
         <select id="delete-ship-selector" class="w-full p-2 border rounded-lg bg-white border-red-300">
-            <option value="">Schiff zum Löschen auswählen...</option>
+            <option value="">Schiff auswählen...</option>
             ${Object.values(CHECKLIST_SHIPS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}
         </select>
-        <button id="delete-ship-btn" class="w-full py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700">Ausgewähltes Schiff löschen</button>
+        <input type="text" id="manage-ship-name" class="w-full p-2 border rounded-lg" placeholder="Schiffsname bearbeiten...">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button id="rename-ship-btn" class="w-full py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Ausgewähltes Schiff umbenennen</button>
+          <button id="delete-ship-btn" class="w-full py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700">Ausgewähltes Schiff löschen</button>
+        </div>
       </div>
       <div class="p-3 bg-gray-50 rounded-lg space-y-2">
         <h4 class="font-bold text-gray-800">Neuen Container erstellen</h4>
@@ -1913,7 +2004,11 @@ function renderChecklistSettingsView(editListId = null) {
   const deleteShipSelector = view.querySelector('#delete-ship-selector');
   if (deleteShipSelector) {
         const shipOpts = Object.values(CHECKLIST_SHIPS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
-        deleteShipSelector.innerHTML = `<option value="">Schiff zum Löschen auswählen...</option>` + shipOpts;
+        deleteShipSelector.innerHTML = `<option value="">Schiff auswählen...</option>` + shipOpts;
+  }
+  const manageShipNameInput = view.querySelector('#manage-ship-name');
+  if (manageShipNameInput) {
+      manageShipNameInput.value = deleteShipSelector?.value ? (CHECKLIST_SHIPS[deleteShipSelector.value]?.name || '') : '';
   }
 
   const templateAssignee = view.querySelector('#new-template-item-assignee');

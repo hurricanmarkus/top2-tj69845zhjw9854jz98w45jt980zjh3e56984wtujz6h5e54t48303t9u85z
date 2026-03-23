@@ -1,13 +1,22 @@
 {
-  "version": "1.4.17",
-  "buildId": "20260323-1",
+  "version": "1.4.18",
+  "buildId": "20260323-2",
   "releaseDate": "2026-03-23",
-  "releaseTime": "08:23",
+  "releaseTime": "08:27",
   "timezone": "Europe/Vienna",
-  "note": "Checkliste: Container-Eintraege koennen per Enter gespeichert werden und merken Zuweisung sowie Kategorie fuer Folgeeingaben.",
-  "commitId": "2e58e14",
+  "note": "Checkliste: Schiff-Verwaltung ersetzt den direkten Loeschlink und erlaubt Auswahl, Umbenennen sowie Loeschen bestehender Schiffe.",
+  "commitId": "86f6a12",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.4.18",
+      "buildId": "20260323-2",
+      "releaseDate": "2026-03-23",
+      "releaseTime": "08:27",
+      "note": "Checkliste: Schiff-Verwaltung ersetzt den direkten Loeschlink und erlaubt Auswahl, Umbenennen sowie Loeschen bestehender Schiffe.",
+      "commitId": "86f6a12",
+      "obligation": "false"
+    },
     {
       "version": "1.4.17",
       "buildId": "20260323-1",
