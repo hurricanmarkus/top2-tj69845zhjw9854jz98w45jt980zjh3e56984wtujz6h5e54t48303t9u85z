@@ -179,13 +179,12 @@ export async function applyTemplateLogic() {
   const targetListId = modal.dataset.targetListId;
   if (!targetListId) return alertUser && alertUser('Keine Ziel-Checkliste definiert.', 'error');
 
-  const selectedBoxes = Array.from(document.querySelectorAll('.template-item-cb:checked'));
+  const selectedBoxes = Array.from(modal.querySelectorAll('.template-item-cb:checked'));
   if (!selectedBoxes.length) return alertUser && alertUser('Bitte mindestens einen Eintrag wählen.', 'error');
 
   try {
-    // optional replace if 'Schiff' + 'ersetzen' selected
     const type = modal.querySelector('input[name="template-type"]:checked')?.value || 'Container';
-    const insertMode = modal.querySelector('input[name="insert-mode"]:checked')?.value || 'append';
+    const insertMode = modal.querySelector('input[name="insert-mode"]:checked')?.value || 'einfuegen';
     if (type === 'Schiff' && insertMode === 'ersetzen' && typeof getDocs === 'function' && typeof writeBatch === 'function') {
       const q = query(checklistItemsCollectionRef, where('listId', '==', targetListId));
       const snap = await getDocs(q);
@@ -196,17 +195,19 @@ export async function applyTemplateLogic() {
       }
     }
 
-    for (const cb of selectedBoxes) {
+    let appliedItemCount = 0;
+
+    const appendChecklistItem = async (itemLike) => {
       const data = {
         listId: targetListId,
-        text: cb.dataset.text || '',
+        text: itemLike?.text || '',
         status: 'open',
-        important: cb.dataset.important === 'true',
-        assignedTo: cb.dataset.assignedTo || null,
-        assignedToName: cb.dataset.assignedToName || null,
-        categoryId: cb.dataset.categoryId || null,
-        categoryName: cb.dataset.categoryName || null,
-        categoryColor: cb.dataset.categoryColor || null,
+        important: itemLike?.important === true || itemLike?.important === 'true',
+        assignedTo: itemLike?.assignedTo || null,
+        assignedToName: itemLike?.assignedToName || null,
+        categoryId: itemLike?.categoryId || null,
+        categoryName: itemLike?.categoryName || null,
+        categoryColor: itemLike?.categoryColor || null,
         addedBy: getCurrentActorName(),
         addedAt: typeof serverTimestamp === 'function' ? serverTimestamp() : null
       };
@@ -216,9 +217,46 @@ export async function applyTemplateLogic() {
         CHECKLIST_ITEMS[targetListId] = CHECKLIST_ITEMS[targetListId] || [];
         CHECKLIST_ITEMS[targetListId].push({ id: String(Date.now()), ...data });
       }
+      appliedItemCount += 1;
+    };
+
+    if (type === 'Schiff') {
+      for (const cb of selectedBoxes) {
+        const templateId = cb.dataset.templateId || cb.value;
+        if (!templateId) continue;
+
+        let templateItems = [];
+        if (typeof getDocs === 'function') {
+          const itemsRef = collection(checklistTemplatesCollectionRef, templateId, 'template-items');
+          const snap = await getDocs(query(itemsRef, orderBy('text')));
+          snap.forEach(s => templateItems.push({ id: s.id, ...s.data() }));
+        } else {
+          templateItems = TEMPLATE_ITEMS[templateId] || [];
+        }
+
+        for (const item of templateItems) {
+          await appendChecklistItem(item);
+        }
+      }
+    } else {
+      for (const cb of selectedBoxes) {
+        await appendChecklistItem({
+          text: cb.dataset.text || '',
+          important: cb.dataset.important === 'true',
+          assignedTo: cb.dataset.assignedTo || null,
+          assignedToName: cb.dataset.assignedToName || null,
+          categoryId: cb.dataset.categoryId || null,
+          categoryName: cb.dataset.categoryName || null,
+          categoryColor: cb.dataset.categoryColor || null
+        });
+      }
     }
 
-    alertUser && alertUser(`${selectedBoxes.length} Einträge wurden hinzugefügt.`, 'success');
+    if (appliedItemCount === 0) {
+      return alertUser && alertUser('In den gewählten Quellen wurden keine Einträge gefunden.', 'warning');
+    }
+
+    alertUser && alertUser(`${appliedItemCount} Einträge wurden hinzugefügt.`, 'success');
     closeTemplateModal();
   } catch (err) {
     console.error('applyTemplateLogic error:', err);
@@ -3007,9 +3045,11 @@ function openTemplateModal(targetListId) {
   const templateSelect = document.getElementById('template-select');
   const itemsContainer = document.getElementById('template-items-container');
   const modeSection = document.getElementById('template-mode-section');
-  const selectAllBtn = document.getElementById('template-select-all-btn'); // Bug 11: Button Referenz
+  const resetSelectAllButton = () => {
+    const button = document.getElementById('template-select-all-btn');
+    if (button) button.textContent = 'Alle auswählen';
+  };
 
-  // Bug 11: Button HTML einfügen, falls noch nicht da
   if (!document.getElementById('template-select-all-btn') && itemsContainer) {
       const btnDiv = document.createElement('div');
       btnDiv.className = "flex justify-end mb-2";
@@ -3017,14 +3057,53 @@ function openTemplateModal(targetListId) {
       itemsContainer.parentNode.insertBefore(btnDiv, itemsContainer);
   }
 
+  const renderSelectableItems = (items) => {
+    itemsContainer.innerHTML = '';
+    resetSelectAllButton();
+    if (!items.length) {
+      itemsContainer.innerHTML = '<p class="text-xs text-gray-500 text-center py-4">Keine Einträge gefunden.</p>';
+      return;
+    }
+    items.forEach(it => {
+      itemsContainer.innerHTML += `
+              <label class="flex items-center gap-2 p-2 cursor-pointer hover:bg-gray-100 rounded border-b border-gray-50 last:border-0">
+                <input type="checkbox" class="h-5 w-5 template-item-cb text-indigo-600 rounded" value="${it.id}"
+                  data-text="${(it.text||'').replace(/"/g,'&quot;')}"
+                  data-important="${!!it.important}"
+                  data-assigned-to="${it.assignedTo || ''}"
+                  data-assigned-to-name="${it.assignedToName || ''}"
+                  data-category-id="${it.categoryId || ''}"
+                  data-category-name="${it.categoryName || ''}"
+                  data-category-color="${it.categoryColor || ''}">
+                <span class="text-sm text-gray-700">${escapeHtml(it.text)}</span>
+              </label>`;
+    });
+  };
+
+  const renderSelectableContainers = (containers) => {
+    itemsContainer.innerHTML = '';
+    resetSelectAllButton();
+    if (!containers.length) {
+      itemsContainer.innerHTML = '<p class="text-xs text-gray-500 text-center py-4">Keine Container für dieses Schiff gefunden.</p>';
+      return;
+    }
+    containers.forEach(container => {
+      itemsContainer.innerHTML += `
+              <label class="flex items-center gap-2 p-2 cursor-pointer hover:bg-gray-100 rounded border-b border-gray-50 last:border-0">
+                <input type="checkbox" class="h-5 w-5 template-item-cb text-indigo-600 rounded" value="${container.id}" data-template-id="${container.id}">
+                <span class="text-sm text-gray-700">${escapeHtml(container.name || 'Unbenannter Container')}</span>
+              </label>`;
+    });
+  };
+
   const updateTemplateDropdown = () => {
     const type = modal.querySelector('input[name="template-type"]:checked')?.value || 'Container';
     if (!templateSelect) return;
     
     templateSelect.innerHTML = '<option value="">Bitte Quelle wählen...</option>';
+    resetSelectAllButton();
     
     if (type === 'Container') {
-      // Bug 6: Mobilfreundliche Optgroups
       const ships = Object.values(CHECKLIST_SHIPS || {});
       ships.forEach(ship => {
           const containers = Object.values(TEMPLATES || {}).filter(t => getTemplateShipId(t) === ship.id);
@@ -3044,34 +3123,31 @@ function openTemplateModal(targetListId) {
           });
       }
     } else {
-      // Bug 10 Fix: Schiff (Checklisten) laden
-      const lists = Object.values(CHECKLISTS || {});
-      if (lists.length > 0) {
-          templateSelect.innerHTML += `<option disabled class="bg-gray-100 font-bold text-gray-900">━━ Checklisten ━━</option>`;
-          lists.forEach(cl => {
-              templateSelect.innerHTML += `<option value="${cl.id}">&nbsp;&nbsp;${escapeHtml(cl.name)}</option>`;
+      const ships = Object.values(CHECKLIST_SHIPS || {});
+      if (ships.length > 0) {
+          templateSelect.innerHTML += `<option disabled class="bg-gray-100 font-bold text-gray-900">━━ Schiffe ━━</option>`;
+          ships.forEach(ship => {
+              templateSelect.innerHTML += `<option value="${ship.id}">&nbsp;&nbsp;${escapeHtml(ship.name)}</option>`;
           });
       }
     }
     modeSection && modeSection.classList.toggle('hidden', type !== 'Schiff');
   };
 
-  // Event Listener Logik
   if (!modal.dataset.listenersAttached) {
-    // Typ Wechsel (Container <-> Schiff)
     modal.querySelectorAll('input[name="template-type"]').forEach(radio => {
         radio.addEventListener('change', () => {
             updateTemplateDropdown();
-            itemsContainer.innerHTML = ''; // Liste leeren
+            itemsContainer.innerHTML = '';
         });
     });
 
-    // Quelle Auswahl Change
     templateSelect?.addEventListener('change', async (e) => {
       const id = e.target.value;
       const type = modal.querySelector('input[name="template-type"]:checked')?.value || 'Container';
       if (!itemsContainer) return;
       itemsContainer.innerHTML = '';
+      resetSelectAllButton();
       if (!id) return;
 
       itemsContainer.innerHTML = '<p class="text-xs text-gray-500 text-center py-4">Lade Einträge...</p>';
@@ -3080,37 +3156,18 @@ function openTemplateModal(targetListId) {
           let items = [];
           
           if (type === 'Container') {
-              // Container Items aus Subcollection laden
               if (typeof getDocs === 'function') {
                 const itemsRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-templates', id, 'template-items');
                 const snap = await getDocs(query(itemsRef, orderBy('text')));
                 snap.forEach(s => items.push({ id: s.id, ...s.data() }));
               }
+              renderSelectableItems(items);
           } else {
-              // Schiff: Items aus CHECKLIST_ITEMS Cache holen (Bug 10 Fix)
-              items = CHECKLIST_ITEMS[id] || [];
+              const containers = Object.values(TEMPLATES || {})
+                .filter(template => getTemplateShipId(template) === id)
+                .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'de', { sensitivity: 'base' }));
+              renderSelectableContainers(containers);
           }
-
-          itemsContainer.innerHTML = '';
-          if (!items.length) { 
-              itemsContainer.innerHTML = '<p class="text-xs text-gray-500 text-center py-4">Keine Einträge gefunden.</p>'; 
-              return; 
-          }
-
-          items.forEach(it => {
-              itemsContainer.innerHTML += `
-              <label class="flex items-center gap-2 p-2 cursor-pointer hover:bg-gray-100 rounded border-b border-gray-50 last:border-0">
-                <input type="checkbox" class="h-5 w-5 template-item-cb text-indigo-600 rounded" value="${it.id}"
-                  data-text="${(it.text||'').replace(/"/g,'&quot;')}"
-                  data-important="${!!it.important}"
-                  data-assigned-to="${it.assignedTo || ''}"
-                  data-assigned-to-name="${it.assignedToName || ''}"
-                  data-category-id="${it.categoryId || ''}"
-                  data-category-name="${it.categoryName || ''}"
-                  data-category-color="${it.categoryColor || ''}">
-                <span class="text-sm text-gray-700">${escapeHtml(it.text)}</span>
-              </label>`;
-          });
 
       } catch (err) {
           console.error('Fehler beim Laden:', err);
@@ -3118,11 +3175,9 @@ function openTemplateModal(targetListId) {
       }
     });
 
-    // Bug 11: Select All Listener
     document.addEventListener('click', (e) => {
         if (e.target.id === 'template-select-all-btn') {
             const checkboxes = itemsContainer.querySelectorAll('.template-item-cb');
-            // Prüfen ob alle ausgewählt sind -> dann abwählen, sonst alle auswählen
             const allSelected = Array.from(checkboxes).every(cb => cb.checked);
             checkboxes.forEach(cb => cb.checked = !allSelected);
             e.target.textContent = allSelected ? "Alle auswählen" : "Alle abwählen";

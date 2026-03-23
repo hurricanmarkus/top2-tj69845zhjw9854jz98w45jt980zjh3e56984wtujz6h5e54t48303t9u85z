@@ -1,13 +1,22 @@
 {
-  "version": "1.4.19",
-  "buildId": "20260323-3",
+  "version": "1.4.20",
+  "buildId": "20260323-4",
   "releaseDate": "2026-03-23",
-  "releaseTime": "08:42",
+  "releaseTime": "09:55",
   "timezone": "Europe/Vienna",
-  "note": "Checkliste: Aktiver Einstellungs-Renderpfad korrigiert, damit Schiff verwalten im echten UI sichtbar ist.",
-  "commitId": "6fdbed8",
+  "note": "Checkliste: Im Dialog Container-Inhalt einfuegen zeigt Quell-Typ Schiff jetzt die Container des gewaehlten Schiffs zur Auswahl und uebernimmt deren Inhalte korrekt.",
+  "commitId": "79ec55d",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.4.20",
+      "buildId": "20260323-4",
+      "releaseDate": "2026-03-23",
+      "releaseTime": "09:55",
+      "note": "Checkliste: Im Dialog Container-Inhalt einfuegen zeigt Quell-Typ Schiff jetzt die Container des gewaehlten Schiffs zur Auswahl und uebernimmt deren Inhalte korrekt.",
+      "commitId": "79ec55d",
+      "obligation": "false"
+    },
     {
       "version": "1.4.19",
       "buildId": "20260323-3",
