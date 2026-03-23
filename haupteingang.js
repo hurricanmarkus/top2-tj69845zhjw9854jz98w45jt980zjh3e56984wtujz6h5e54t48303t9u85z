@@ -512,6 +512,67 @@ function setDeferredUpdateVersion(version) {
     }
 }
 
+function getStoredVersionUiLoginMode() {
+    try {
+        return String(localStorage.getItem(ADMIN_STORAGE_KEY) || '').trim();
+    } catch (error) {
+        return '';
+    }
+}
+
+function isVersionUiGuestContext() {
+    return currentUser.mode === GUEST_MODE && !getStoredVersionUiLoginMode();
+}
+
+function canCurrentUserSeeRestoreCode() {
+    return currentUser.mode !== GUEST_MODE && currentUser.role === 'SYSTEMADMIN';
+}
+
+function extractVersionAreaAndNote(rawNote, explicitArea = '') {
+    const normalizedNote = String(rawNote || '').trim() || '-';
+    const normalizedArea = String(explicitArea || '').trim();
+
+    if (normalizedArea) {
+        return {
+            releaseArea: normalizedArea,
+            releaseNote: normalizedNote
+        };
+    }
+
+    const match = normalizedNote.match(/^([^:\n]{2,80}):\s+(.+)$/);
+    if (!match) {
+        return {
+            releaseArea: '-',
+            releaseNote: normalizedNote
+        };
+    }
+
+    return {
+        releaseArea: match[1].trim() || '-',
+        releaseNote: match[2].trim() || normalizedNote
+    };
+}
+
+async function copyTextToClipboard(text) {
+    const normalizedText = String(text || '');
+
+    if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(normalizedText);
+        return;
+    }
+
+    const helper = document.createElement('textarea');
+    helper.value = normalizedText;
+    helper.setAttribute('readonly', 'readonly');
+    helper.style.position = 'fixed';
+    helper.style.opacity = '0';
+    document.body.appendChild(helper);
+    helper.focus();
+    helper.select();
+    document.execCommand('copy');
+    helper.remove();
+}
+
 function parseBooleanFlag(value) {
     if (typeof value === 'boolean') return value;
     return String(value || '').trim().toLowerCase() === 'true';
@@ -519,42 +580,6 @@ function parseBooleanFlag(value) {
 
 function splitComparableTokens(value) {
     return String(value || '').toLowerCase().match(/[0-9]+|[a-z]+/g) || [];
-}
-
-function compareComparableStrings(a, b) {
-    const left = splitComparableTokens(a);
-    const right = splitComparableTokens(b);
-    const max = Math.max(left.length, right.length);
-
-    for (let i = 0; i < max; i += 1) {
-        const lv = left[i];
-        const rv = right[i];
-
-        if (lv === undefined && rv !== undefined) return -1;
-        if (rv === undefined && lv !== undefined) return 1;
-        if (lv === rv) continue;
-
-        const leftIsNum = /^\d+$/.test(lv);
-        const rightIsNum = /^\d+$/.test(rv);
-
-        if (leftIsNum && rightIsNum) {
-            const ln = Number(lv);
-            const rn = Number(rv);
-            if (ln > rn) return 1;
-            if (ln < rn) return -1;
-        } else {
-            if (lv > rv) return 1;
-            if (lv < rv) return -1;
-        }
-    }
-
-    return 0;
-}
-
-function compareVersionCandidates(a, b) {
-    const versionCmp = compareComparableStrings(a?.version, b?.version);
-    if (versionCmp !== 0) return versionCmp;
-    return compareComparableStrings(a?.buildId, b?.buildId);
 }
 
 function isNewerThanCurrent(candidate) {
@@ -567,7 +592,9 @@ function normalizeVersionCandidate(rawEntry, fallback = {}) {
     const buildId = String(rawEntry?.buildId || rawEntry?.appBuildId || rawEntry?.build || fallback.buildId || '').trim();
     const releaseDate = String(rawEntry?.releaseDate || rawEntry?.date || rawEntry?.releasedAt || fallback.releaseDate || '-').trim() || '-';
     const releaseTime = String(rawEntry?.releaseTime || rawEntry?.time || rawEntry?.releasedTime || fallback.releaseTime || '-').trim() || '-';
-    const releaseNote = String(rawEntry?.note || rawEntry?.releaseNote || rawEntry?.description || fallback.releaseNote || '-').trim() || '-';
+    const rawReleaseNote = String(rawEntry?.note || rawEntry?.releaseNote || rawEntry?.description || fallback.releaseNote || '-').trim() || '-';
+    const explicitArea = String(rawEntry?.bereich || rawEntry?.area || rawEntry?.releaseArea || fallback.releaseArea || '').trim();
+    const { releaseArea, releaseNote } = extractVersionAreaAndNote(rawReleaseNote, explicitArea);
     const commitId = String(rawEntry?.commitId || rawEntry?.commit || rawEntry?.revision || fallback.commitId || '').trim();
     const obligation = parseBooleanFlag(rawEntry?.obligation ?? fallback.obligation ?? false);
 
@@ -576,6 +603,8 @@ function normalizeVersionCandidate(rawEntry, fallback = {}) {
         buildId,
         releaseDate,
         releaseTime,
+        releaseArea,
+        bereich: releaseArea,
         releaseNote,
         note: releaseNote,
         commitId,
@@ -599,146 +628,12 @@ function dedupeVersionHistory(entries) {
     return result;
 }
 
-function extractMetaContentFromHtml(html, metaName) {
-    const safeName = String(metaName || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regexNameThenContent = new RegExp(`<meta[^>]*name=["']${safeName}["'][^>]*content=["']([^"']+)["'][^>]*>`, 'i');
-    const regexContentThenName = new RegExp(`<meta[^>]*content=["']([^"']+)["'][^>]*name=["']${safeName}["'][^>]*>`, 'i');
-
-    const matchA = html.match(regexNameThenContent);
-    if (matchA && matchA[1]) return String(matchA[1]).trim();
-
-    const matchB = html.match(regexContentThenName);
-    if (matchB && matchB[1]) return String(matchB[1]).trim();
-
-    return '';
-}
-
-async function fetchLatestIndexBuildInfo() {
-    const response = await fetch(`/index.html?t=${Date.now()}`, {
-        cache: 'no-store',
-        headers: {
-            'Cache-Control': 'no-cache'
-        }
-    });
-
-    if (!response.ok) {
-        throw new Error(`Index-Info nicht erreichbar (${response.status})`);
-    }
-
-    const html = await response.text();
-    return {
-        version: extractMetaContentFromHtml(html, 'top2-app-version'),
-        buildId: extractMetaContentFromHtml(html, 'top2-build-id')
-    };
-}
-
-async function fetchLatestVersionInfo() {
-    const [versionPayloadResult, indexBuildResult] = await Promise.allSettled([
-        (async () => {
-            const url = `${VERSION_INFO_URL}?t=${Date.now()}`;
-            const response = await fetch(url, {
-                cache: 'no-store',
-                headers: {
-                    'Cache-Control': 'no-cache'
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error(`Version-Info nicht erreichbar (${response.status})`);
-            }
-
-            return response.json();
-        })(),
-        fetchLatestIndexBuildInfo()
-    ]);
-
-    const data = versionPayloadResult.status === 'fulfilled' ? versionPayloadResult.value : null;
-    const indexBuild = indexBuildResult.status === 'fulfilled' ? indexBuildResult.value : { version: '', buildId: '' };
-
-    if (!data && !indexBuild.buildId && !indexBuild.version) {
-        throw new Error('Version-Info und Index-Metadaten nicht erreichbar.');
-    }
-
-    const topJsonEntry = normalizeVersionCandidate(data || {}, { source: 'version.json' });
-    const indexEntry = normalizeVersionCandidate(indexBuild || {}, {
-        source: 'index.html',
-        obligation: false,
-        releaseDate: topJsonEntry.releaseDate,
-        releaseTime: topJsonEntry.releaseTime,
-        releaseNote: topJsonEntry.releaseNote,
-        commitId: topJsonEntry.commitId
-    });
-
-    const historyEntries = (Array.isArray(data?.history) ? data.history : []).map((entry) => normalizeVersionCandidate(entry, {
-        source: 'version.history',
-        obligation: false
-    }));
-
-    const allCandidates = dedupeVersionHistory([
-        ...historyEntries,
-        topJsonEntry,
-        indexEntry,
-        {
-            version: CURRENT_APP_VERSION,
-            buildId: CURRENT_BUILD_ID,
-            releaseDate: topJsonEntry.releaseDate,
-            releaseTime: topJsonEntry.releaseTime,
-            releaseNote: 'Installierte Version',
-            note: 'Installierte Version',
-            commitId: '',
-            obligation: false,
-            source: 'runtime'
-        }
-    ].filter((entry) => entry.version || entry.buildId));
-
-    const newerCandidates = allCandidates.filter((entry) => isNewerThanCurrent(entry));
-    const mandatoryNewerCandidates = newerCandidates.filter((entry) => entry.obligation);
-    const preferredPool = mandatoryNewerCandidates.length > 0 ? mandatoryNewerCandidates : (newerCandidates.length > 0 ? newerCandidates : allCandidates);
-
-    const selected = preferredPool.reduce((best, current) => {
-        if (!best) return current;
-        return compareVersionCandidates(current, best) > 0 ? current : best;
-    }, null) || {
-        version: CURRENT_APP_VERSION,
-        buildId: CURRENT_BUILD_ID,
-        releaseDate: '-',
-        releaseTime: '-',
-        releaseNote: '-',
-        note: '-',
-        commitId: '',
-        obligation: false,
-        source: 'runtime'
-    };
-
-    const history = dedupeVersionHistory([
-        selected,
-        ...allCandidates
-    ]).sort((a, b) => compareVersionCandidates(b, a));
-
-    const isNewer = isNewerThanCurrent(selected);
-    const obligation = isNewer && selected.obligation;
-
-    return {
-        version: selected.version,
-        buildId: selected.buildId,
-        releaseDate: selected.releaseDate,
-        releaseTime: selected.releaseTime,
-        releaseNote: selected.releaseNote,
-        history,
-        // commitId bleibt bewusst ungenutzt in der UI (unsichtbar fuer Benutzer)
-        commitId: selected.commitId,
-        obligation,
-        isNewer,
-        hasMandatoryNewer: mandatoryNewerCandidates.length > 0,
-        source: selected.source
-    };
-}
-
 function getVersionInfoModalElements() {
     return {
         modal: document.getElementById('versionInfoModal'),
         card: document.getElementById('versionInfoModalCard'),
         header: document.getElementById('versionInfoModalHeader'),
+        content: document.getElementById('versionInfoModalContent'),
         title: document.getElementById('versionInfoModalTitle'),
         summary: document.getElementById('versionInfoModalSummary'),
         currentVersion: document.getElementById('versionInfoCurrentVersion'),
@@ -747,6 +642,7 @@ function getVersionInfoModalElements() {
         latestBuild: document.getElementById('versionInfoLatestBuild'),
         releaseDate: document.getElementById('versionInfoReleaseDate'),
         releaseTime: document.getElementById('versionInfoReleaseTime'),
+        releaseArea: document.getElementById('versionInfoReleaseArea'),
         releaseNote: document.getElementById('versionInfoReleaseNote'),
         history: document.getElementById('versionInfoHistory'),
         details: document.getElementById('versionHistoryDetails'),
@@ -759,6 +655,16 @@ function getVersionInfoModalElements() {
         installBtnSpinner: document.getElementById('versionInfoInstallBtnSpinner'),
         closeBtn: document.getElementById('versionInfoCloseBtn'),
         closeHeaderBtn: document.getElementById('versionInfoCloseHeaderBtn')
+    };
+}
+
+function getRestoreCodeModalElements() {
+    return {
+        modal: document.getElementById('versionRestoreModal'),
+        title: document.getElementById('versionRestoreTitle'),
+        list: document.getElementById('versionRestoreCodeList'),
+        closeBtn: document.getElementById('versionRestoreCloseBtn'),
+        closeHeaderBtn: document.getElementById('versionRestoreCloseHeaderBtn')
     };
 }
 
@@ -847,8 +753,66 @@ function closeVersionInfoModal() {
     const { modal } = getVersionInfoModalElements();
     if (modal && !appVersionState.mandatoryUpdate) {
         stopVersionInstallProgressSimulation();
+        closeRestoreCodeModal();
         modal.classList.add('hidden');
     }
+}
+
+function closeRestoreCodeModal() {
+    const { modal } = getRestoreCodeModalElements();
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+}
+
+function buildRestoreCodeLines(commitId) {
+    const normalizedCommitId = String(commitId || '').trim() || 'pending';
+    return [
+        'git checkout main',
+        `git reset --hard ${normalizedCommitId}`,
+        'git push origin main --force',
+        'git commit --allow-empty -m "Trigger Vercel Build"',
+        'git push origin main --force'
+    ];
+}
+
+function openRestoreCodeModal(entry = {}) {
+    if (!canCurrentUserSeeRestoreCode()) {
+        return;
+    }
+
+    const { modal, title, list } = getRestoreCodeModalElements();
+    if (!modal || !title || !list) {
+        return;
+    }
+
+    const version = String(entry?.version || '-').trim() || '-';
+    const lines = buildRestoreCodeLines(entry?.commitId);
+
+    title.textContent = `Restorecode ${version}`;
+    list.innerHTML = lines.map((line, index) => `
+        <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 flex flex-col sm:flex-row sm:items-center gap-2">
+            <div class="flex-1 font-mono text-xs sm:text-sm text-gray-800 break-all">${index + 1}: ${escapeHtml(line)}</div>
+            <button type="button" class="version-restore-copy-btn px-3 py-2 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition" data-line-number="${index + 1}" data-copy-text="${escapeHtml(line)}">Kopieren</button>
+        </div>
+    `).join('');
+
+    list.querySelectorAll('.version-restore-copy-btn').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const lineNumber = button.dataset.lineNumber || '?';
+            const copyText = button.dataset.copyText || '';
+
+            try {
+                await copyTextToClipboard(copyText);
+                alertUser(`Restorecode Zeile ${lineNumber} kopiert.`, 'success');
+            } catch (error) {
+                console.error('Restorecode konnte nicht kopiert werden:', error);
+                alertUser('Restorecode konnte nicht kopiert werden.', 'error');
+            }
+        });
+    });
+
+    modal.classList.remove('hidden');
 }
 
 function isUpdateAvailable(versionInfo) {
@@ -869,16 +833,36 @@ function renderVersionHistory(history) {
         const version = entry?.version || '-';
         const date = entry?.releaseDate || '-';
         const time = entry?.releaseTime || '-';
+        const area = entry?.releaseArea || entry?.bereich || '-';
         const note = entry?.note || '-';
+        const commitId = entry?.commitId || 'pending';
+        const restoreButton = canCurrentUserSeeRestoreCode()
+            ? `<button type="button" class="version-restore-open-btn px-3 py-1.5 rounded-lg bg-slate-700 text-white text-xs font-bold hover:bg-slate-800 transition" data-version="${escapeHtml(version)}" data-commit-id="${escapeHtml(commitId)}">Restorecode</button>`
+            : '';
         const obligationBadge = entry?.obligation ? '<span class="ml-2 inline-flex items-center rounded bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700">Pflicht</span>' : '';
         return `
             <div class="rounded-lg border border-gray-200 bg-white p-2">
-                <div class="font-semibold text-gray-800">${version}${obligationBadge}</div>
-                <div class="text-xs text-gray-500">${date} ${time}</div>
-                <div class="text-sm text-gray-700 mt-1">${note}</div>
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div class="min-w-0">
+                        <div class="font-semibold text-gray-800">${escapeHtml(version)}${obligationBadge}</div>
+                        <div class="text-xs text-gray-500">${escapeHtml(date)} ${escapeHtml(time)}</div>
+                    </div>
+                    ${restoreButton}
+                </div>
+                <div class="text-xs font-semibold uppercase tracking-wide text-indigo-700 mt-2">Bereich: ${escapeHtml(area)}</div>
+                <div class="text-sm text-gray-700 mt-1">${escapeHtml(note)}</div>
             </div>
         `;
     }).join('');
+
+    historyContainer.querySelectorAll('.version-restore-open-btn').forEach((button) => {
+        button.addEventListener('click', () => {
+            openRestoreCodeModal({
+                version: button.dataset.version || '-',
+                commitId: button.dataset.commitId || 'pending'
+            });
+        });
+    });
 }
 
 function applyVersionModalTheme(isMandatory) {
@@ -908,6 +892,7 @@ function startMainAppInitializationIfAllowed() {
 
 function bindVersionModalEvents() {
     const { modal, closeBtn, closeHeaderBtn } = getVersionInfoModalElements();
+    const { modal: restoreModal, closeBtn: restoreCloseBtn, closeHeaderBtn: restoreCloseHeaderBtn } = getRestoreCodeModalElements();
     if (!modal) return;
 
     if (modal.dataset.bound === 'true') return;
@@ -924,6 +909,22 @@ function bindVersionModalEvents() {
 
     if (closeHeaderBtn) {
         closeHeaderBtn.addEventListener('click', () => closeVersionInfoModal());
+    }
+
+    if (restoreModal) {
+        restoreModal.addEventListener('click', (event) => {
+            if (event.target === restoreModal) {
+                closeRestoreCodeModal();
+            }
+        });
+    }
+
+    if (restoreCloseBtn) {
+        restoreCloseBtn.addEventListener('click', () => closeRestoreCodeModal());
+    }
+
+    if (restoreCloseHeaderBtn) {
+        restoreCloseHeaderBtn.addEventListener('click', () => closeRestoreCodeModal());
     }
 
     modal.dataset.bound = 'true';
@@ -955,6 +956,11 @@ function updateFooterVersionUI(versionInfo, hasUpdate) {
     }
 
     indicator.onclick = () => {
+        if (!hasUpdate && isVersionUiGuestContext()) {
+            alertUser('Diese Ansicht ist für Gäste nicht verfügbar.', 'error');
+            return;
+        }
+
         openVersionInfoModal(versionInfo || appVersionState.latestInfo, { forceOpen: false });
     };
 }
@@ -965,6 +971,7 @@ function openVersionInfoModal(versionInfoOverride = null, options = {}) {
         buildId: CURRENT_BUILD_ID,
         releaseDate: '-',
         releaseTime: '-',
+        releaseArea: '-',
         releaseNote: '-',
         history: [],
         obligation: false,
@@ -973,9 +980,11 @@ function openVersionInfoModal(versionInfoOverride = null, options = {}) {
 
     const hasUpdate = isUpdateAvailable(info);
     const isMandatoryUpdate = hasUpdate && parseBooleanFlag(info?.obligation);
+    const isGuestViewer = isVersionUiGuestContext();
 
     const {
         modal,
+        content,
         title,
         summary,
         currentVersion,
@@ -984,6 +993,7 @@ function openVersionInfoModal(versionInfoOverride = null, options = {}) {
         latestBuild,
         releaseDate,
         releaseTime,
+        releaseArea,
         releaseNote,
         details,
         installProgressPanel,
@@ -996,7 +1006,12 @@ function openVersionInfoModal(versionInfoOverride = null, options = {}) {
         closeHeaderBtn
     } = getVersionInfoModalElements();
 
-    if (!modal || !title || !summary || !currentVersion || !currentBuild || !latestVersion || !latestBuild || !releaseDate || !releaseTime || !releaseNote || !details || !installProgressPanel || !laterBtn || !installBtn || !installBtnText || !installBtnPercent || !installBtnSpinner || !closeBtn || !closeHeaderBtn) {
+    if (!modal || !content || !title || !summary || !currentVersion || !currentBuild || !latestVersion || !latestBuild || !releaseDate || !releaseTime || !releaseArea || !releaseNote || !details || !installProgressPanel || !laterBtn || !installBtn || !installBtnText || !installBtnPercent || !installBtnSpinner || !closeBtn || !closeHeaderBtn) {
+        return;
+    }
+
+    if (isGuestViewer && !hasUpdate) {
+        alertUser('Diese Ansicht ist für Gäste nicht verfügbar.', 'error');
         return;
     }
 
@@ -1012,26 +1027,29 @@ function openVersionInfoModal(versionInfoOverride = null, options = {}) {
     latestBuild.textContent = `Build: ${info.buildId || '-'}`;
     releaseDate.textContent = info.releaseDate || '-';
     releaseTime.textContent = info.releaseTime || '-';
+    releaseArea.textContent = info.releaseArea || '-';
     releaseNote.textContent = info.releaseNote || '-';
+    laterBtn.textContent = isGuestViewer ? 'Abbrechen' : 'Später';
+    content.classList.toggle('hidden', isGuestViewer && hasUpdate);
 
     renderVersionHistory(info.history);
     details.open = false;
     stopVersionInstallProgressSimulation();
 
     if (hasUpdate) {
-        const installButtonLabel = isMandatoryUpdate ? 'Starten' : 'Update jetzt';
+        const installButtonLabel = isMandatoryUpdate ? 'Starten' : (isGuestViewer ? 'Durchführen' : 'Update jetzt');
         if (isMandatoryUpdate) {
             title.textContent = 'Pflicht-Update erforderlich';
-            summary.textContent = `Diese Version ist verpflichtend. Bitte "Starten" ausfuehren (${CURRENT_APP_VERSION} -> ${info.version || CURRENT_APP_VERSION}).`; 
+            summary.textContent = isGuestViewer ? '' : `Diese Version ist verpflichtend. Bitte "Starten" ausfuehren (${CURRENT_APP_VERSION} -> ${info.version || CURRENT_APP_VERSION}).`;
             laterBtn.classList.add('hidden');
             closeBtn.classList.add('hidden');
             closeHeaderBtn.classList.add('hidden');
             installBtn.classList.remove('hidden');
         } else {
             title.textContent = 'Update verfuegbar';
-            summary.textContent = `Neue Version erkannt: ${CURRENT_APP_VERSION} -> ${info.version || CURRENT_APP_VERSION}.`; 
+            summary.textContent = isGuestViewer ? '' : `Neue Version erkannt: ${CURRENT_APP_VERSION} -> ${info.version || CURRENT_APP_VERSION}.`;
             laterBtn.classList.remove('hidden');
-            closeHeaderBtn.classList.remove('hidden');
+            closeHeaderBtn.classList.toggle('hidden', isGuestViewer);
             installBtn.classList.remove('hidden');
             closeBtn.classList.add('hidden');
         }
@@ -1059,7 +1077,7 @@ function openVersionInfoModal(versionInfoOverride = null, options = {}) {
         installBtn.onclick = async () => {
             installBtn.disabled = true;
             if (!isMandatoryUpdate) laterBtn.disabled = true;
-            summary.textContent = isMandatoryUpdate ? 'Pflicht-Update wird gestartet...' : 'Update wird installiert...';
+            summary.textContent = isGuestViewer ? '' : (isMandatoryUpdate ? 'Pflicht-Update wird gestartet...' : 'Update wird installiert...');
             startVersionInstallProgressSimulation(installButtonLabel);
 
             try {
@@ -1071,7 +1089,7 @@ function openVersionInfoModal(versionInfoOverride = null, options = {}) {
                     percent: 100,
                     baseLabel: installButtonLabel
                 });
-                summary.textContent = 'Update wird abgeschlossen...';
+                summary.textContent = isGuestViewer ? '' : 'Update wird abgeschlossen...';
             } catch (error) {
                 console.error('Update-Installation fehlgeschlagen:', error);
                 stopVersionInstallProgressSimulation();
@@ -1081,7 +1099,7 @@ function openVersionInfoModal(versionInfoOverride = null, options = {}) {
                     percent: 0,
                     baseLabel: installButtonLabel
                 });
-                summary.textContent = 'Update fehlgeschlagen. Bitte erneut versuchen.';
+                summary.textContent = isGuestViewer ? '' : 'Update fehlgeschlagen. Bitte erneut versuchen.';
                 installBtn.disabled = false;
                 if (!isMandatoryUpdate) laterBtn.disabled = false;
             }
@@ -1090,6 +1108,7 @@ function openVersionInfoModal(versionInfoOverride = null, options = {}) {
         applyVersionModalTheme(false);
         title.textContent = 'Versionsinformationen';
         summary.textContent = 'Diese App ist auf dem aktuellen Stand.';
+        content.classList.remove('hidden');
         setVersionInstallProgressUi({
             visible: false,
             installing: false,
