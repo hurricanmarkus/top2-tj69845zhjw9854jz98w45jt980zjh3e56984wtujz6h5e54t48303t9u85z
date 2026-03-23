@@ -1,13 +1,22 @@
 {
-  "version": "1.4.18",
-  "buildId": "20260323-2",
+  "version": "1.4.19",
+  "buildId": "20260323-3",
   "releaseDate": "2026-03-23",
-  "releaseTime": "08:27",
+  "releaseTime": "08:42",
   "timezone": "Europe/Vienna",
-  "note": "Checkliste: Schiff-Verwaltung ersetzt den direkten Loeschlink und erlaubt Auswahl, Umbenennen sowie Loeschen bestehender Schiffe.",
-  "commitId": "86f6a12",
+  "note": "Checkliste: Aktiver Einstellungs-Renderpfad korrigiert, damit Schiff verwalten im echten UI sichtbar ist.",
+  "commitId": "6fdbed8",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.4.19",
+      "buildId": "20260323-3",
+      "releaseDate": "2026-03-23",
+      "releaseTime": "08:42",
+      "note": "Checkliste: Aktiver Einstellungs-Renderpfad korrigiert, damit Schiff verwalten im echten UI sichtbar ist.",
+      "commitId": "6fdbed8",
+      "obligation": "false"
+    },
     {
       "version": "1.4.18",
       "buildId": "20260323-2",

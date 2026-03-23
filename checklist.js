@@ -2245,7 +2245,7 @@ function renderChecklistSettingsView(editListId = null) {
       <div class="p-3 bg-gray-50 rounded-lg space-y-2">
         <div class="flex justify-between items-center mb-1">
             <h4 class="font-bold text-gray-800">Neues Schiff erstellen</h4>
-            <button id="show-delete-ship-form-btn" class="text-xs text-red-600 font-semibold hover:underline">Schiff löschen...</button>
+            <button id="show-delete-ship-form-btn" class="text-xs text-blue-600 font-semibold hover:underline">Schiff verwalten...</button>
         </div>
         <div class="flex gap-2">
           <input type="text" id="checklist-settings-new-ship-name" class="flex-grow p-2 border rounded-lg" placeholder="Name für neues Schiff...">
@@ -2253,13 +2253,17 @@ function renderChecklistSettingsView(editListId = null) {
         </div>
         </div>
 
-      <div id="delete-ship-section" class="hidden p-3 bg-red-50 border border-red-200 rounded-lg space-y-2">
-        <h4 class="font-bold text-red-800">Schiff löschen</h4>
-        <select id="delete-ship-selector" class="w-full p-2 border rounded-lg bg-white border-red-300">
-            <option value="">Schiff zum Löschen auswählen...</option>
+      <div id="delete-ship-section" class="hidden p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+        <h4 class="font-bold text-blue-800">Schiff verwalten</h4>
+        <select id="delete-ship-selector" class="w-full p-2 border rounded-lg bg-white border-blue-300">
+            <option value="">Schiff auswählen...</option>
             ${Object.values(CHECKLIST_SHIPS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}
         </select>
-        <button id="delete-ship-btn" class="w-full py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700">Ausgewähltes Schiff löschen</button>
+        <input type="text" id="manage-ship-name" class="w-full p-2 border rounded-lg" placeholder="Schiffsname bearbeiten...">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button id="rename-ship-btn" class="w-full py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Ausgewähltes Schiff umbenennen</button>
+          <button id="delete-ship-btn" class="w-full py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700">Ausgewähltes Schiff löschen</button>
+        </div>
       </div>
       <div class="p-3 bg-gray-50 rounded-lg space-y-2">
         <h4 class="font-bold text-gray-800">Neuen Container erstellen</h4>
@@ -2408,7 +2412,11 @@ function renderChecklistSettingsView(editListId = null) {
   const deleteShipSelector = view.querySelector('#delete-ship-selector');
   if (deleteShipSelector) {
         const shipOpts = Object.values(CHECKLIST_SHIPS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
-        deleteShipSelector.innerHTML = `<option value="">Schiff zum Löschen auswählen...</option>` + shipOpts;
+        deleteShipSelector.innerHTML = `<option value="">Schiff auswählen...</option>` + shipOpts;
+  }
+  const manageShipNameInput = view.querySelector('#manage-ship-name');
+  if (manageShipNameInput) {
+      manageShipNameInput.value = deleteShipSelector?.value ? (CHECKLIST_SHIPS[deleteShipSelector.value]?.name || '') : '';
   }
 
   const templateAssignee = view.querySelector('#new-template-item-assignee');
