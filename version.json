@@ -1,13 +1,22 @@
 {
-  "version": "1.4.16",
-  "buildId": "20260322-4",
-  "releaseDate": "2026-03-22",
-  "releaseTime": "11:31",
+  "version": "1.4.17",
+  "buildId": "20260323-1",
+  "releaseDate": "2026-03-23",
+  "releaseTime": "08:23",
   "timezone": "Europe/Vienna",
-  "note": "Checkliste: Kategorien-Editor repariert, Dropdown-/Gruppenzuweisungsfehler behoben und Modal-/Papierkorbpfade stabilisiert.",
-  "commitId": "397f073",
+  "note": "Checkliste: Container-Eintraege koennen per Enter gespeichert werden und merken Zuweisung sowie Kategorie fuer Folgeeingaben.",
+  "commitId": "2e58e14",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.4.17",
+      "buildId": "20260323-1",
+      "releaseDate": "2026-03-23",
+      "releaseTime": "08:23",
+      "note": "Checkliste: Container-Eintraege koennen per Enter gespeichert werden und merken Zuweisung sowie Kategorie fuer Folgeeingaben.",
+      "commitId": "2e58e14",
+      "obligation": "false"
+    },
     {
       "version": "1.4.16",
       "buildId": "20260322-4",

@@ -50,6 +50,7 @@ const safeWindow = (name, fallback) => {
 let selectedTemplateId = null;
 let unsubscribeTemplateItems = null;
 let TEMPLATE_ITEMS = {}; // Hier speichern wir die Items der Vorlagen
+let lastTemplateItemFormSelection = { assignedTo: '', categoryId: '' };
 
 // Hinweis: Die anderen großen Objekte (CHECKLISTS, USERS etc.) 
 // kommen aus dem Import von 'haupteingang.js'.
@@ -1314,6 +1315,60 @@ function setupSchiffAndContainerManagementListeners(view) {
 
     console.log("setupSchiffAndContainerManagementListeners: Hänge PRIMÄREN Listener an #card-templates an.");
 
+    const applyTemplateItemFormSelection = () => {
+        const assigneeSelect = document.getElementById('new-template-item-assignee');
+        if (assigneeSelect) {
+            assigneeSelect.value = lastTemplateItemFormSelection.assignedTo || '';
+        }
+        const categorySelect = document.getElementById('new-template-item-category');
+        if (categorySelect) {
+            categorySelect.value = lastTemplateItemFormSelection.categoryId || '';
+        }
+    };
+
+    const addTemplateItemFromEditor = async () => {
+        const textInput = document.getElementById('new-template-item-text');
+        const assigneeSelect = document.getElementById('new-template-item-assignee');
+        const categorySelect = document.getElementById('new-template-item-category');
+        const importantCheckbox = document.getElementById('new-template-item-important');
+        const activeTemplateId = getActiveTemplateId();
+        if (!textInput || !assigneeSelect || !categorySelect || !importantCheckbox) {
+            console.error("Fehler: Elemente zum Hinzufügen von Template-Items nicht gefunden.");
+            alertUser("Fehler: UI-Elemente nicht gefunden.", "error");
+            return false;
+        }
+        if (!activeTemplateId) {
+            alertUser("Bitte zuerst einen Container auswählen.", "error");
+            return false;
+        }
+        const text = textInput.value.trim();
+        if (!text) {
+            alertUser("Bitte Text eingeben.", "error");
+            return false;
+        }
+        const assignedTo = assigneeSelect.value;
+        const assignedToName = assignedTo ? assigneeSelect.options[assigneeSelect.selectedIndex].text : null;
+        const categoryId = categorySelect.value;
+        const categoryName = categoryId ? categorySelect.options[categorySelect.selectedIndex].text : null;
+        const newItemData = { text, important: importantCheckbox.checked, assignedTo: assignedTo || null, assignedToName, categoryId: categoryId || null, categoryName, addedBy: getCurrentActorName(), addedAt: typeof serverTimestamp === 'function' ? serverTimestamp() : null };
+        try {
+            const itemsSubCollectionRef = collection(checklistTemplatesCollectionRef, activeTemplateId, 'template-items');
+            await addDoc(itemsSubCollectionRef, newItemData);
+            lastTemplateItemFormSelection.assignedTo = assignedTo || '';
+            lastTemplateItemFormSelection.categoryId = categoryId || '';
+            textInput.value = '';
+            assigneeSelect.value = lastTemplateItemFormSelection.assignedTo;
+            categorySelect.value = lastTemplateItemFormSelection.categoryId;
+            importantCheckbox.checked = false;
+            textInput.focus();
+            return true;
+        } catch (err) {
+            console.error("Fehler beim Hinzufügen des Template-Items:", err);
+            alertUser("Fehler beim Hinzufügen des Eintrags.", "error");
+            return false;
+        }
+    };
+
     templatesCard.addEventListener('click', async (e) => {
         // Der Rest der Funktion bleibt genau gleich wie in der letzten Version
         // ... (Logik für Schiff erstellen, Schiff löschen, Container erstellen, Container auswählen, Schiff zuweisen, Eintrag hinzufügen, Container löschen) ...
@@ -1429,19 +1484,20 @@ function setupSchiffAndContainerManagementListeners(view) {
                  editor.classList.add('hidden');
                  if (typeof unsubscribeTemplateItems === 'function') unsubscribeTemplateItems();
              } else {
-                 selectedTemplateId = clickedTemplateId;
-                 document.getElementById('template-editor-title').textContent = `Einträge für Container "${TEMPLATES[selectedTemplateId]?.name || '–'}"`;
-                 editor.classList.remove('hidden');
-                 if (typeof unsubscribeTemplateItems === 'function') unsubscribeTemplateItems();
-                 if (typeof onSnapshot === 'function' && checklistTemplatesCollectionRef) {
-                     const templateId = clickedTemplateId;
-                     const itemsSubCollectionRef = collection(checklistTemplatesCollectionRef, templateId, 'template-items');
+                selectedTemplateId = clickedTemplateId;
+                document.getElementById('template-editor-title').textContent = `Einträge für Container "${TEMPLATES[selectedTemplateId]?.name || '–'}"`;
+                editor.classList.remove('hidden');
+                applyTemplateItemFormSelection();
+                if (typeof unsubscribeTemplateItems === 'function') unsubscribeTemplateItems();
+                if (typeof onSnapshot === 'function' && checklistTemplatesCollectionRef) {
+                    const templateId = clickedTemplateId;
+                    const itemsSubCollectionRef = collection(checklistTemplatesCollectionRef, templateId, 'template-items');
                      unsubscribeTemplateItems = onSnapshot(query(itemsSubCollectionRef, orderBy('text')), (snapshot) => {
                          TEMPLATE_ITEMS[templateId] = [];
                          snapshot.forEach(doc => TEMPLATE_ITEMS[templateId].push({ id: doc.id, ...doc.data() }));
                          renderTemplateItemsEditor(templateId);
                      }, console.error);
-                 }
+                }
              }
              renderContainerList();
              return;
@@ -1484,35 +1540,7 @@ function setupSchiffAndContainerManagementListeners(view) {
         // "+ Eintrag hinzufügen" Button im Editor
         if (e.target.closest('#add-template-item-btn')) {
              console.log("... Klick auf '+ Eintrag hinzufügen' (im Editor) verarbeitet.");
-            const textInput = document.getElementById('new-template-item-text');
-            const assigneeSelect = document.getElementById('new-template-item-assignee');
-            const categorySelect = document.getElementById('new-template-item-category');
-            const importantCheckbox = document.getElementById('new-template-item-important');
-            const activeTemplateId = getActiveTemplateId();
-            if (!textInput || !assigneeSelect || !categorySelect || !importantCheckbox) {
-                console.error("Fehler: Elemente zum Hinzufügen von Template-Items nicht gefunden.");
-                return alertUser("Fehler: UI-Elemente nicht gefunden.", "error");
-            }
-            if (!activeTemplateId) return alertUser("Bitte zuerst einen Container auswählen.", "error");
-            const text = textInput.value.trim();
-            if (!text) return alertUser("Bitte Text eingeben.", "error");
-            const assignedTo = assigneeSelect.value;
-            const assignedToName = assignedTo ? assigneeSelect.options[assigneeSelect.selectedIndex].text : null;
-            const categoryId = categorySelect.value;
-            const categoryName = categoryId ? categorySelect.options[categorySelect.selectedIndex].text : null;
-            const newItemData = { text, important: importantCheckbox.checked, assignedTo: assignedTo || null, assignedToName, categoryId: categoryId || null, categoryName, addedBy: getCurrentActorName(), addedAt: typeof serverTimestamp === 'function' ? serverTimestamp() : null };
-            try {
-                const itemsSubCollectionRef = collection(checklistTemplatesCollectionRef, activeTemplateId, 'template-items');
-                await addDoc(itemsSubCollectionRef, newItemData);
-                textInput.value = '';
-                assigneeSelect.value = '';
-                categorySelect.value = '';
-                importantCheckbox.checked = false;
-                textInput.focus();
-            } catch (err) {
-                 console.error("Fehler beim Hinzufügen des Template-Items:", err);
-                 alertUser("Fehler beim Hinzufügen des Eintrags.", "error");
-            }
+            await addTemplateItemFromEditor();
             return;
         }
 
@@ -1545,6 +1573,13 @@ function setupSchiffAndContainerManagementListeners(view) {
         console.log("setupSchiffAndContainerManagementListeners: Klick wurde vom primären Listener erkannt, aber keiner der spezifischen Fälle passte.");
 
     }); // Ende addEventListener für templatesCard
+
+    templatesCard.addEventListener('keydown', async (e) => {
+        const textInput = e.target.closest('#new-template-item-text');
+        if (!textInput || e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
+        e.preventDefault();
+        await addTemplateItemFromEditor();
+    });
 }
 
 /* BACKUP-FUNKTION ZIKA 26.10. FUNKT ALLES AUSSER ARCHIV VON LISTEN
@@ -2284,8 +2319,13 @@ function renderChecklistSettingsView(editListId = null) {
   const templateAssignee = view.querySelector('#new-template-item-assignee');
   if (templateAssignee) {
       templateAssignee.innerHTML = `<option value="">Zuweisen...</option>` + Object.values(USERS || {}).map(u => `<option value="${u.id}">${escapeHtml(u.name||u.displayName||'')}</option>`).join('');
+      templateAssignee.value = lastTemplateItemFormSelection.assignedTo || '';
   }
   updateCategoryDropdowns();
+  const templateCategory = view.querySelector('#new-template-item-category');
+  if (templateCategory) {
+      templateCategory.value = lastTemplateItemFormSelection.categoryId || '';
+  }
 
   // --- Helper für Gruppen-Anzeige im Editor ---
   function updateCurrentGroupDisplay(listId) {
