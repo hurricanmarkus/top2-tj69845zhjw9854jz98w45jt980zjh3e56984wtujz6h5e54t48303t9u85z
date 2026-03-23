@@ -1,14 +1,24 @@
 {
-  "version": "1.5.0",
-  "buildId": "20260323-5",
+  "version": "1.5.1",
+  "buildId": "20260323-6",
   "releaseDate": "2026-03-23",
-  "releaseTime": "11:40",
+  "releaseTime": "11:58",
   "bereich": "Versionssystem",
   "timezone": "Europe/Vienna",
-  "note": "Bereich-Feld, SYSTEMADMIN-Restorecode und Gastlogik im Versionsdialog ergänzt.",
+  "note": "Fehlende Versions-Loader in haupteingang.js wiederhergestellt, damit Versionsdaten für eingeloggte Benutzer korrekt angezeigt werden.",
   "commitId": "pending",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.5.1",
+      "buildId": "20260323-6",
+      "releaseDate": "2026-03-23",
+      "releaseTime": "11:58",
+      "bereich": "Versionssystem",
+      "note": "Fehlende Versions-Loader in haupteingang.js wiederhergestellt, damit Versionsdaten für eingeloggte Benutzer korrekt angezeigt werden.",
+      "commitId": "pending",
+      "obligation": "false"
+    },
     {
       "version": "1.5.0",
       "buildId": "20260323-5",

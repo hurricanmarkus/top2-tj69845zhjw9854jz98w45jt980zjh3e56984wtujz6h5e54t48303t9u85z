@@ -582,6 +582,42 @@ function splitComparableTokens(value) {
     return String(value || '').toLowerCase().match(/[0-9]+|[a-z]+/g) || [];
 }
 
+function compareComparableStrings(a, b) {
+    const left = splitComparableTokens(a);
+    const right = splitComparableTokens(b);
+    const max = Math.max(left.length, right.length);
+
+    for (let i = 0; i < max; i += 1) {
+        const lv = left[i];
+        const rv = right[i];
+
+        if (lv === undefined && rv !== undefined) return -1;
+        if (rv === undefined && lv !== undefined) return 1;
+        if (lv === rv) continue;
+
+        const leftIsNum = /^\d+$/.test(lv);
+        const rightIsNum = /^\d+$/.test(rv);
+
+        if (leftIsNum && rightIsNum) {
+            const ln = Number(lv);
+            const rn = Number(rv);
+            if (ln > rn) return 1;
+            if (ln < rn) return -1;
+        } else {
+            if (lv > rv) return 1;
+            if (lv < rv) return -1;
+        }
+    }
+
+    return 0;
+}
+
+function compareVersionCandidates(a, b) {
+    const versionCmp = compareComparableStrings(a?.version, b?.version);
+    if (versionCmp !== 0) return versionCmp;
+    return compareComparableStrings(a?.buildId, b?.buildId);
+}
+
 function isNewerThanCurrent(candidate) {
     if (!candidate) return false;
     return compareVersionCandidates(candidate, { version: CURRENT_APP_VERSION, buildId: CURRENT_BUILD_ID }) > 0;
@@ -626,6 +662,153 @@ function dedupeVersionHistory(entries) {
     });
 
     return result;
+}
+
+function extractMetaContentFromHtml(html, metaName) {
+    const safeName = String(metaName || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regexNameThenContent = new RegExp(`<meta[^>]*name=["']${safeName}["'][^>]*content=["']([^"']+)["'][^>]*>`, 'i');
+    const regexContentThenName = new RegExp(`<meta[^>]*content=["']([^"']+)["'][^>]*name=["']${safeName}["'][^>]*>`, 'i');
+
+    const matchA = html.match(regexNameThenContent);
+    if (matchA && matchA[1]) return String(matchA[1]).trim();
+
+    const matchB = html.match(regexContentThenName);
+    if (matchB && matchB[1]) return String(matchB[1]).trim();
+
+    return '';
+}
+
+async function parseIndexVersionMeta() {
+    const response = await fetch(`/?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            Pragma: 'no-cache'
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error(`index.html nicht erreichbar (${response.status})`);
+    }
+
+    const html = await response.text();
+    return {
+        version: extractMetaContentFromHtml(html, 'top2-app-version'),
+        buildId: extractMetaContentFromHtml(html, 'top2-build-id')
+    };
+}
+
+async function fetchLatestVersionInfo() {
+    const [versionPayloadResult, indexBuildResult] = await Promise.allSettled([
+        (async () => {
+            const url = `${VERSION_INFO_URL}?t=${Date.now()}`;
+            const response = await fetch(url, {
+                cache: 'no-store',
+                headers: {
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    Pragma: 'no-cache'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`version.json nicht erreichbar (${response.status})`);
+            }
+
+            return response.json();
+        })(),
+        parseIndexVersionMeta()
+    ]);
+
+    const data = versionPayloadResult.status === 'fulfilled' ? versionPayloadResult.value : null;
+    const indexBuild = indexBuildResult.status === 'fulfilled' ? indexBuildResult.value : {};
+
+    if (versionPayloadResult.status === 'rejected') {
+        console.warn('Version-Check: version.json konnte nicht geladen werden.', versionPayloadResult.reason);
+    }
+    if (indexBuildResult.status === 'rejected') {
+        console.warn('Version-Check: Index-Metadaten konnten nicht geladen werden.', indexBuildResult.reason);
+    }
+
+    if (!data && !indexBuild.buildId && !indexBuild.version) {
+        throw new Error('Version-Info und Index-Metadaten nicht erreichbar.');
+    }
+
+    const topJsonEntry = normalizeVersionCandidate(data || {}, { source: 'version.json' });
+    const indexEntry = normalizeVersionCandidate(indexBuild || {}, {
+        source: 'index.html',
+        obligation: false,
+        releaseDate: topJsonEntry.releaseDate,
+        releaseTime: topJsonEntry.releaseTime,
+        releaseArea: topJsonEntry.releaseArea,
+        releaseNote: topJsonEntry.releaseNote,
+        commitId: topJsonEntry.commitId
+    });
+
+    const historyEntries = (Array.isArray(data?.history) ? data.history : []).map((entry) => normalizeVersionCandidate(entry, {
+        source: 'version.history',
+        obligation: false
+    }));
+
+    const allCandidates = dedupeVersionHistory([
+        ...historyEntries,
+        topJsonEntry,
+        indexEntry,
+        {
+            version: CURRENT_APP_VERSION,
+            buildId: CURRENT_BUILD_ID,
+            releaseDate: topJsonEntry.releaseDate,
+            releaseTime: topJsonEntry.releaseTime,
+            releaseArea: topJsonEntry.releaseArea,
+            releaseNote: 'Installierte Version',
+            note: 'Installierte Version',
+            commitId: '',
+            obligation: false,
+            source: 'runtime'
+        }
+    ].filter((entry) => entry.version || entry.buildId));
+
+    const newerCandidates = allCandidates.filter((entry) => isNewerThanCurrent(entry));
+    const mandatoryNewerCandidates = newerCandidates.filter((entry) => entry.obligation);
+    const preferredPool = mandatoryNewerCandidates.length > 0 ? mandatoryNewerCandidates : (newerCandidates.length > 0 ? newerCandidates : allCandidates);
+
+    const selected = preferredPool.reduce((best, current) => {
+        if (!best) return current;
+        return compareVersionCandidates(current, best) > 0 ? current : best;
+    }, null) || {
+        version: CURRENT_APP_VERSION,
+        buildId: CURRENT_BUILD_ID,
+        releaseDate: '-',
+        releaseTime: '-',
+        releaseArea: '-',
+        releaseNote: '-',
+        note: '-',
+        commitId: '',
+        obligation: false,
+        source: 'runtime'
+    };
+
+    const history = dedupeVersionHistory([
+        selected,
+        ...allCandidates
+    ]).sort((a, b) => compareVersionCandidates(b, a));
+
+    const isNewer = isNewerThanCurrent(selected);
+    const obligation = isNewer && selected.obligation;
+
+    return {
+        version: selected.version,
+        buildId: selected.buildId,
+        releaseDate: selected.releaseDate,
+        releaseTime: selected.releaseTime,
+        releaseArea: selected.releaseArea,
+        releaseNote: selected.releaseNote,
+        history,
+        commitId: selected.commitId,
+        obligation,
+        isNewer,
+        hasMandatoryNewer: mandatoryNewerCandidates.length > 0,
+        source: selected.source
+    };
 }
 
 function getVersionInfoModalElements() {
