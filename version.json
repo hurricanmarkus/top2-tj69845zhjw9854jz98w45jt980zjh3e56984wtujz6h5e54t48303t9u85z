@@ -1,14 +1,24 @@
 {
-  "version": "1.5.2",
-  "buildId": "20260331-1",
+  "version": "1.5.3",
+  "buildId": "20260331-2",
   "releaseDate": "2026-03-31",
-  "releaseTime": "08:01",
+  "releaseTime": "08:32",
   "bereich": "Wertguthaben",
   "timezone": "Europe/Vienna",
-  "note": "Wertguthaben-Kategorien werden jetzt robust in Firebase gespeichert, live synchronisiert und nicht mehr durch lokale Normalisierung verloren.",
-  "commitId": "f7db031",
+  "note": "Wertguthaben-Settings normalisieren jetzt alle Default-Warnwerte konsistent, sodass Aktionscode-Warnungen beim Speichern nicht verloren gehen.",
+  "commitId": "4108419",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.5.3",
+      "buildId": "20260331-2",
+      "releaseDate": "2026-03-31",
+      "releaseTime": "08:32",
+      "bereich": "Wertguthaben",
+      "note": "Wertguthaben-Settings normalisieren jetzt alle Default-Warnwerte konsistent, sodass Aktionscode-Warnungen beim Speichern nicht verloren gehen.",
+      "commitId": "4108419",
+      "obligation": "false"
+    },
     {
       "version": "1.5.2",
       "buildId": "20260331-1",

@@ -2050,18 +2050,31 @@ function shouldNormalizeWertguthabenKategorieInFirestore(rawCategory) {
     return category.toLowerCase() === WG_UNASSIGNED_KATEGORIE.toLowerCase() && category !== WG_UNASSIGNED_KATEGORIE;
 }
 
-function applyWertguthabenSettings(rawSettings) {
+function normalizeWertguthabenDefaultWarnings(rawWarnings) {
+    return {
+        gutschein: 14,
+        guthaben: 30,
+        wertguthaben: 90,
+        wertguthaben_gesetzlich: 180,
+        aktionscode: 7,
+        ...(rawWarnings && typeof rawWarnings === 'object' ? rawWarnings : {})
+    };
+}
+
+function buildNormalizedWertguthabenSettingsPayload(rawSettings) {
     const parsed = rawSettings && typeof rawSettings === 'object' ? rawSettings : {};
-    wertguthabenSettings = {
+    return {
+        ...parsed,
         kategorien: sanitizeWertguthabenKategorien(parsed.kategorien),
-        defaultWarnings: {
-            gutschein: 14,
-            guthaben: 30,
-            wertguthaben: 90,
-            wertguthaben_gesetzlich: 180,
-            aktionscode: 7,
-            ...(parsed.defaultWarnings || {})
-        }
+        defaultWarnings: normalizeWertguthabenDefaultWarnings(parsed.defaultWarnings)
+    };
+}
+
+function applyWertguthabenSettings(rawSettings) {
+    const parsed = buildNormalizedWertguthabenSettingsPayload(rawSettings);
+    wertguthabenSettings = {
+        kategorien: parsed.kategorien,
+        defaultWarnings: parsed.defaultWarnings
     };
 
     populateKategorieDropdowns();
@@ -2184,26 +2197,12 @@ function renderWertguthabenKategorieSettingsList() {
 
 async function persistWertguthabenSettings() {
     try {
-        const payload = {
-            ...wertguthabenSettings,
-            kategorien: sanitizeWertguthabenKategorien(wertguthabenSettings.kategorien)
-        };
+        const payload = buildNormalizedWertguthabenSettingsPayload(wertguthabenSettings);
         await saveUserSetting('wertguthabenSettings', payload);
 
         const persisted = getUserSetting('wertguthabenSettings', null);
         const expectedSerialized = JSON.stringify(payload);
-        const persistedSerialized = JSON.stringify({
-            ...(persisted && typeof persisted === 'object' ? persisted : {}),
-            kategorien: sanitizeWertguthabenKategorien(persisted?.kategorien),
-            defaultWarnings: {
-                gutschein: 14,
-                guthaben: 30,
-                wertguthaben: 90,
-                wertguthaben_gesetzlich: 180,
-                aktionscode: 7,
-                ...(persisted?.defaultWarnings || {})
-            }
-        });
+        const persistedSerialized = JSON.stringify(buildNormalizedWertguthabenSettingsPayload(persisted));
 
         if (persistedSerialized !== expectedSerialized) {
             throw new Error('Die Wertguthaben-Einstellungen konnten nicht in Firebase bestätigt werden.');
@@ -4045,13 +4044,18 @@ async function saveSettings() {
     const guthaben = parseInt(document.getElementById('settings-warning-guthaben').value) || 30;
     const wertguthaben = parseInt(document.getElementById('settings-warning-wertguthaben').value) || 90;
     const wertguthaben_gesetzlich = parseInt(document.getElementById('settings-warning-wertguthaben_gesetzlich').value) || 180;
+    const aktionscodeInput = document.getElementById('settings-warning-aktionscode');
+    const aktionscode = aktionscodeInput
+        ? (parseInt(aktionscodeInput.value) || 7)
+        : (wertguthabenSettings.defaultWarnings?.aktionscode || 7);
 
     // Einstellungen aktualisieren
     wertguthabenSettings.defaultWarnings = {
         gutschein,
         guthaben,
         wertguthaben,
-        wertguthaben_gesetzlich
+        wertguthaben_gesetzlich,
+        aktionscode
     };
     wertguthabenSettings.kategorien = sanitizeWertguthabenKategorien(wertguthabenSettings.kategorien);
 
