@@ -1,14 +1,24 @@
 {
-  "version": "1.5.3",
-  "buildId": "20260331-2",
+  "version": "1.5.4",
+  "buildId": "20260331-3",
   "releaseDate": "2026-03-31",
-  "releaseTime": "08:32",
+  "releaseTime": "08:44",
   "bereich": "Wertguthaben",
   "timezone": "Europe/Vienna",
-  "note": "Wertguthaben-Settings normalisieren jetzt alle Default-Warnwerte konsistent, sodass Aktionscode-Warnungen beim Speichern nicht verloren gehen.",
-  "commitId": "4108419",
+  "note": "Wertguthaben besitzt jetzt ein 3-Punkte-Menü mit Transaktionsübersicht, Datumsfilter und klickbarer Liste zum Öffnen des zugehörigen Eintrags.",
+  "commitId": "de87471",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.5.4",
+      "buildId": "20260331-3",
+      "releaseDate": "2026-03-31",
+      "releaseTime": "08:44",
+      "bereich": "Wertguthaben",
+      "note": "Wertguthaben besitzt jetzt ein 3-Punkte-Menü mit Transaktionsübersicht, Datumsfilter und klickbarer Liste zum Öffnen des zugehörigen Eintrags.",
+      "commitId": "de87471",
+      "obligation": "false"
+    },
     {
       "version": "1.5.3",
       "buildId": "20260331-2",

@@ -24,15 +24,15 @@
     <meta name="application-name" content="TOP 2 App">
     <meta name="apple-mobile-web-app-title" content="TOP 2">
     <meta name="theme-color" content="#4f46e5" />
-    <meta name="top2-app-version" content="1.5.3" />
-    <meta name="top2-build-id" content="20260331-2" />
+    <meta name="top2-app-version" content="1.5.4" />
+    <meta name="top2-build-id" content="20260331-3" />
     <meta name="msapplication-navbutton-color" content="#4f46e5">
     <meta name="apple-mobile-app-status-bar-style" content="black-translucent">
     <link rel="icon" type="image/png" sizes="192x192" href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
     <link rel="apple-touch-icon" type="image/png" sizes="192x192"
         href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
 
-    <link rel="manifest" href="manifest.json?v=20260331-2">
+    <link rel="manifest" href="manifest.json?v=20260331-3">
 
     <link rel="stylesheet" href="style.css">
     
@@ -1904,7 +1904,7 @@
             <!-- ========== WERTGUTHABEN VIEW ========== -->
             <div id="wertguthabenView" class="view">
                 <div class="back-link-container w-full mb-3">
-                    <div class="flex items-center justify-between gap-2 flex-nowrap overflow-x-auto no-scrollbar">
+                    <div class="flex items-center justify-between gap-2 flex-wrap">
                         <button class="back-link shrink-0 flex items-center text-gray-600 hover:text-indigo-600 transition whitespace-nowrap"
                             data-target="home">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
@@ -1920,13 +1920,34 @@
                             Einlöse-System
                         </button>
 
-                        <button id="btn-wertguthaben-settings"
-                            class="shrink-0 p-2 text-gray-500 hover:text-gray-800 transition rounded-full hover:bg-gray-200"
-                            title="Einstellungen & Kategorien verwalten">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 sm:w-6 sm:h-6">
-                                <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.295 1.473c.497.144.971.342 1.416.587l1.25-.834a1 1 0 0 1 1.262.125l1.669 1.669a1 1 0 0 1 .125 1.262l-.834 1.25c.245.445.443.919.587 1.416l1.473.294a1 1 0 0 1 .804.98v2.361a1 1 0 0 1-.804.98l-1.473.295a6.95 6.95 0 0 1-.587 1.416l.834 1.25a1 1 0 0 1-.125 1.262l-1.669 1.669a1 1 0 0 1-1.262.125l-1.25-.834a6.953 6.953 0 0 1-1.416.587l-.294 1.473a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.295-1.473a6.957 6.957 0 0 1-1.416-.587l-1.25.834a1 1 0 0 1-1.262-.125l-1.669-1.669a1 1 0 0 1-.125-1.262l.834-1.25a6.957 6.957 0 0 1-.587-1.416l-1.473-.294A1 1 0 0 1 1 11.18V8.82a1 1 0 0 1 .804-.98l1.473-.295c.144-.497.342-.971.587-1.416l-.834-1.25a1 1 0 0 1 .125-1.262l1.669-1.669a1 1 0 0 1 1.262-.125l1.25.834c.445-.245.919-.443 1.416-.587l.294-1.473ZM13 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" clip-rule="evenodd" />
-                            </svg>
-                        </button>
+                        <div class="ml-auto shrink-0 flex items-center gap-1 relative">
+                            <div class="relative">
+                                <button id="btn-wertguthaben-menu"
+                                    class="shrink-0 px-2 py-2 text-gray-500 hover:text-gray-800 transition rounded-full hover:bg-gray-200"
+                                    title="Wertguthaben-Menü"
+                                    aria-label="Wertguthaben-Menü öffnen"
+                                    aria-haspopup="true"
+                                    aria-expanded="false">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 sm:w-5 sm:h-5">
+                                        <path d="M10 3a1.75 1.75 0 1 0 0 3.5A1.75 1.75 0 0 0 10 3ZM10 8.25a1.75 1.75 0 1 0 0 3.5 1.75 1.75 0 0 0 0-3.5ZM8.25 15a1.75 1.75 0 1 1 3.5 0 1.75 1.75 0 0 1-3.5 0Z" />
+                                    </svg>
+                                </button>
+                                <div id="wertguthabenMenuDropdown" class="hidden absolute right-0 top-full mt-2 w-44 bg-white border border-gray-200 rounded-xl shadow-xl z-30 p-1">
+                                    <button id="btn-open-wg-transaktionen"
+                                        class="w-full text-left px-3 py-2 rounded-lg text-sm font-semibold text-gray-700 hover:bg-emerald-50 hover:text-emerald-800 transition">
+                                        Transaktionen
+                                    </button>
+                                </div>
+                            </div>
+
+                            <button id="btn-wertguthaben-settings"
+                                class="shrink-0 p-2 text-gray-500 hover:text-gray-800 transition rounded-full hover:bg-gray-200"
+                                title="Einstellungen & Kategorien verwalten">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 sm:w-6 sm:h-6">
+                                    <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.295 1.473c.497.144.971.342 1.416.587l1.25-.834a1 1 0 0 1 1.262.125l1.669 1.669a1 1 0 0 1 .125 1.262l-.834 1.25c.245.445.443.919.587 1.416l1.473.294a1 1 0 0 1 .804.98v2.361a1 1 0 0 1-.804.98l-1.473.295a6.95 6.95 0 0 1-.587 1.416l.834 1.25a1 1 0 0 1-.125 1.262l-1.669 1.669a1 1 0 0 1-1.262.125l-1.25-.834a6.953 6.953 0 0 1-1.416.587l-.294 1.473a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.295-1.473a6.957 6.957 0 0 1-1.416-.587l-1.25.834a1 1 0 0 1-1.262-.125l-1.669-1.669a1 1 0 0 1-.125-1.262l.834-1.25a6.957 6.957 0 0 1-.587-1.416l-1.473-.294A1 1 0 0 1 1 11.18V8.82a1 1 0 0 1 .804-.98l1.473-.295c.144-.497.342-.971.587-1.416l-.834-1.25a1 1 0 0 1 .125-1.262l1.669-1.669a1 1 0 0 1 1.262-.125l1.25.834c.445-.245.919-.443 1.416-.587l.294-1.473ZM13 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                     <div class="border-t border-gray-300 mt-2"></div>
                 </div>
@@ -8094,6 +8115,51 @@
                             Bearbeiten
                         </button>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="wertguthabenTransaktionenModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-[70]">
+            <div class="bg-white p-4 sm:p-6 rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+                <div class="flex justify-between items-center gap-3 mb-4">
+                    <h3 class="text-xl sm:text-2xl font-bold text-emerald-800">Transaktionen</h3>
+                    <button id="closeWertguthabenTransaktionenModal" class="text-gray-400 hover:text-red-600 font-bold text-3xl leading-none">&times;</button>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-3 items-end mb-4">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Von</label>
+                        <input type="date" id="wgTransaktionenVon" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-emerald-500 bg-white">
+                    </div>
+                    <div class="text-center text-sm font-bold text-gray-500 pb-3">-</div>
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Bis</label>
+                        <input type="date" id="wgTransaktionenBis" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-emerald-500 bg-white">
+                    </div>
+                </div>
+
+                <div class="flex-1 overflow-auto rounded-xl border border-gray-200">
+                    <table class="min-w-full text-sm">
+                        <thead class="sticky top-0 bg-emerald-50 border-b border-emerald-200">
+                            <tr>
+                                <th class="px-4 py-3 text-left font-bold text-emerald-800 uppercase tracking-wide">Name</th>
+                                <th class="px-4 py-3 text-left font-bold text-emerald-800 uppercase tracking-wide">ID</th>
+                                <th class="px-4 py-3 text-left font-bold text-emerald-800 uppercase tracking-wide">Transaktion</th>
+                                <th class="px-4 py-3 text-left font-bold text-emerald-800 uppercase tracking-wide">Datum</th>
+                            </tr>
+                        </thead>
+                        <tbody id="wertguthabenTransaktionenTableBody" class="divide-y divide-gray-200 bg-white">
+                            <tr>
+                                <td colspan="4" class="px-4 py-8 text-center text-gray-400 italic">Keine Transaktionen gefunden.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-4 pt-4 border-t">
+                    <button id="closeWertguthabenTransaktionenBtn" class="px-6 py-2.5 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-bold transition">
+                        Schließen
+                    </button>
                 </div>
             </div>
         </div>

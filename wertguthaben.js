@@ -49,6 +49,8 @@ let wgEinloeseScannerStream = null;
 let wgEinloeseScannerInterval = null;
 let wgEinloeseScannerBusy = false;
 let wgEinloeseBarcodeDetector = null;
+let wertguthabenMenuOpen = false;
+let wgTransaktionenRenderRequestId = 0;
 const wertguthabenFormState = {
     isCopyMode: false,
     copySourceId: '',
@@ -193,8 +195,60 @@ function setupEventListeners() {
 
     const settingsBtn = document.getElementById('btn-wertguthaben-settings');
     if (settingsBtn && !settingsBtn.dataset.listenerAttached) {
-        settingsBtn.addEventListener('click', openSettingsModal);
+        settingsBtn.addEventListener('click', () => {
+            closeWertguthabenMenuDropdown();
+            openSettingsModal();
+        });
         settingsBtn.dataset.listenerAttached = 'true';
+    }
+
+    const menuBtn = document.getElementById('btn-wertguthaben-menu');
+    if (menuBtn && !menuBtn.dataset.listenerAttached) {
+        menuBtn.addEventListener('click', (event) => {
+            event.stopPropagation();
+            toggleWertguthabenMenuDropdown();
+        });
+        menuBtn.dataset.listenerAttached = 'true';
+    }
+
+    const openTransaktionenBtn = document.getElementById('btn-open-wg-transaktionen');
+    if (openTransaktionenBtn && !openTransaktionenBtn.dataset.listenerAttached) {
+        openTransaktionenBtn.addEventListener('click', async () => {
+            closeWertguthabenMenuDropdown();
+            await openWertguthabenTransaktionenModal();
+        });
+        openTransaktionenBtn.dataset.listenerAttached = 'true';
+    }
+
+    const closeTransaktionenModalBtn = document.getElementById('closeWertguthabenTransaktionenModal');
+    if (closeTransaktionenModalBtn && !closeTransaktionenModalBtn.dataset.listenerAttached) {
+        closeTransaktionenModalBtn.addEventListener('click', closeWertguthabenTransaktionenModal);
+        closeTransaktionenModalBtn.dataset.listenerAttached = 'true';
+    }
+
+    const closeTransaktionenFooterBtn = document.getElementById('closeWertguthabenTransaktionenBtn');
+    if (closeTransaktionenFooterBtn && !closeTransaktionenFooterBtn.dataset.listenerAttached) {
+        closeTransaktionenFooterBtn.addEventListener('click', closeWertguthabenTransaktionenModal);
+        closeTransaktionenFooterBtn.dataset.listenerAttached = 'true';
+    }
+
+    ['wgTransaktionenVon', 'wgTransaktionenBis'].forEach((inputId) => {
+        const input = document.getElementById(inputId);
+        if (!input || input.dataset.listenerAttached === 'true') return;
+        input.addEventListener('change', renderWertguthabenTransaktionenOverview);
+        input.dataset.listenerAttached = 'true';
+    });
+
+    const transaktionenTableBody = document.getElementById('wertguthabenTransaktionenTableBody');
+    if (transaktionenTableBody && !transaktionenTableBody.dataset.listenerAttached) {
+        transaktionenTableBody.addEventListener('click', (event) => {
+            const row = event.target.closest('tr[data-wertguthaben-id]');
+            if (!row) return;
+            const wertguthabenId = String(row.dataset.wertguthabenId || '').trim();
+            if (!wertguthabenId) return;
+            window.openWertguthabenDetails(wertguthabenId);
+        });
+        transaktionenTableBody.dataset.listenerAttached = 'true';
     }
 
     const closeModal = document.getElementById('closeWertguthabenModal');
@@ -356,6 +410,9 @@ function setupEventListeners() {
             }
             if (!e.target.closest('#wg-einloese-id-input') && !e.target.closest('#wg-einloese-suggestions-box')) {
                 hideEinloeseSuggestions();
+            }
+            if (!e.target.closest('#btn-wertguthaben-menu') && !e.target.closest('#wertguthabenMenuDropdown')) {
+                closeWertguthabenMenuDropdown();
             }
         });
         document.body.dataset.wgSuggestionsListenerAttached = 'true';
@@ -1960,6 +2017,75 @@ function formatDateTime(value) {
     });
 }
 
+function getTodayDateInputValue() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function parseLocalDateInputValue(value, endOfDay = false) {
+    const normalized = String(value || '').trim();
+    const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+    const [, year, month, day] = match;
+    const date = new Date(
+        Number(year),
+        Number(month) - 1,
+        Number(day),
+        endOfDay ? 23 : 0,
+        endOfDay ? 59 : 0,
+        endOfDay ? 59 : 0,
+        endOfDay ? 999 : 0
+    );
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getTransaktionSortTimestamp(transaktion) {
+    const date = toDateValue(transaktion?.datum || transaktion?.createdAt || transaktion?.updatedAt);
+    return date ? date.getTime() : 0;
+}
+
+function formatWertguthabenTransaktionSummary(transaktion) {
+    const betrag = Number(transaktion?.betrag || 0);
+    const isKorrektur = transaktion?.typ === 'korrektur';
+    const isStartguthaben = isStartguthabenTransaktion(transaktion);
+    const typLabel = transaktion?.typ === 'verwendung'
+        ? 'Verwendung'
+        : (transaktion?.typ === 'gutschrift'
+            ? 'Gutschrift'
+            : (transaktion?.typ === 'korrektur'
+                ? 'Korrektur'
+                : (transaktion?.typ === 'einloesung' ? 'Einlösung' : 'Transaktion')));
+    const icon = transaktion?.typ === 'verwendung'
+        ? '📉'
+        : (transaktion?.typ === 'gutschrift'
+            ? '📈'
+            : (transaktion?.typ === 'korrektur'
+                ? '🛠️'
+                : (transaktion?.typ === 'einloesung' ? '🎟️' : '📄')));
+    const amountText = transaktion?.typ === 'verwendung'
+        ? `- ${Math.abs(betrag).toFixed(2)} €`
+        : (transaktion?.typ === 'gutschrift'
+            ? `+ ${Math.abs(betrag).toFixed(2)} €`
+            : (transaktion?.typ === 'einloesung'
+                ? '1x Einlösung'
+                : (isKorrektur
+                    ? `${betrag >= 0 ? '+' : '-'} ${Math.abs(betrag).toFixed(2)} €`
+                    : `${Math.abs(betrag).toFixed(2)} €`)));
+    const metaParts = [];
+    if (transaktion?.beschreibung) metaParts.push(transaktion.beschreibung);
+    if (transaktion?.bestellnr) metaParts.push(`Best.-Nr. ${transaktion.bestellnr}`);
+    if (transaktion?.rechnungsnr) metaParts.push(`Rech.-Nr. ${transaktion.rechnungsnr}`);
+    if (isStartguthaben) metaParts.push('Systemeintrag');
+
+    return {
+        title: `${icon} ${typLabel} · ${amountText}`,
+        details: metaParts.join(' · ')
+    };
+}
+
 function getDisplayUserName(userId) {
     if (!userId) return 'Unbekannt';
     return USERS[userId]?.name || userId;
@@ -2214,6 +2340,117 @@ async function persistWertguthabenSettings() {
         alertUser('Einstellungen konnten nicht gespeichert werden.', 'error');
         return false;
     }
+}
+
+function toggleWertguthabenMenuDropdown() {
+    const menuBtn = document.getElementById('btn-wertguthaben-menu');
+    const dropdown = document.getElementById('wertguthabenMenuDropdown');
+    if (!menuBtn || !dropdown) return;
+
+    wertguthabenMenuOpen = !wertguthabenMenuOpen;
+    dropdown.classList.toggle('hidden', !wertguthabenMenuOpen);
+    menuBtn.setAttribute('aria-expanded', wertguthabenMenuOpen ? 'true' : 'false');
+}
+
+function closeWertguthabenMenuDropdown() {
+    const menuBtn = document.getElementById('btn-wertguthaben-menu');
+    const dropdown = document.getElementById('wertguthabenMenuDropdown');
+    wertguthabenMenuOpen = false;
+    if (dropdown) dropdown.classList.add('hidden');
+    if (menuBtn) menuBtn.setAttribute('aria-expanded', 'false');
+}
+
+async function loadAllWertguthabenTransaktionen() {
+    const entries = Object.values(WERTGUTHABEN);
+    const transaktionsPakete = await Promise.all(entries.map(async (entry) => {
+        const transaktionen = await loadTransaktionen(entry.id);
+        return transaktionen.map((transaktion) => ({
+            ...transaktion,
+            wertguthabenId: entry.id,
+            wertguthabenName: entry.name || 'Ohne Name',
+            wertguthabenDisplayId: getWertguthabenDisplayId(entry)
+        }));
+    }));
+
+    return transaktionsPakete.flat();
+}
+
+async function renderWertguthabenTransaktionenOverview() {
+    const tbody = document.getElementById('wertguthabenTransaktionenTableBody');
+    const vonInput = document.getElementById('wgTransaktionenVon');
+    const bisInput = document.getElementById('wgTransaktionenBis');
+    if (!tbody || !vonInput || !bisInput) return;
+
+    const vonDate = parseLocalDateInputValue(vonInput.value, false);
+    const bisDate = parseLocalDateInputValue(bisInput.value, true);
+
+    if (!vonDate || !bisDate) {
+        tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-gray-400 italic">Bitte gültige Datumswerte wählen.</td></tr>';
+        return;
+    }
+
+    if (vonDate.getTime() > bisDate.getTime()) {
+        tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-amber-700 italic">Der Von-Wert darf nicht nach dem Bis-Wert liegen.</td></tr>';
+        return;
+    }
+
+    const requestId = ++wgTransaktionenRenderRequestId;
+    tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-gray-400 italic">Transaktionen werden geladen...</td></tr>';
+
+    const alleTransaktionen = await loadAllWertguthabenTransaktionen();
+    if (requestId !== wgTransaktionenRenderRequestId) return;
+
+    const gefiltert = alleTransaktionen
+        .map((transaktion) => ({
+            ...transaktion,
+            _sortTimestamp: getTransaktionSortTimestamp(transaktion)
+        }))
+        .filter((transaktion) => transaktion._sortTimestamp >= vonDate.getTime() && transaktion._sortTimestamp <= bisDate.getTime())
+        .sort((a, b) => b._sortTimestamp - a._sortTimestamp);
+
+    if (gefiltert.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-gray-400 italic">Keine Transaktionen im gewählten Zeitraum gefunden.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = gefiltert.map((transaktion) => {
+        const summary = formatWertguthabenTransaktionSummary(transaktion);
+        const datumText = formatDateTime(transaktion.datum || transaktion.createdAt || transaktion.updatedAt) || '-';
+        return `
+            <tr data-wertguthaben-id="${escapeHtml(transaktion.wertguthabenId)}" class="cursor-pointer hover:bg-emerald-50 transition-colors">
+                <td class="px-4 py-3 align-top">
+                    <div class="font-semibold text-gray-900">${escapeHtml(transaktion.wertguthabenName || 'Ohne Name')}</div>
+                </td>
+                <td class="px-4 py-3 align-top">
+                    <div class="font-mono font-bold text-emerald-700">#${escapeHtml(transaktion.wertguthabenDisplayId || '')}</div>
+                </td>
+                <td class="px-4 py-3 align-top">
+                    <div class="font-semibold text-gray-800">${escapeHtml(summary.title)}</div>
+                    ${summary.details ? `<div class="mt-1 text-xs text-gray-500">${escapeHtml(summary.details)}</div>` : ''}
+                </td>
+                <td class="px-4 py-3 align-top whitespace-nowrap text-gray-600">${escapeHtml(datumText)}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+async function openWertguthabenTransaktionenModal() {
+    const modal = document.getElementById('wertguthabenTransaktionenModal');
+    const vonInput = document.getElementById('wgTransaktionenVon');
+    const bisInput = document.getElementById('wgTransaktionenBis');
+    if (!modal || !vonInput || !bisInput) return;
+
+    const today = getTodayDateInputValue();
+    vonInput.value = today;
+    bisInput.value = today;
+    modal.style.display = 'flex';
+    await renderWertguthabenTransaktionenOverview();
+}
+
+function closeWertguthabenTransaktionenModal() {
+    const modal = document.getElementById('wertguthabenTransaktionenModal');
+    if (!modal) return;
+    modal.style.display = 'none';
 }
 
 async function addWertguthabenKategorieFromSettings() {
@@ -3859,10 +4096,6 @@ window.openWertguthabenDetails = async function(id) {
 
     // Transaktionen laden und anzeigen
     const transaktionen = await loadTransaktionen(id);
-    const getTransaktionSortTimestamp = (transaktion) => {
-        const date = toDateValue(transaktion?.datum || transaktion?.createdAt || transaktion?.updatedAt);
-        return date ? date.getTime() : 0;
-    };
     const sortedTransaktionen = [...transaktionen].sort((a, b) => {
         const aSystem = isStartguthabenTransaktion(a);
         const bSystem = isStartguthabenTransaktion(b);
