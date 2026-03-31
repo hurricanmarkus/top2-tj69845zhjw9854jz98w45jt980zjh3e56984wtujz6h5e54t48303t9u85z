@@ -61,6 +61,7 @@ const hasFirestore = typeof addDoc === 'function' && typeof updateDoc === 'funct
 const getTemplateShipId = (template) => template?.shipId || template?.stackId || null;
 const getTemplateShipName = (template) => template?.shipName || template?.stackName || null;
 const checklistCheckboxClickTracker = new Map();
+const checklistCheckboxHintTimeouts = new Map();
 
 const PERSON_BADGE_CLASSES = [
   'bg-sky-100 text-sky-800 border-sky-200',
@@ -1035,19 +1036,32 @@ export function renderChecklistItems(listId) {
           const listId = view.dataset.currentListId;
           const now = Date.now();
           const lastClick = checklistCheckboxClickTracker.get(itemId) || 0;
+          const existingHintTimeout = checklistCheckboxHintTimeouts.get(itemId);
 
           if (now - lastClick < 1000) {
+              if (existingHintTimeout) {
+                  window.clearTimeout(existingHintTimeout);
+                  checklistCheckboxHintTimeouts.delete(itemId);
+              }
               checklistCheckboxClickTracker.delete(itemId);
               await toggleChecklistItemStatusByDoubleClick(itemId, listId, cb);
               return;
           }
 
           checklistCheckboxClickTracker.set(itemId, now);
-          window.setTimeout(() => {
+          if (existingHintTimeout) {
+              window.clearTimeout(existingHintTimeout);
+          }
+          const hintTimeout = window.setTimeout(() => {
               if (checklistCheckboxClickTracker.get(itemId) === now) {
                   checklistCheckboxClickTracker.delete(itemId);
+                  checklistCheckboxHintTimeouts.delete(itemId);
+                  if (typeof alertUser === 'function') {
+                      alertUser('Zum Ändern des Status ist ein Doppelklick auf die Checkbox notwendig.', 'warning');
+                  }
               }
           }, 1000);
+          checklistCheckboxHintTimeouts.set(itemId, hintTimeout);
       });
       wrapper.dataset.checkboxListener = 'true';
   }

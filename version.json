@@ -1,14 +1,24 @@
 {
-  "version": "1.5.10",
-  "buildId": "20260331-9",
+  "version": "1.5.11",
+  "buildId": "20260331-10",
   "releaseDate": "2026-03-31",
-  "releaseTime": "14:32",
+  "releaseTime": "14:39",
   "bereich": "Checkliste",
   "timezone": "Europe/Vienna",
-  "note": "Checkliste: Schiff & Container nutzt jetzt exklusive Wartungsboxen fuer Schiff/Container und Inhalte; bestehende Container sind pro Schiff in exklusiven Ausklappboxen gruppiert.",
+  "note": "Checkliste: Ein einfacher Klick auf die Status-Checkbox blendet nach 1 Sekunde ohne zweiten Klick einen Hinweis ein, dass fuer den Statuswechsel ein Doppelklick noetig ist.",
   "commitId": "b1383f2",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.5.11",
+      "buildId": "20260331-10",
+      "releaseDate": "2026-03-31",
+      "releaseTime": "14:39",
+      "bereich": "Checkliste",
+      "note": "Checkliste: Ein einfacher Klick auf die Status-Checkbox blendet nach 1 Sekunde ohne zweiten Klick einen Hinweis ein, dass fuer den Statuswechsel ein Doppelklick noetig ist.",
+      "commitId": "b1383f2",
+      "obligation": "false"
+    },
     {
       "version": "1.5.10",
       "buildId": "20260331-9",
