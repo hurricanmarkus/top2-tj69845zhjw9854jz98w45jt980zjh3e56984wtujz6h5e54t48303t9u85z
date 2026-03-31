@@ -8,6 +8,7 @@ import {
     db,
     currentUser,
     USERS,
+    usersCollectionRef,
     navigate,
     appId
 } from './haupteingang.js';
@@ -37,6 +38,7 @@ let paymentsCollection = null;
 let globalShortIdsCollection = null;
 let WERTGUTHABEN = {};
 let unsubscribeWertguthaben = null;
+let unsubscribeWertguthabenSettings = null;
 let currentFilter = { typ: '', kategorie: '', eigentuemer: '', status: 'aktiv' };
 let activeWertguthabenFilters = [];
 let wertguthabenSearchJoinMode = 'and';
@@ -72,6 +74,7 @@ const transaktionModalState = {
 const WG_WERT_UNLOCK_COUNTDOWN_SECONDS = 30;
 let wgWertUnlockSecondsLeft = 0;
 let wgWertUnlockTimer = null;
+let wertguthabenSettingsSyncUserId = '';
 
 const WG_UNASSIGNED_KATEGORIE = 'Nicht zugeordnet';
 const WG_SHORT_ID_LENGTH = 4;
@@ -166,6 +169,7 @@ export function initializeWertguthaben() {
 
     // Einstellungen aus Firebase laden (NACH loadUserSettings)
     loadSettings();
+    startWertguthabenSettingsSync();
 
     if (db) {
         wertguthabenCollection = collection(db, 'artifacts', appId, 'public', 'data', 'wertguthaben');
@@ -231,6 +235,14 @@ function setupEventListeners() {
     if (eigentuemerSelect && !eigentuemerSelect.dataset.listenerAttached) {
         eigentuemerSelect.addEventListener('change', handleEigentuemerChange);
         eigentuemerSelect.dataset.listenerAttached = 'true';
+    }
+
+    const kategorieSelect = document.getElementById('wgKategorie');
+    if (kategorieSelect && !kategorieSelect.dataset.categoryListenerAttached) {
+        kategorieSelect.addEventListener('change', () => {
+            kategorieSelect.dataset.selectedKategorie = String(kategorieSelect.value || '').trim();
+        });
+        kategorieSelect.dataset.categoryListenerAttached = 'true';
     }
 
     const statusSelect = document.getElementById('wgStatus');
@@ -1502,6 +1514,13 @@ function confirmWertBetragUnlock() {
 export function stopWertguthabenListener() {
     stopEinloeseScanner({ hidePanel: true, clearStatus: true });
 
+    if (unsubscribeWertguthabenSettings) {
+        unsubscribeWertguthabenSettings();
+        unsubscribeWertguthabenSettings = null;
+        wertguthabenSettingsSyncUserId = '';
+        console.log("🛑 Wertguthaben-Settings-Listener gestoppt.");
+    }
+
     if (unsubscribeWertguthaben) {
         unsubscribeWertguthaben();
         unsubscribeWertguthaben = null;
@@ -1533,7 +1552,11 @@ export function listenForWertguthaben() {
     }
 
     try {
-        stopWertguthabenListener();
+        if (unsubscribeWertguthaben) {
+            unsubscribeWertguthaben();
+            unsubscribeWertguthaben = null;
+            console.log("🛑 Wertguthaben-Listener gestoppt.");
+        }
 
         // DATENSCHUTZ-FIX: Nur Wertguthaben laden, die vom aktuellen User erstellt wurden
         // ODER wo der User als Eigentümer eingetragen ist
@@ -1548,7 +1571,7 @@ export function listenForWertguthaben() {
                 // DATENSCHUTZ: Nur eigene Einträge speichern
                 // (erstellt von mir ODER ich bin Eigentümer)
                 if (data.createdBy === currentUser.mode || data.eigentuemer === currentUser.mode) {
-                    const normalizedCategory = normalizeWertguthabenKategorie(data.kategorie);
+                    const normalizedCategory = normalizeWertguthabenKategorie(data.kategorie, { preserveUnknown: true });
                     const normalizedFixedId = normalizeFixedId(data.fixedId);
 
                     WERTGUTHABEN[docSnap.id] = {
@@ -1558,7 +1581,7 @@ export function listenForWertguthaben() {
                         fixedId: normalizedFixedId || ''
                     };
 
-                    if (data.kategorie !== normalizedCategory) {
+                    if (shouldNormalizeWertguthabenKategorieInFirestore(data.kategorie)) {
                         normalizeKategorieInFirestore(docSnap.id, normalizedCategory);
                     }
 
@@ -1988,20 +2011,100 @@ function getEditableWertguthabenKategorien() {
     return sanitizeWertguthabenKategorien(wertguthabenSettings.kategorien);
 }
 
+function getObservedWertguthabenKategorien() {
+    return sanitizeWertguthabenKategorien(
+        Object.values(WERTGUTHABEN).map((entry) => {
+            const value = String(entry?.kategorie || '').trim();
+            if (!value) return '';
+            if (value.toLowerCase() === WG_UNASSIGNED_KATEGORIE.toLowerCase()) return '';
+            return value;
+        })
+    );
+}
+
 function getDefaultFormKategorie() {
     const editable = getEditableWertguthabenKategorien();
     return editable[0] || WG_UNASSIGNED_KATEGORIE;
 }
 
 function getAllWertguthabenKategorien() {
-    return [WG_UNASSIGNED_KATEGORIE, ...getEditableWertguthabenKategorien()];
+    return [WG_UNASSIGNED_KATEGORIE, ...sanitizeWertguthabenKategorien([
+        ...getEditableWertguthabenKategorien(),
+        ...getObservedWertguthabenKategorien()
+    ])];
 }
 
-function normalizeWertguthabenKategorie(rawCategory) {
+function normalizeWertguthabenKategorie(rawCategory, options = {}) {
+    const { preserveUnknown = false } = options;
     const category = String(rawCategory || '').trim();
     if (!category) return WG_UNASSIGNED_KATEGORIE;
+    if (category.toLowerCase() === WG_UNASSIGNED_KATEGORIE.toLowerCase()) return WG_UNASSIGNED_KATEGORIE;
     const all = getAllWertguthabenKategorien();
-    return all.includes(category) ? category : WG_UNASSIGNED_KATEGORIE;
+    if (all.includes(category)) return category;
+    return preserveUnknown ? category : WG_UNASSIGNED_KATEGORIE;
+}
+
+function shouldNormalizeWertguthabenKategorieInFirestore(rawCategory) {
+    const category = String(rawCategory || '').trim();
+    if (!category) return true;
+    return category.toLowerCase() === WG_UNASSIGNED_KATEGORIE.toLowerCase() && category !== WG_UNASSIGNED_KATEGORIE;
+}
+
+function applyWertguthabenSettings(rawSettings) {
+    const parsed = rawSettings && typeof rawSettings === 'object' ? rawSettings : {};
+    wertguthabenSettings = {
+        kategorien: sanitizeWertguthabenKategorien(parsed.kategorien),
+        defaultWarnings: {
+            gutschein: 14,
+            guthaben: 30,
+            wertguthaben: 90,
+            wertguthaben_gesetzlich: 180,
+            aktionscode: 7,
+            ...(parsed.defaultWarnings || {})
+        }
+    };
+
+    populateKategorieDropdowns();
+    renderWertguthabenKategorieSettingsList();
+}
+
+function startWertguthabenSettingsSync() {
+    if (!currentUser?.mode || currentUser.mode === 'Gast' || !usersCollectionRef) {
+        if (unsubscribeWertguthabenSettings) {
+            unsubscribeWertguthabenSettings();
+            unsubscribeWertguthabenSettings = null;
+            wertguthabenSettingsSyncUserId = '';
+        }
+        return;
+    }
+
+    if (unsubscribeWertguthabenSettings && wertguthabenSettingsSyncUserId === currentUser.mode) {
+        return;
+    }
+
+    if (unsubscribeWertguthabenSettings) {
+        unsubscribeWertguthabenSettings();
+        unsubscribeWertguthabenSettings = null;
+    }
+
+    wertguthabenSettingsSyncUserId = currentUser.mode;
+    const userDocRef = doc(usersCollectionRef, currentUser.mode);
+    unsubscribeWertguthabenSettings = onSnapshot(userDocRef, (docSnap) => {
+        const rawSettings = docSnap.exists()
+            ? docSnap.data()?.userSettings?.wertguthabenSettings
+            : null;
+        applyWertguthabenSettings(rawSettings);
+    }, (error) => {
+        console.warn('Wertguthaben-Settings-Sync fehlgeschlagen:', error);
+    });
+}
+
+function setWertguthabenFormKategorieValue(rawCategory) {
+    const formSelect = document.getElementById('wgKategorie');
+    if (!formSelect) return;
+
+    formSelect.dataset.selectedKategorie = normalizeWertguthabenKategorie(rawCategory, { preserveUnknown: true });
+    populateKategorieDropdowns();
 }
 
 function populateKategorieDropdowns() {
@@ -2010,21 +2113,30 @@ function populateKategorieDropdowns() {
 
     const formSelect = document.getElementById('wgKategorie');
     if (formSelect) {
-        const previous = normalizeWertguthabenKategorie(formSelect.value);
-        if (editableCategories.length > 0) {
+        const previous = normalizeWertguthabenKategorie(
+            formSelect.dataset.selectedKategorie || formSelect.value,
+            { preserveUnknown: true }
+        );
+        const formCategories = [...editableCategories];
+        if (previous !== WG_UNASSIGNED_KATEGORIE && !formCategories.includes(previous)) {
+            formCategories.unshift(previous);
+        }
+
+        if (formCategories.length > 0) {
             formSelect.innerHTML = `
                 <option value="${escapeHtml(WG_UNASSIGNED_KATEGORIE)}" disabled>${escapeHtml(WG_UNASSIGNED_KATEGORIE)} (automatisch)</option>
-                ${editableCategories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('')}
+                ${formCategories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('')}
             `;
             if (previous === WG_UNASSIGNED_KATEGORIE) {
                 formSelect.value = WG_UNASSIGNED_KATEGORIE;
             } else {
-                formSelect.value = editableCategories.includes(previous) ? previous : editableCategories[0];
+                formSelect.value = formCategories.includes(previous) ? previous : formCategories[0];
             }
         } else {
             formSelect.innerHTML = `<option value="${escapeHtml(WG_UNASSIGNED_KATEGORIE)}">${escapeHtml(WG_UNASSIGNED_KATEGORIE)} (automatisch)</option>`;
             formSelect.value = WG_UNASSIGNED_KATEGORIE;
         }
+        formSelect.dataset.selectedKategorie = String(formSelect.value || '').trim();
     }
 
     const filterSelect = document.getElementById('filter-wg-kategorie');
@@ -2070,9 +2182,33 @@ function renderWertguthabenKategorieSettingsList() {
     `;
 }
 
-function persistWertguthabenSettings() {
+async function persistWertguthabenSettings() {
     try {
-        saveUserSetting('wertguthabenSettings', wertguthabenSettings);
+        const payload = {
+            ...wertguthabenSettings,
+            kategorien: sanitizeWertguthabenKategorien(wertguthabenSettings.kategorien)
+        };
+        await saveUserSetting('wertguthabenSettings', payload);
+
+        const persisted = getUserSetting('wertguthabenSettings', null);
+        const expectedSerialized = JSON.stringify(payload);
+        const persistedSerialized = JSON.stringify({
+            ...(persisted && typeof persisted === 'object' ? persisted : {}),
+            kategorien: sanitizeWertguthabenKategorien(persisted?.kategorien),
+            defaultWarnings: {
+                gutschein: 14,
+                guthaben: 30,
+                wertguthaben: 90,
+                wertguthaben_gesetzlich: 180,
+                aktionscode: 7,
+                ...(persisted?.defaultWarnings || {})
+            }
+        });
+
+        if (persistedSerialized !== expectedSerialized) {
+            throw new Error('Die Wertguthaben-Einstellungen konnten nicht in Firebase bestätigt werden.');
+        }
+
         return true;
     } catch (error) {
         console.error('Konnte Wertguthaben-Einstellungen nicht speichern:', error);
@@ -2081,7 +2217,7 @@ function persistWertguthabenSettings() {
     }
 }
 
-function addWertguthabenKategorieFromSettings() {
+async function addWertguthabenKategorieFromSettings() {
     const input = document.getElementById('new-wg-kategorie-input');
     if (!input) return;
 
@@ -2102,7 +2238,7 @@ function addWertguthabenKategorieFromSettings() {
     }
 
     wertguthabenSettings.kategorien = sanitizeWertguthabenKategorien([...current, raw]);
-    if (!persistWertguthabenSettings()) return;
+    if (!await persistWertguthabenSettings()) return;
     input.value = '';
     populateKategorieDropdowns();
     renderWertguthabenKategorieSettingsList();
@@ -2130,7 +2266,7 @@ window.renameWertguthabenKategorie = async function(oldCategory) {
     }
 
     wertguthabenSettings.kategorien = current.map((item) => (item === oldCategory ? trimmed : item));
-    if (!persistWertguthabenSettings()) return;
+    if (!await persistWertguthabenSettings()) return;
     populateKategorieDropdowns();
     renderWertguthabenKategorieSettingsList();
     await reassignKategorieInEntries(oldCategory, trimmed);
@@ -2153,7 +2289,7 @@ window.deleteWertguthabenKategorie = async function(category) {
     }
 
     wertguthabenSettings.kategorien = current.filter((item) => item !== category);
-    if (!persistWertguthabenSettings()) return;
+    if (!await persistWertguthabenSettings()) return;
     populateKategorieDropdowns();
     renderWertguthabenKategorieSettingsList();
     await reassignKategorieInEntries(category, WG_UNASSIGNED_KATEGORIE);
@@ -2301,7 +2437,7 @@ function resetForm() {
     document.getElementById('wgTyp').value = 'gutschein';
     document.getElementById('wgStatus').value = 'aktiv';
     document.getElementById('wgWert').value = '';
-    document.getElementById('wgKategorie').value = getDefaultFormKategorie();
+    setWertguthabenFormKategorieValue(getDefaultFormKategorie());
     document.getElementById('wgName').value = '';
     document.getElementById('wgUnternehmen').value = '';
     setKaufdatumToToday();
@@ -2372,7 +2508,7 @@ function populateWertguthabenFormFromEntry(wg, options = {}) {
     document.getElementById('wgTyp').value = wg.typ || 'gutschein';
     document.getElementById('wgStatus').value = wg.status || 'aktiv';
     document.getElementById('wgWert').value = isCopy ? '' : (wg.wert || '');
-    document.getElementById('wgKategorie').value = normalizeWertguthabenKategorie(wg.kategorie);
+    setWertguthabenFormKategorieValue(normalizeWertguthabenKategorie(wg.kategorie, { preserveUnknown: true }));
     document.getElementById('wgName').value = wg.name || '';
     document.getElementById('wgUnternehmen').value = wg.unternehmen || '';
     document.getElementById('wgKaufdatum').value = wg.kaufdatum || '';
@@ -2712,7 +2848,10 @@ async function saveWertguthaben() {
         return alertUser('Bitte Name eingeben!', 'error');
     }
 
-    const selectedKategorie = normalizeWertguthabenKategorie(document.getElementById('wgKategorie').value);
+    const selectedKategorie = normalizeWertguthabenKategorie(
+        document.getElementById('wgKategorie').dataset.selectedKategorie || document.getElementById('wgKategorie').value,
+        { preserveUnknown: true }
+    );
     if (!selectedKategorie) {
         return alertUser('Bitte eine Kategorie auswählen!', 'error');
     }
@@ -3918,7 +4057,9 @@ async function saveSettings() {
 
     // In Firebase speichern (geräteübergreifend)
     try {
-        saveUserSetting('wertguthabenSettings', wertguthabenSettings);
+        if (!await persistWertguthabenSettings()) {
+            return;
+        }
         populateKategorieDropdowns();
         await ensureAllEntriesHaveValidKategorie();
         alertUser('Einstellungen gespeichert!', 'success');
@@ -3932,16 +4073,8 @@ async function saveSettings() {
 // Einstellungen beim Start laden
 function loadSettings() {
     try {
-        const saved = getUserSetting('wertguthabenSettings');
-        if (saved) {
-            const parsed = saved; // Bereits ein Objekt, kein JSON.parse nötig
-            wertguthabenSettings.defaultWarnings = {
-                ...wertguthabenSettings.defaultWarnings,
-                ...parsed.defaultWarnings
-            };
-            wertguthabenSettings.kategorien = sanitizeWertguthabenKategorien(parsed.kategorien);
-            console.log('✅ Wertguthaben-Einstellungen geladen:', wertguthabenSettings);
-        }
+        applyWertguthabenSettings(getUserSetting('wertguthabenSettings', null));
+        console.log('✅ Wertguthaben-Einstellungen geladen:', wertguthabenSettings);
     } catch (error) {
         console.warn('Konnte Einstellungen nicht laden:', error);
     }
@@ -3949,7 +4082,7 @@ function loadSettings() {
 
 async function ensureAllEntriesHaveValidKategorie() {
     const updates = Object.values(WERTGUTHABEN)
-        .filter((entry) => normalizeWertguthabenKategorie(entry.kategorie) !== String(entry.kategorie || '').trim())
+        .filter((entry) => shouldNormalizeWertguthabenKategorieInFirestore(entry.kategorie))
         .map((entry) => normalizeKategorieInFirestore(entry.id, normalizeWertguthabenKategorie(entry.kategorie)));
 
     await Promise.all(updates);

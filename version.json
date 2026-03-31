@@ -1,14 +1,24 @@
 {
-  "version": "1.5.1",
-  "buildId": "20260323-6",
-  "releaseDate": "2026-03-23",
-  "releaseTime": "11:58",
-  "bereich": "Versionssystem",
+  "version": "1.5.2",
+  "buildId": "20260331-1",
+  "releaseDate": "2026-03-31",
+  "releaseTime": "08:01",
+  "bereich": "Wertguthaben",
   "timezone": "Europe/Vienna",
-  "note": "Fehlende Versions-Loader in haupteingang.js wiederhergestellt, damit Versionsdaten für eingeloggte Benutzer korrekt angezeigt werden.",
-  "commitId": "pending",
+  "note": "Wertguthaben-Kategorien werden jetzt robust in Firebase gespeichert, live synchronisiert und nicht mehr durch lokale Normalisierung verloren.",
+  "commitId": "f7db031",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.5.2",
+      "buildId": "20260331-1",
+      "releaseDate": "2026-03-31",
+      "releaseTime": "08:01",
+      "bereich": "Wertguthaben",
+      "note": "Wertguthaben-Kategorien werden jetzt robust in Firebase gespeichert, live synchronisiert und nicht mehr durch lokale Normalisierung verloren.",
+      "commitId": "f7db031",
+      "obligation": "false"
+    },
     {
       "version": "1.5.1",
       "buildId": "20260323-6",
