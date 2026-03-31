@@ -51,6 +51,7 @@ let wgEinloeseScannerBusy = false;
 let wgEinloeseBarcodeDetector = null;
 let wertguthabenMenuOpen = false;
 let wgTransaktionenRenderRequestId = 0;
+const WG_VERIFIABLE_TRANSACTION_TYPES = new Set(['verwendung', 'gutschrift', 'korrektur']);
 let ARCHIVED_WERTGUTHABEN = {};
 const wertguthabenDetailsState = {
     readOnly: false,
@@ -582,6 +583,7 @@ function setupEventListeners() {
                 if (statusSelect) statusSelect.value = '';
             }
 
+            syncWertguthabenTypFilterWithVerification();
             renderWertguthabenTable();
         });
         filterVerifizierung.dataset.listenerAttached = 'true';
@@ -601,6 +603,8 @@ function setupEventListeners() {
         resetFilters.addEventListener('click', resetWertguthabenFiltersToDefault);
         resetFilters.dataset.listenerAttached = 'true';
     }
+
+    syncWertguthabenTypFilterWithVerification();
 
     const openEinloeseBtn = document.getElementById('btn-open-einloese-system');
     if (openEinloeseBtn && !openEinloeseBtn.dataset.listenerAttached) {
@@ -912,6 +916,63 @@ function normalizeEinloeseCodeInput(rawValue) {
         .trim()
         .replace(/\s+/g, '')
         .toUpperCase();
+}
+
+function doesMaskedAwareTextMatch(storedValue, queryValue) {
+    const normalizedStoredText = String(storedValue ?? '').trim();
+    const normalizedQueryText = String(queryValue ?? '').trim();
+    if (!normalizedStoredText || !normalizedQueryText) return false;
+
+    const lowerStored = normalizedStoredText.toLowerCase();
+    const lowerQuery = normalizedQueryText.toLowerCase();
+    if (lowerStored.includes(lowerQuery)) return true;
+
+    const compactStored = normalizeEinloeseCodeInput(normalizedStoredText);
+    const compactQuery = normalizeEinloeseCodeInput(normalizedQueryText);
+    if (!compactStored || !compactQuery) return false;
+    if (compactStored.includes(compactQuery)) return true;
+
+    return compactStored.includes('*') && matchesMaskedEinloeseCode(compactQuery, compactStored);
+}
+
+function isVerifiableHistoryTransaktionCandidate(transaktion, wgTyp = '') {
+    return wgTyp !== 'aktionscode'
+        && !!transaktion?.id
+        && !isStartguthabenTransaktion(transaktion)
+        && WG_VERIFIABLE_TRANSACTION_TYPES.has(String(transaktion?.typ || '').trim());
+}
+
+function getLatestVerifiableHistoryTransaktionIdFromEntries(entries, wgTyp = '') {
+    return [...(Array.isArray(entries) ? entries : [])]
+        .filter((entry) => isVerifiableHistoryTransaktionCandidate(entry, wgTyp))
+        .sort((a, b) => getTransaktionSortTimestamp(b) - getTransaktionSortTimestamp(a))[0]?.id || '';
+}
+
+async function getLatestVerifiableHistoryTransaktionId(wertguthabenId, wgTyp = '') {
+    const transaktionen = await loadTransaktionen(wertguthabenId);
+    return getLatestVerifiableHistoryTransaktionIdFromEntries(transaktionen, wgTyp);
+}
+
+function syncWertguthabenTypFilterWithVerification() {
+    const filterTyp = document.getElementById('filter-wg-typ');
+    if (!filterTyp) return;
+
+    const allTypesOption = filterTyp.querySelector('option[value=""]');
+    const aktionscodeOption = filterTyp.querySelector('option[value="aktionscode"]');
+    const verifizierungActive = currentFilter.verifizierung === 'verified' || currentFilter.verifizierung === 'unverified';
+
+    if (allTypesOption) {
+        allTypesOption.textContent = verifizierungActive ? 'Alle Typen ohne Aktionscode' : 'Alle Typen';
+    }
+    if (aktionscodeOption) {
+        aktionscodeOption.hidden = verifizierungActive;
+        aktionscodeOption.disabled = verifizierungActive;
+    }
+    if (verifizierungActive && currentFilter.typ === 'aktionscode') {
+        currentFilter.typ = '';
+    }
+
+    filterTyp.value = currentFilter.typ || '';
 }
 
 function escapeRegExpForScanner(value) {
@@ -1514,6 +1575,7 @@ function resetWertguthabenFiltersToDefault() {
     if (filterEigentuemer) filterEigentuemer.value = '';
     if (filterVerifizierung) filterVerifizierung.value = 'ignore';
     if (filterStatus) filterStatus.value = 'aktiv';
+    syncWertguthabenTypFilterWithVerification();
     hideWertguthabenSearchSuggestions();
 
     renderWertguthabenSearchTags();
@@ -1524,6 +1586,7 @@ function doesWertguthabenMatchSearchFilter(wertguthabenEintrag, filter) {
     const value = filter.value;
     const normalizedValue = String(value || '').replace(',', '.');
     const fixedId = getWertguthabenDisplayId(wertguthabenEintrag).toLowerCase();
+    const fixedIdRaw = String(wertguthabenEintrag.fixedId || '').toLowerCase();
     const name = (wertguthabenEintrag.name || '').toLowerCase();
     const code = (wertguthabenEintrag.code || '').toLowerCase();
     const unternehmen = (wertguthabenEintrag.unternehmen || '').toLowerCase();
@@ -1544,9 +1607,9 @@ function doesWertguthabenMatchSearchFilter(wertguthabenEintrag, filter) {
     ].map((entry) => entry.toLowerCase().replace(',', '.'));
     const pin = (wertguthabenEintrag.pin || '').toLowerCase();
     const seriennummer = (wertguthabenEintrag.seriennummer || '').toLowerCase();
-    const fulltextValues = [
+    const textValues = [
         fixedId,
-        String(wertguthabenEintrag.fixedId || '').toLowerCase(),
+        fixedIdRaw,
         name,
         code,
         pin,
@@ -1581,36 +1644,39 @@ function doesWertguthabenMatchSearchFilter(wertguthabenEintrag, filter) {
         String(wertguthabenEintrag.kombinierbar || '').toLowerCase(),
         String(wertguthabenEintrag.kategorien || '').toLowerCase(),
         String(wertguthabenEintrag.ausnahmen || '').toLowerCase(),
-        String(wertguthabenEintrag.quelle || '').toLowerCase(),
-        ...amountValues
-    ].join(' ');
+        String(wertguthabenEintrag.quelle || '').toLowerCase()
+    ];
+    const fulltextValues = [...textValues, ...amountValues].join(' ');
+    const matchesTextValues = (...candidates) => candidates.some((candidate) => doesMaskedAwareTextMatch(candidate, value));
 
     switch (filter.category) {
         case 'id':
-            return fixedId.includes(value);
+            return matchesTextValues(fixedId, fixedIdRaw);
         case 'name':
-            return name.includes(value);
+            return matchesTextValues(name);
         case 'code':
-            return code.includes(value);
+            return matchesTextValues(code);
         case 'pin':
-            return pin.includes(value);
+            return matchesTextValues(pin);
         case 'seriennummer':
-            return seriennummer.includes(value);
+            return matchesTextValues(seriennummer);
         case 'unternehmen':
-            return unternehmen.includes(value);
+            return matchesTextValues(unternehmen);
         case 'kategorie':
-            return kategorie.includes(value);
+            return matchesTextValues(kategorie);
         case 'eigentuemer':
-            return eigentuemerName.includes(value) || eigentuemerId.includes(value);
+            return matchesTextValues(eigentuemerName, eigentuemerId);
         case 'typ':
-            return typ.includes(value) || typLabel.includes(value);
+            return matchesTextValues(typ, typLabel);
         case 'status':
-            return statusKey.includes(value) || statusLabel.includes(value);
+            return matchesTextValues(statusKey, statusLabel);
         case 'betrag':
             return amountValues.some((entry) => entry.includes(normalizedValue));
         case 'all':
         default:
-            return fulltextValues.includes(value) || fulltextValues.includes(normalizedValue);
+            return textValues.some((entry) => doesMaskedAwareTextMatch(entry, value))
+                || fulltextValues.includes(value)
+                || fulltextValues.includes(normalizedValue);
     }
 }
 
@@ -1801,6 +1867,9 @@ function renderWertguthabenTable() {
     let wertguthaben = Object.values(WERTGUTHABEN);
 
     // Filter anwenden
+    if (currentFilter.verifizierung !== 'ignore') {
+        wertguthaben = wertguthaben.filter((w) => w.typ !== 'aktionscode');
+    }
     if (currentFilter.typ) {
         wertguthaben = wertguthaben.filter(w => w.typ === currentFilter.typ);
     }
@@ -4159,7 +4228,12 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
     document.getElementById('transaktionRechnungsnr').value = editTransaktion?.rechnungsnr || '';
     document.getElementById('transaktionBeschreibung').value = editTransaktion?.beschreibung || '';
 
-    const verificationAllowed = isEditFromHistory && wg.typ !== 'aktionscode';
+    const latestVerifiableTransaktionId = isEditFromHistory
+        ? await getLatestVerifiableHistoryTransaktionId(wertguthabenId, wg.typ)
+        : '';
+    const verificationAllowed = isEditFromHistory
+        && wg.typ !== 'aktionscode'
+        && latestVerifiableTransaktionId === editTransaktion?.id;
     let alreadyVerified = false;
 
     if (verifySection && verifyCheckbox && verifyInfo) {
@@ -4191,7 +4265,11 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
     if (isEditFromHistory) {
         if (!verificationAllowed) {
             setTransaktionSaveEnabled(false);
-            setTransaktionValidationHint('Für Aktionscodes ist keine Betragsverifizierung möglich.');
+            setTransaktionValidationHint(
+                wg.typ === 'aktionscode'
+                    ? 'Für Aktionscodes ist keine Betragsverifizierung möglich.'
+                    : 'Nur der neueste Transaktionseintrag kann verifiziert werden.'
+            );
         } else if (alreadyVerified) {
             setTransaktionSaveEnabled(false);
             setTransaktionValidationHint('Diese Transaktion ist bereits verifiziert und gesperrt.');
@@ -4287,6 +4365,11 @@ async function saveTransaktion() {
         try {
             if (wg.typ === 'aktionscode') {
                 return alertUser('Für Aktionscodes ist keine Betragsverifizierung verfügbar.', 'warning');
+            }
+
+            const latestVerifiableTransaktionId = await getLatestVerifiableHistoryTransaktionId(wertguthabenId, wg.typ);
+            if (!latestVerifiableTransaktionId || latestVerifiableTransaktionId !== editTransaktionId) {
+                return alertUser('Nur der neueste Transaktionseintrag kann verifiziert werden.', 'warning');
             }
 
             const transaktionRef = doc(db, 'artifacts', appId, 'public', 'data', 'wertguthaben', wertguthabenId, 'transaktionen', editTransaktionId);
@@ -4477,6 +4560,16 @@ window.openEditTransaktionFromHistory = async function(wertguthabenId, transakti
             return alertUser('Transaktion nicht gefunden!', 'error');
         }
 
+        const wgTyp = String(WERTGUTHABEN[wertguthabenId]?.typ || '').trim();
+        const latestVerifiableTransaktionId = await getLatestVerifiableHistoryTransaktionId(wertguthabenId, wgTyp);
+        if (!latestVerifiableTransaktionId || latestVerifiableTransaktionId !== transaktionId) {
+            return alertUser('Nur der neueste Transaktionseintrag kann verifiziert werden.', 'warning');
+        }
+
+        if (transaktionDoc.data()?.betragVerifiziert) {
+            return alertUser('Der neueste Transaktionseintrag ist bereits verifiziert.', 'info');
+        }
+
         document.getElementById('wertguthabenDetailsModal').style.display = 'none';
         await window.openTransaktionModal(wertguthabenId, {
             source: 'dashboard',
@@ -4583,7 +4676,7 @@ window.openWertguthabenDetails = async function(id, options = {}) {
             </div>` : ''}
             <div>
                 <p class="text-sm font-bold text-gray-600">Restzeit</p>
-                <p class="text-lg">${escapeHtml(restzeit)}</p>
+                <p class="text-lg">${restzeit}</p>
             </div>
             ${wg.typ !== 'aktionscode' ? `
             <div>
@@ -4640,6 +4733,7 @@ window.openWertguthabenDetails = async function(id, options = {}) {
         if (aSystem !== bSystem) return aSystem ? -1 : 1;
         return getTransaktionSortTimestamp(a) - getTransaktionSortTimestamp(b);
     });
+    const latestVerifiableTransaktionId = getLatestVerifiableHistoryTransaktionIdFromEntries(sortedTransaktionen, wg.typ);
     const transaktionsList = document.getElementById('transaktionsList');
 
     if (sortedTransaktionen.length === 0) {
@@ -4661,7 +4755,10 @@ window.openWertguthabenDetails = async function(id, options = {}) {
                     : (isKorrektur
                         ? `${transaktionBetrag >= 0 ? '+' : '-'} ${Math.abs(transaktionBetrag).toFixed(2)} € (Korrektur)`
                         : `+ ${Math.abs(transaktionBetrag).toFixed(2)} €`));
-            const canEdit = !readOnly && (t.typ === 'verwendung' || t.typ === 'gutschrift' || t.typ === 'korrektur') && wg.typ !== 'aktionscode';
+            const canEdit = !readOnly
+                && isVerifiableHistoryTransaktionCandidate(t, wg.typ)
+                && latestVerifiableTransaktionId === t.id
+                && !t.betragVerifiziert;
             const canDelete = !readOnly && !isStartguthaben;
             const verifyInfo = (wg.typ !== 'aktionscode' && t.betragVerifiziert)
                 ? `✅ Verifiziert: ${formatDateTime(t.betragVerifiziertAm)} · ${getDisplayUserName(t.betragVerifiziertVon)}`
@@ -4685,7 +4782,7 @@ window.openWertguthabenDetails = async function(id, options = {}) {
                             ${verifyInfo ? `<div class="mt-1 text-xs font-semibold text-emerald-700">${escapeHtml(verifyInfo)}</div>` : ''}
                         </div>
                         <div class="ml-2 flex gap-1">
-                            ${canEdit ? `<button onclick="window.openEditTransaktionFromHistory('${effectiveId}', '${t.id}')" class="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="Transaktion bearbeiten">✏️</button>` : ''}
+                            ${canEdit ? `<button onclick="window.openEditTransaktionFromHistory('${effectiveId}', '${t.id}')" class="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="Transaktion verifizieren">✅</button>` : ''}
                             ${canDelete ? `<button onclick="deleteTransaktion('${effectiveId}', '${t.id}')" class="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Transaktion löschen">🗑️</button>` : ''}
                         </div>
                     </div>

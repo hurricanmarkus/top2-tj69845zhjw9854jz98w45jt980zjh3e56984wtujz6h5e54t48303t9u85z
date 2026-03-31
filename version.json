@@ -1,14 +1,24 @@
 {
-  "version": "1.5.7",
-  "buildId": "20260331-6",
+  "version": "1.5.8",
+  "buildId": "20260331-7",
   "releaseDate": "2026-03-31",
-  "releaseTime": "09:11",
+  "releaseTime": "09:59",
   "bereich": "Wertguthaben",
   "timezone": "Europe/Vienna",
-  "note": "Die Wertguthaben-Filterbox unterstützt jetzt einen Verifizierungsfilter mit Ignorieren/Verifiziert/Unverifiziert sowie einen schmaleren Eigentümer-Filter.",
-  "commitId": "fe07075",
+  "note": "Wertguthaben blendet Aktionscode bei Verifizierungsfiltern aus, findet maskierte Sternchen-Werte besser, zentriert das Einlöse-System und erlaubt Verifizierung nur noch für den neuesten History-Eintrag.",
+  "commitId": "c20e8d4",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.5.8",
+      "buildId": "20260331-7",
+      "releaseDate": "2026-03-31",
+      "releaseTime": "09:59",
+      "bereich": "Wertguthaben",
+      "note": "Wertguthaben blendet Aktionscode bei Verifizierungsfiltern aus, findet maskierte Sternchen-Werte besser, zentriert das Einlöse-System und erlaubt Verifizierung nur noch für den neuesten History-Eintrag.",
+      "commitId": "c20e8d4",
+      "obligation": "false"
+    },
     {
       "version": "1.5.7",
       "buildId": "20260331-6",
