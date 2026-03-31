@@ -1,6 +1,6 @@
 // // @ts-check
 import { query, where, orderBy, onSnapshot, collection, doc, updateDoc, deleteDoc, getDocs, writeBatch, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { updateUIForMode } from './log-InOut.js';
+import { updateUIForMode, getUserSetting, saveUserSetting } from './log-InOut.js';
 import {
     checklistItemsCollectionRef,
     DELETED_CHECKLISTS,
@@ -62,6 +62,8 @@ const getTemplateShipId = (template) => template?.shipId || template?.stackId ||
 const getTemplateShipName = (template) => template?.shipName || template?.stackName || null;
 const checklistCheckboxClickTracker = new Map();
 const checklistCheckboxHintTimeouts = new Map();
+const CHECKLIST_VIEW_FILTERS_KEY = 'checklist_view_filters';
+const CHECKLIST_UNASSIGNED_FILTER_KEY = '__unassigned__';
 
 const PERSON_BADGE_CLASSES = [
   'bg-sky-100 text-sky-800 border-sky-200',
@@ -79,6 +81,178 @@ function getCurrentActorName() {
   const candidate = user.displayName || user.name || user.fullName || user.username || user.email || window.currentUser?.displayName || window.currentUser?.name;
   const normalized = typeof candidate === 'string' ? candidate.trim() : '';
   return normalized || 'Unbekannt';
+}
+
+function buildChecklistPersonFilterOptions(listId) {
+  const uniqueOptions = new Map();
+  let hasUnassigned = false;
+
+  (CHECKLIST_ITEMS[listId] || []).forEach(item => {
+    const assignedUserId = typeof item?.assignedTo === 'string' ? item.assignedTo.trim() : '';
+    const assignedUserName = typeof item?.assignedToName === 'string' ? item.assignedToName.trim() : '';
+
+    if (!assignedUserId && !assignedUserName) {
+      hasUnassigned = true;
+      return;
+    }
+
+    const key = assignedUserId ? `user:${assignedUserId}` : `name:${assignedUserName.toLowerCase()}`;
+    const fallbackUser = assignedUserId ? USERS?.[assignedUserId] : null;
+    const label = assignedUserName || fallbackUser?.name || fallbackUser?.displayName || assignedUserId || 'Unbekannt';
+    if (!uniqueOptions.has(key)) {
+      uniqueOptions.set(key, { key, label });
+    }
+  });
+
+  const options = Array.from(uniqueOptions.values()).sort((a, b) => String(a.label || '').localeCompare(String(b.label || ''), 'de', { sensitivity: 'base' }));
+  if (hasUnassigned) {
+    options.push({ key: CHECKLIST_UNASSIGNED_FILTER_KEY, label: 'Ohne Zuordnung' });
+  }
+  return options;
+}
+
+function getChecklistPersonFilterSignature(personOptions) {
+  return personOptions.map(option => `${option.key}:${option.label}`).join('|');
+}
+
+function getChecklistDefaultFilterState(personOptions) {
+  return {
+    text: '',
+    status: 'all',
+    people: personOptions.map(option => option.key),
+    personOptionsSignature: getChecklistPersonFilterSignature(personOptions)
+  };
+}
+
+function getStoredChecklistViewFilters() {
+  const stored = getUserSetting(CHECKLIST_VIEW_FILTERS_KEY, {});
+  return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {};
+}
+
+function persistChecklistFilterState(listId, filterState) {
+  if (!listId) return;
+  const storedFilters = getStoredChecklistViewFilters();
+  const normalizedState = {
+    text: typeof filterState?.text === 'string' ? filterState.text : '',
+    status: filterState?.status === 'open' || filterState?.status === 'done' ? filterState.status : 'all',
+    people: Array.isArray(filterState?.people) ? filterState.people.slice() : [],
+    personOptionsSignature: typeof filterState?.personOptionsSignature === 'string' ? filterState.personOptionsSignature : ''
+  };
+  saveUserSetting(CHECKLIST_VIEW_FILTERS_KEY, {
+    ...storedFilters,
+    [listId]: normalizedState
+  });
+}
+
+function loadChecklistFilterState(listId, personOptions) {
+  const defaultState = getChecklistDefaultFilterState(personOptions);
+  const storedFilters = getStoredChecklistViewFilters();
+  const rawState = storedFilters[listId];
+
+  if (!rawState || typeof rawState !== 'object' || Array.isArray(rawState)) {
+    return defaultState;
+  }
+
+  const allowedKeys = new Set(defaultState.people);
+  const normalizedState = {
+    text: typeof rawState.text === 'string' ? rawState.text : '',
+    status: rawState.status === 'open' || rawState.status === 'done' ? rawState.status : 'all',
+    people: Array.isArray(rawState.people) ? rawState.people.filter(key => allowedKeys.has(key)) : defaultState.people.slice(),
+    personOptionsSignature: typeof rawState.personOptionsSignature === 'string' ? rawState.personOptionsSignature : ''
+  };
+
+  if (normalizedState.personOptionsSignature !== defaultState.personOptionsSignature) {
+    persistChecklistFilterState(listId, defaultState);
+    return defaultState;
+  }
+
+  return normalizedState;
+}
+
+function readChecklistFilterStateFromView(view, personOptions) {
+  const defaultState = getChecklistDefaultFilterState(personOptions);
+  const allowedKeys = new Set(defaultState.people);
+  const selectedPeople = Array.from(view.querySelectorAll('.checklist-person-filter-option:checked')).map(input => input.value).filter(key => allowedKeys.has(key));
+  return {
+    text: view.querySelector('#checklist-filter-text')?.value || '',
+    status: view.querySelector('#checklist-filter-status')?.value === 'open' || view.querySelector('#checklist-filter-status')?.value === 'done' ? view.querySelector('#checklist-filter-status')?.value : 'all',
+    people: selectedPeople,
+    personOptionsSignature: defaultState.personOptionsSignature
+  };
+}
+
+function getChecklistPersonFilterSummary(personOptions, selectedKeys) {
+  if (!personOptions.length) return 'Keine Personen vorhanden';
+  const selectedOptions = personOptions.filter(option => selectedKeys.includes(option.key));
+  if (selectedOptions.length === personOptions.length) return 'Alle ausgewählt';
+  if (selectedOptions.length === 0) return 'Nichts ausgewählt';
+  if (selectedOptions.length <= 2) return selectedOptions.map(option => option.label).join(', ');
+  return `${selectedOptions.length} von ${personOptions.length} ausgewählt`;
+}
+
+function syncChecklistFilterUi(view, personOptions, filterState) {
+  const defaultState = getChecklistDefaultFilterState(personOptions);
+  const selectedPeople = Array.isArray(filterState?.people) ? filterState.people : defaultState.people;
+  const hasTextFilter = Boolean((filterState?.text || '').trim());
+  const hasStatusFilter = (filterState?.status || 'all') !== 'all';
+  const hasPersonFilter = selectedPeople.length !== personOptions.length;
+  const hasAnyFilter = hasTextFilter || hasStatusFilter || hasPersonFilter;
+  const activeControlClass = 'bg-orange-50 border-orange-400 ring-2 ring-orange-200 animate-pulse';
+  const inactiveInputClass = 'bg-white border-gray-300';
+  const inactiveBoxClass = 'bg-white border-gray-200';
+
+  view.dataset.checklistPersonOptionsSignature = defaultState.personOptionsSignature;
+
+  const textInput = view.querySelector('#checklist-filter-text');
+  if (textInput) {
+    if (document.activeElement !== textInput) textInput.value = filterState?.text || '';
+    textInput.className = `w-full p-2 border rounded-lg text-sm transition ${hasTextFilter ? activeControlClass : inactiveInputClass}`;
+  }
+
+  const statusSelect = view.querySelector('#checklist-filter-status');
+  if (statusSelect) {
+    statusSelect.value = filterState?.status || 'all';
+    statusSelect.className = `w-full p-2 border rounded-lg text-sm transition ${hasStatusFilter ? activeControlClass : 'bg-white border-gray-300'}`;
+  }
+
+  const personFilterBox = view.querySelector('#checklist-person-filter-box');
+  if (personFilterBox) {
+    personFilterBox.className = `rounded-lg border overflow-hidden transition ${hasPersonFilter ? activeControlClass : inactiveBoxClass}`;
+  }
+
+  const personSummary = view.querySelector('#checklist-person-filter-summary');
+  if (personSummary) {
+    personSummary.textContent = getChecklistPersonFilterSummary(personOptions, selectedPeople);
+  }
+
+  const personCount = view.querySelector('#checklist-person-filter-count');
+  if (personCount) {
+    personCount.textContent = `${selectedPeople.length}/${personOptions.length}`;
+  }
+
+  const optionsContainer = view.querySelector('#checklist-person-filter-options');
+  if (optionsContainer) {
+    optionsContainer.innerHTML = personOptions.length
+      ? personOptions.map(option => `
+          <label class="flex items-center justify-between gap-3 px-3 py-2 rounded-lg hover:bg-white/80 cursor-pointer transition">
+            <span class="text-sm text-gray-700 break-words">${escapeHtml(option.label)}</span>
+            <input type="checkbox" class="checklist-person-filter-option h-4 w-4 rounded border-gray-300 text-indigo-600" value="${option.key}" ${selectedPeople.includes(option.key) ? 'checked' : ''}>
+          </label>
+        `).join('')
+      : '<p class="px-3 py-2 text-sm text-gray-400">Keine Personenfilter verfügbar.</p>';
+  }
+
+  const resetButton = view.querySelector('#checklist-filter-reset-btn');
+  if (resetButton) {
+    resetButton.disabled = !hasAnyFilter;
+    resetButton.className = `w-full lg:w-auto px-3 py-2 rounded-lg text-sm font-semibold border transition ${hasAnyFilter ? 'bg-orange-50 text-orange-700 border-orange-300 hover:bg-orange-100' : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'}`;
+  }
+
+  const personToggle = view.querySelector('#checklist-person-filter-toggle');
+  const personPanel = view.querySelector('#checklist-person-filter-panel');
+  if (personToggle && personPanel) {
+    personToggle.setAttribute('aria-expanded', String(!personPanel.classList.contains('hidden')));
+  }
 }
 
 function getChecklistCategoryById(categoryId) {
@@ -809,7 +983,8 @@ export function renderChecklistView(listId) {
   
   const canSwitchLists = isSystemAdmin || hasSwitchPerm;
   const disabledAttr = canSwitchLists ? '' : 'disabled';
-  // ----------------------------------
+  const personOptions = buildChecklistPersonFilterOptions(listId);
+  const initialFilterState = loadChecklistFilterState(listId, personOptions);
 
   contentWrapper.innerHTML = `
     <div class="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm mb-4">
@@ -817,13 +992,33 @@ export function renderChecklistView(listId) {
       <select id="checklist-switcher" class="p-2 border rounded-lg bg-gray-50 text-sm" ${disabledAttr}>${groupedListOptions}</select>
     </div>
 
-    <div class="bg-white p-3 rounded-lg shadow-sm mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-      <input type="text" id="checklist-filter-text" class="p-2 border rounded-lg text-sm" placeholder="Nach Text oder ID suchen...">
-      <select id="checklist-filter-status" class="p-2 border rounded-lg bg-white text-sm">
+    <div class="bg-white p-3 rounded-lg shadow-sm mb-4 grid grid-cols-1 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,0.55fr)_minmax(0,1fr)_auto] gap-3 items-start">
+      <input type="text" id="checklist-filter-text" class="w-full p-2 border rounded-lg text-sm" placeholder="Nach Text oder ID suchen...">
+      <select id="checklist-filter-status" class="w-full p-2 border rounded-lg bg-white text-sm">
         <option value="all">Alle anzeigen</option>
         <option value="open">Nur Offene</option>
         <option value="done">Nur Erledigte</option>
       </select>
+      <div id="checklist-person-filter-box" class="rounded-lg border overflow-hidden bg-white border-gray-200 transition">
+        <button type="button" id="checklist-person-filter-toggle" class="w-full flex items-center justify-between gap-3 px-3 py-2 text-left hover:bg-gray-50 transition">
+          <div class="min-w-0">
+            <div class="text-sm font-semibold text-gray-800">Personenfilter</div>
+            <div id="checklist-person-filter-summary" class="text-xs text-gray-500 truncate">Alle ausgewählt</div>
+          </div>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <span id="checklist-person-filter-count" class="text-xs font-semibold text-gray-500">0/0</span>
+            <span id="checklist-person-filter-chevron" class="text-gray-400 text-lg leading-none">+</span>
+          </div>
+        </button>
+        <div id="checklist-person-filter-panel" class="hidden border-t border-gray-200 bg-orange-50/40 p-3 space-y-3">
+          <div class="flex gap-2">
+            <button type="button" id="checklist-person-filter-all-btn" class="flex-1 px-3 py-2 rounded-lg text-xs font-semibold border border-gray-200 bg-white hover:bg-gray-50 transition">Alle auswählen</button>
+            <button type="button" id="checklist-person-filter-none-btn" class="flex-1 px-3 py-2 rounded-lg text-xs font-semibold border border-gray-200 bg-white hover:bg-gray-50 transition">Alle abwählen</button>
+          </div>
+          <div id="checklist-person-filter-options" class="max-h-56 overflow-y-auto space-y-1"></div>
+        </div>
+      </div>
+      <button type="button" id="checklist-filter-reset-btn" class="w-full lg:w-auto px-3 py-2 rounded-lg text-sm font-semibold border transition">Filter zurücksetzen</button>
     </div>
 
     <div id="checklist-stats" class="bg-indigo-50 p-3 rounded-lg text-center mb-4 text-sm font-semibold text-indigo-800"></div>
@@ -839,10 +1034,66 @@ export function renderChecklistView(listId) {
     switcher.addEventListener('change', (e) => renderChecklistView(e.target.value));
   }
 
-  contentWrapper.querySelector('#checklist-filter-text')?.addEventListener('input', () => renderChecklistItems(listId));
-  contentWrapper.querySelector('#checklist-filter-status')?.addEventListener('change', () => renderChecklistItems(listId));
+  syncChecklistFilterUi(view, personOptions, initialFilterState);
 
-  // render items
+  const persistAndRenderChecklistFilters = () => {
+    const nextPersonOptions = buildChecklistPersonFilterOptions(listId);
+    const nextFilterState = readChecklistFilterStateFromView(view, nextPersonOptions);
+    persistChecklistFilterState(listId, nextFilterState);
+    syncChecklistFilterUi(view, nextPersonOptions, nextFilterState);
+    renderChecklistItems(listId);
+  };
+
+  contentWrapper.querySelector('#checklist-filter-text')?.addEventListener('input', persistAndRenderChecklistFilters);
+  contentWrapper.querySelector('#checklist-filter-status')?.addEventListener('change', persistAndRenderChecklistFilters);
+
+  contentWrapper.addEventListener('change', (e) => {
+    if (e.target.closest('.checklist-person-filter-option')) {
+      persistAndRenderChecklistFilters();
+    }
+  });
+
+  contentWrapper.addEventListener('click', (e) => {
+    const toggleButton = e.target.closest('#checklist-person-filter-toggle');
+    if (toggleButton) {
+      const panel = contentWrapper.querySelector('#checklist-person-filter-panel');
+      const chevron = contentWrapper.querySelector('#checklist-person-filter-chevron');
+      if (panel) {
+        panel.classList.toggle('hidden');
+        if (chevron) chevron.textContent = panel.classList.contains('hidden') ? '+' : '−';
+        toggleButton.setAttribute('aria-expanded', String(!panel.classList.contains('hidden')));
+      }
+      return;
+    }
+
+    const selectAllButton = e.target.closest('#checklist-person-filter-all-btn');
+    if (selectAllButton) {
+      contentWrapper.querySelectorAll('.checklist-person-filter-option').forEach(input => {
+        input.checked = true;
+      });
+      persistAndRenderChecklistFilters();
+      return;
+    }
+
+    const selectNoneButton = e.target.closest('#checklist-person-filter-none-btn');
+    if (selectNoneButton) {
+      contentWrapper.querySelectorAll('.checklist-person-filter-option').forEach(input => {
+        input.checked = false;
+      });
+      persistAndRenderChecklistFilters();
+      return;
+    }
+
+    const resetButton = e.target.closest('#checklist-filter-reset-btn');
+    if (resetButton) {
+      const resetPersonOptions = buildChecklistPersonFilterOptions(listId);
+      const resetState = getChecklistDefaultFilterState(resetPersonOptions);
+      syncChecklistFilterUi(view, resetPersonOptions, resetState);
+      persistChecklistFilterState(listId, resetState);
+      renderChecklistItems(listId);
+    }
+  });
+
   renderChecklistItems(listId);
 }
 
@@ -858,23 +1109,40 @@ export function renderChecklistItems(listId) {
   if (!itemsContainer) return;
 
   const allItems = (CHECKLIST_ITEMS[listId] || []).map((it, idx) => ({ ...it, originalIndex: idx }));
-  const filterText = (view.querySelector('#checklist-filter-text')?.value || '').toLowerCase();
-  const filterStatus = view.querySelector('#checklist-filter-status')?.value || 'all';
+  const personOptions = buildChecklistPersonFilterOptions(listId);
+  const currentSignature = getChecklistPersonFilterSignature(personOptions);
+  let filterState;
 
-  // 1. Filtern
+  if ((view.dataset.checklistPersonOptionsSignature || '') !== currentSignature) {
+    filterState = getChecklistDefaultFilterState(personOptions);
+    syncChecklistFilterUi(view, personOptions, filterState);
+    persistChecklistFilterState(listId, filterState);
+  } else {
+    filterState = readChecklistFilterStateFromView(view, personOptions);
+    syncChecklistFilterUi(view, personOptions, filterState);
+  }
+
+  const filterText = (filterState.text || '').toLowerCase();
+  const filterStatus = filterState.status || 'all';
+  const selectedPeople = new Set(filterState.people || []);
+  const hasActiveFilters = Boolean(filterText) || filterStatus !== 'all' || selectedPeople.size !== personOptions.length;
+
   const filtered = allItems.filter(item => {
     const idStr = String(item.originalIndex + 1);
     const matchesText = !filterText || (item.text || '').toLowerCase().includes(filterText) || idStr.includes(filterText);
     const matchesStatus = filterStatus === 'all' ||
       (filterStatus === 'open' && item.status !== 'done') ||
       (filterStatus === 'done' && item.status === 'done');
-    return matchesText && matchesStatus;
+    const assignedUserId = typeof item?.assignedTo === 'string' ? item.assignedTo.trim() : '';
+    const assignedUserName = typeof item?.assignedToName === 'string' ? item.assignedToName.trim() : '';
+    const personKey = assignedUserId ? `user:${assignedUserId}` : (assignedUserName ? `name:${assignedUserName.toLowerCase()}` : CHECKLIST_UNASSIGNED_FILTER_KEY);
+    const matchesPerson = selectedPeople.has(personKey);
+    return matchesText && matchesStatus && matchesPerson;
   });
 
   const doneItems = filtered.filter(i => i.status === 'done');
   const openItems = filtered.filter(i => i.status !== 'done');
 
-  // Statistik
   const total = filtered.length;
   const doneCount = doneItems.length;
   const openCount = openItems.length;
@@ -927,11 +1195,12 @@ export function renderChecklistItems(listId) {
       return html;
   }
 
-  // --- RENDER OPEN ITEMS (Gruppiert) ---
   itemsContainer.innerHTML = '';
 
   if (openItems.length === 0) {
-      itemsContainer.innerHTML = '<p class="text-center text-gray-400 text-sm py-4">Alles erledigt! 🎉</p>';
+      itemsContainer.innerHTML = filtered.length === 0
+        ? `<p class="text-center text-gray-400 text-sm py-4">${hasActiveFilters ? 'Keine Einträge mit den aktuellen Filtern gefunden.' : 'Keine Einträge vorhanden.'}</p>`
+        : '<p class="text-center text-gray-400 text-sm py-4">Alles erledigt! 🎉</p>';
   } else {
       const groups = {};
       openItems.forEach(item => {

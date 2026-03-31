@@ -1,14 +1,24 @@
 {
-  "version": "1.5.11",
-  "buildId": "20260331-10",
+  "version": "1.5.12",
+  "buildId": "20260331-11",
   "releaseDate": "2026-03-31",
-  "releaseTime": "14:39",
+  "releaseTime": "14:55",
   "bereich": "Checkliste",
   "timezone": "Europe/Vienna",
-  "note": "Checkliste: Ein einfacher Klick auf die Status-Checkbox blendet nach 1 Sekunde ohne zweiten Klick einen Hinweis ein, dass fuer den Statuswechsel ein Doppelklick noetig ist.",
+  "note": "Checkliste: Die aktuelle Checkliste hat jetzt kompaktere Text-/Statusfilter, einen Personen-Mehrfachfilter mit Alle auswaehlen, Reset und orange markierte aktive Filter; die Auswahl wird ueber userSettings geraeteuebergreifend gespeichert und bei Personen-Aenderungen automatisch zurueckgesetzt.",
   "commitId": "b1383f2",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.5.12",
+      "buildId": "20260331-11",
+      "releaseDate": "2026-03-31",
+      "releaseTime": "14:55",
+      "bereich": "Checkliste",
+      "note": "Checkliste: Die aktuelle Checkliste hat jetzt kompaktere Text-/Statusfilter, einen Personen-Mehrfachfilter mit Alle auswaehlen, Reset und orange markierte aktive Filter; die Auswahl wird ueber userSettings geraeteuebergreifend gespeichert und bei Personen-Aenderungen automatisch zurueckgesetzt.",
+      "commitId": "b1383f2",
+      "obligation": "false"
+    },
     {
       "version": "1.5.11",
       "buildId": "20260331-10",
