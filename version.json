@@ -1,14 +1,44 @@
 {
-  "version": "1.5.4",
-  "buildId": "20260331-3",
+  "version": "1.5.7",
+  "buildId": "20260331-6",
   "releaseDate": "2026-03-31",
-  "releaseTime": "08:44",
+  "releaseTime": "09:11",
   "bereich": "Wertguthaben",
   "timezone": "Europe/Vienna",
-  "note": "Wertguthaben besitzt jetzt ein 3-Punkte-Menü mit Transaktionsübersicht, Datumsfilter und klickbarer Liste zum Öffnen des zugehörigen Eintrags.",
-  "commitId": "de87471",
+  "note": "Die Wertguthaben-Filterbox unterstützt jetzt einen Verifizierungsfilter mit Ignorieren/Verifiziert/Unverifiziert sowie einen schmaleren Eigentümer-Filter.",
+  "commitId": "fe07075",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.5.7",
+      "buildId": "20260331-6",
+      "releaseDate": "2026-03-31",
+      "releaseTime": "09:11",
+      "bereich": "Wertguthaben",
+      "note": "Die Wertguthaben-Filterbox unterstützt jetzt einen Verifizierungsfilter mit Ignorieren/Verifiziert/Unverifiziert sowie einen schmaleren Eigentümer-Filter.",
+      "commitId": "fe07075",
+      "obligation": "false"
+    },
+    {
+      "version": "1.5.6",
+      "buildId": "20260331-5",
+      "releaseDate": "2026-03-31",
+      "releaseTime": "09:08",
+      "bereich": "Wertguthaben",
+      "note": "Wertguthaben unterstützt jetzt Archivieren mit OK-Bestätigung, synchronen Archivgründen, Archivliste, Wiederherstellen und endgültigem Löschen sowie einer Nur-Lesen-Ansicht für archivierte Einträge.",
+      "commitId": "fe07075",
+      "obligation": "false"
+    },
+    {
+      "version": "1.5.5",
+      "buildId": "20260331-4",
+      "releaseDate": "2026-03-31",
+      "releaseTime": "08:52",
+      "bereich": "Wertguthaben",
+      "note": "Das Wertguthaben-Transaktionsfenster wurde mobilfreundlicher verdichtet und um Schnellfilter, Ergebniszähler sowie zusätzliche Transaktionsspalten erweitert.",
+      "commitId": "fe07075",
+      "obligation": "false"
+    },
     {
       "version": "1.5.4",
       "buildId": "20260331-3",

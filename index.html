@@ -24,15 +24,15 @@
     <meta name="application-name" content="TOP 2 App">
     <meta name="apple-mobile-web-app-title" content="TOP 2">
     <meta name="theme-color" content="#4f46e5" />
-    <meta name="top2-app-version" content="1.5.4" />
-    <meta name="top2-build-id" content="20260331-3" />
+    <meta name="top2-app-version" content="1.5.7" />
+    <meta name="top2-build-id" content="20260331-6" />
     <meta name="msapplication-navbutton-color" content="#4f46e5">
     <meta name="apple-mobile-app-status-bar-style" content="black-translucent">
     <link rel="icon" type="image/png" sizes="192x192" href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
     <link rel="apple-touch-icon" type="image/png" sizes="192x192"
         href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
 
-    <link rel="manifest" href="manifest.json?v=20260331-3">
+    <link rel="manifest" href="manifest.json?v=20260331-6">
 
     <link rel="stylesheet" href="style.css">
     
@@ -1937,6 +1937,10 @@
                                         class="w-full text-left px-3 py-2 rounded-lg text-sm font-semibold text-gray-700 hover:bg-emerald-50 hover:text-emerald-800 transition">
                                         Transaktionen
                                     </button>
+                                    <button id="btn-open-wg-archiv"
+                                        class="w-full text-left px-3 py-2 rounded-lg text-sm font-semibold text-gray-700 hover:bg-emerald-50 hover:text-emerald-800 transition">
+                                        Archiv
+                                    </button>
                                 </div>
                             </div>
 
@@ -2034,8 +2038,14 @@
                                 <option value="Nicht zugeordnet">Nicht zugeordnet</option>
                             </select>
 
-                            <select id="filter-wg-eigentuemer" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm flex-1 min-w-[150px]">
+                            <select id="filter-wg-eigentuemer" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm flex-[0.5] min-w-[110px] max-w-[150px]">
                                 <option value="">Alle Eigentümer</option>
+                            </select>
+
+                            <select id="filter-wg-verifizierung" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm flex-1 min-w-[180px]">
+                                <option value="ignore" selected>Ignoriere Verifizierung</option>
+                                <option value="verified">Nur Verifizierte</option>
+                                <option value="unverified">Nur Unverifizierte</option>
                             </select>
 
                             <select id="filter-wg-status" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
@@ -8109,7 +8119,7 @@
                             Kopieren
                         </button>
                         <button id="deleteWertguthabenBtn" class="px-6 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 font-bold transition">
-                            Löschen
+                            Archivieren
                         </button>
                         <button id="editWertguthabenDetailsBtn" class="px-6 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-bold transition">
                             Bearbeiten
@@ -8119,8 +8129,8 @@
             </div>
         </div>
 
-        <div id="wertguthabenTransaktionenModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-[70]">
-            <div class="bg-white p-4 sm:p-6 rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div id="wertguthabenTransaktionenModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-end sm:items-center justify-center p-2 sm:p-4 z-[70]">
+            <div class="bg-white p-4 sm:p-6 rounded-t-2xl sm:rounded-xl shadow-2xl w-full max-w-6xl max-h-[96vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
                 <div class="flex justify-between items-center gap-3 mb-4">
                     <h3 class="text-xl sm:text-2xl font-bold text-emerald-800">Transaktionen</h3>
                     <button id="closeWertguthabenTransaktionenModal" class="text-gray-400 hover:text-red-600 font-bold text-3xl leading-none">&times;</button>
@@ -8138,19 +8148,30 @@
                     </div>
                 </div>
 
-                <div class="flex-1 overflow-auto rounded-xl border border-gray-200">
-                    <table class="min-w-full text-sm">
-                        <thead class="sticky top-0 bg-emerald-50 border-b border-emerald-200">
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <div class="flex flex-wrap gap-2">
+                        <button id="wgTransaktionenQuickHeute" type="button" class="px-3 py-1.5 rounded-lg border border-emerald-300 bg-white text-emerald-700 text-xs sm:text-sm font-bold hover:bg-emerald-50 transition">Heute</button>
+                        <button id="wgTransaktionenQuick7Tage" type="button" class="px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 text-xs sm:text-sm font-bold hover:bg-gray-50 transition">7 Tage</button>
+                        <button id="wgTransaktionenQuickMonat" type="button" class="px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 text-xs sm:text-sm font-bold hover:bg-gray-50 transition">Monat</button>
+                    </div>
+                    <div id="wgTransaktionenSummary" class="text-xs sm:text-sm font-semibold text-gray-600">0 Transaktionen</div>
+                </div>
+
+                <div class="flex-1 overflow-auto rounded-xl border border-gray-200 bg-white">
+                    <table class="min-w-[980px] w-full text-xs sm:text-sm">
+                        <thead class="sticky top-0 z-10 bg-emerald-50 border-b border-emerald-200">
                             <tr>
                                 <th class="px-4 py-3 text-left font-bold text-emerald-800 uppercase tracking-wide">Name</th>
                                 <th class="px-4 py-3 text-left font-bold text-emerald-800 uppercase tracking-wide">ID</th>
+                                <th class="px-4 py-3 text-left font-bold text-emerald-800 uppercase tracking-wide">Typ</th>
                                 <th class="px-4 py-3 text-left font-bold text-emerald-800 uppercase tracking-wide">Transaktion</th>
+                                <th class="px-4 py-3 text-left font-bold text-emerald-800 uppercase tracking-wide">Von</th>
                                 <th class="px-4 py-3 text-left font-bold text-emerald-800 uppercase tracking-wide">Datum</th>
                             </tr>
                         </thead>
                         <tbody id="wertguthabenTransaktionenTableBody" class="divide-y divide-gray-200 bg-white">
                             <tr>
-                                <td colspan="4" class="px-4 py-8 text-center text-gray-400 italic">Keine Transaktionen gefunden.</td>
+                                <td colspan="6" class="px-4 py-8 text-center text-gray-400 italic">Keine Transaktionen gefunden.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -8159,6 +8180,84 @@
                 <div class="flex justify-end gap-3 mt-4 pt-4 border-t">
                     <button id="closeWertguthabenTransaktionenBtn" class="px-6 py-2.5 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-bold transition">
                         Schließen
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="wertguthabenArchivModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-end sm:items-center justify-center p-2 sm:p-4 z-[72]">
+            <div class="bg-white p-4 sm:p-6 rounded-t-2xl sm:rounded-xl shadow-2xl w-full max-w-6xl max-h-[96vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
+                <div class="flex justify-between items-center gap-3 mb-4">
+                    <h3 class="text-xl sm:text-2xl font-bold text-emerald-800">Archiv</h3>
+                    <button id="closeWertguthabenArchivModal" class="text-gray-400 hover:text-red-600 font-bold text-3xl leading-none">&times;</button>
+                </div>
+
+                <div class="flex items-center justify-between gap-3 mb-3">
+                    <div id="wertguthabenArchivSummary" class="text-xs sm:text-sm font-semibold text-gray-600">0 archivierte Einträge</div>
+                </div>
+
+                <div class="flex-1 overflow-auto rounded-xl border border-gray-200 bg-white">
+                    <table class="min-w-[980px] w-full text-xs sm:text-sm">
+                        <thead class="sticky top-0 z-10 bg-emerald-50 border-b border-emerald-200">
+                            <tr>
+                                <th class="px-4 py-3 text-left font-bold text-emerald-800 uppercase tracking-wide">Name</th>
+                                <th class="px-4 py-3 text-left font-bold text-emerald-800 uppercase tracking-wide">ID</th>
+                                <th class="px-4 py-3 text-left font-bold text-emerald-800 uppercase tracking-wide">Typ</th>
+                                <th class="px-4 py-3 text-left font-bold text-emerald-800 uppercase tracking-wide">Archiviert am</th>
+                                <th class="px-4 py-3 text-left font-bold text-emerald-800 uppercase tracking-wide">Grund</th>
+                                <th class="px-4 py-3 text-left font-bold text-emerald-800 uppercase tracking-wide">Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="wertguthabenArchivTableBody" class="divide-y divide-gray-200 bg-white">
+                            <tr>
+                                <td colspan="6" class="px-4 py-8 text-center text-gray-400 italic">Keine archivierten Einträge gefunden.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-4 pt-4 border-t">
+                    <button id="closeWertguthabenArchivBtn" class="px-6 py-2.5 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-bold transition">
+                        Schließen
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="wertguthabenArchiveConfirmModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-[85]">
+            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg">
+                <div class="flex justify-between items-center gap-3 mb-4">
+                    <h3 class="text-xl font-bold text-red-800">Eintrag archivieren</h3>
+                    <button id="closeWertguthabenArchiveConfirmModal" class="text-gray-400 hover:text-red-600 font-bold text-3xl leading-none">&times;</button>
+                </div>
+
+                <p class="text-sm text-gray-700 leading-relaxed mb-4">Dieser Eintrag wird archiviert und danach im Dashboard sowie in den aktiven Wertguthaben-Systemen nicht mehr angezeigt. Zur Bestätigung musst du <strong>OK</strong> eingeben.</p>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Grund</label>
+                        <select id="wgArchiveReasonSelect" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-emerald-500 bg-white">
+                            <option value="">Grund auswählen...</option>
+                        </select>
+                        <div id="wgArchiveReasonNewWrapper" class="hidden mt-2">
+                            <input type="text" id="wgArchiveReasonNew" placeholder="Neuen Archivierungsgrund eingeben"
+                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-emerald-500 bg-white">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Zur Bestätigung exakt OK eingeben</label>
+                        <input type="text" id="wgArchiveConfirmText" placeholder="OK"
+                            class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-red-500 bg-white uppercase">
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-6 pt-4 border-t">
+                    <button id="cancelWertguthabenArchiveBtn" class="px-6 py-2.5 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-bold transition">
+                        Abbrechen
+                    </button>
+                    <button id="confirmWertguthabenArchiveBtn" class="px-6 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 font-bold transition disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        Archivieren
                     </button>
                 </div>
             </div>
