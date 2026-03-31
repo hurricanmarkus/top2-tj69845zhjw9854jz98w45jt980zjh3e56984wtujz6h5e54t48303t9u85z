@@ -60,6 +60,7 @@ const hasFirestore = typeof addDoc === 'function' && typeof updateDoc === 'funct
 
 const getTemplateShipId = (template) => template?.shipId || template?.stackId || null;
 const getTemplateShipName = (template) => template?.shipName || template?.stackName || null;
+const checklistCheckboxClickTracker = new Map();
 
 const PERSON_BADGE_CLASSES = [
   'bg-sky-100 text-sky-800 border-sky-200',
@@ -77,6 +78,271 @@ function getCurrentActorName() {
   const candidate = user.displayName || user.name || user.fullName || user.username || user.email || window.currentUser?.displayName || window.currentUser?.name;
   const normalized = typeof candidate === 'string' ? candidate.trim() : '';
   return normalized || 'Unbekannt';
+}
+
+function getChecklistCategoryById(categoryId) {
+  if (!categoryId) return null;
+  for (const categories of Object.values(CHECKLIST_CATEGORIES || {})) {
+    const found = (categories || []).find(category => category.id === categoryId);
+    if (found) return found;
+  }
+  return null;
+}
+
+function getChecklistItemContext(itemId, preferredListId = null) {
+  if (preferredListId && CHECKLIST_ITEMS[preferredListId]) {
+    const item = (CHECKLIST_ITEMS[preferredListId] || []).find(entry => entry.id === itemId);
+    if (item) return { item, listId: preferredListId };
+  }
+  for (const [listId, items] of Object.entries(CHECKLIST_ITEMS || {})) {
+    const item = (items || []).find(entry => entry.id === itemId);
+    if (item) return { item, listId };
+  }
+  return { item: null, listId: preferredListId || null };
+}
+
+function getTemplateItemContext(itemId, preferredTemplateId = null) {
+  if (preferredTemplateId && TEMPLATE_ITEMS[preferredTemplateId]) {
+    const item = (TEMPLATE_ITEMS[preferredTemplateId] || []).find(entry => entry.id === itemId);
+    if (item) return { item, templateId: preferredTemplateId };
+  }
+  for (const [templateId, items] of Object.entries(TEMPLATE_ITEMS || {})) {
+    const item = (items || []).find(entry => entry.id === itemId);
+    if (item) return { item, templateId };
+  }
+  return { item: null, templateId: preferredTemplateId || null };
+}
+
+function buildChecklistAssigneeOptions(selectedValue = '') {
+  const options = Object.values(USERS || {})
+    .filter(user => user && (user.name || user.displayName))
+    .sort((a, b) => String(a.name || a.displayName || '').localeCompare(String(b.name || b.displayName || ''), 'de', { sensitivity: 'base' }))
+    .map(user => `<option value="${user.id}" ${selectedValue === user.id ? 'selected' : ''}>${escapeHtml(user.name || user.displayName || '')}</option>`)
+    .join('');
+  return `<option value="">Niemand zuweisen</option>${options}`;
+}
+
+function buildChecklistCategoryOptions(selectedValue = '') {
+  const groupedOptions = Object.values(CHECKLIST_GROUPS || {})
+    .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''), 'de', { sensitivity: 'base' }))
+    .map(group => {
+      const categories = (CHECKLIST_CATEGORIES[group.id] || [])
+        .slice()
+        .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''), 'de', { sensitivity: 'base' }));
+      if (!categories.length) return '';
+      const categoryOptions = categories
+        .map(category => `<option value="${category.id}" ${selectedValue === category.id ? 'selected' : ''}>${escapeHtml(category.name || '')}</option>`)
+        .join('');
+      return `<optgroup label="${escapeHtml(group.name || '')}">${categoryOptions}</optgroup>`;
+    })
+    .join('');
+  return `<option value="">Keine Kategorie</option>${groupedOptions}`;
+}
+
+function closeChecklistItemEditModal() {
+  const modal = document.getElementById('checklistItemEditModal');
+  if (!modal) return;
+  modal.style.display = 'none';
+  modal.dataset.mode = '';
+  modal.dataset.itemId = '';
+  modal.dataset.listId = '';
+  modal.dataset.templateId = '';
+  modal.dataset.busy = 'false';
+}
+
+function ensureChecklistItemEditModal() {
+  if (document.getElementById('checklistItemEditModal')) return;
+  document.body.insertAdjacentHTML('beforeend', `
+    <div id="checklistItemEditModal" class="fixed inset-0 bg-black/60 z-[140] items-center justify-center p-4" style="display: none;">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div class="sticky top-0 bg-gradient-to-r from-indigo-600 to-blue-600 text-white p-4 rounded-t-2xl flex items-center justify-between gap-3">
+          <h3 id="checklistItemEditModalTitle" class="text-lg font-bold">Eintrag bearbeiten</h3>
+          <button id="checklistItemEditModalCloseBtn" type="button" class="text-white/90 hover:text-white text-2xl leading-none">&times;</button>
+        </div>
+        <div class="p-4 space-y-4">
+          <div>
+            <label for="checklistItemEditName" class="block text-sm font-semibold text-gray-700 mb-1">Unbenennen</label>
+            <input id="checklistItemEditName" type="text" class="w-full p-2 border rounded-lg" placeholder="Text für Eintrag...">
+          </div>
+          <div>
+            <label for="checklistItemEditAssignee" class="block text-sm font-semibold text-gray-700 mb-1">Zuweisen an</label>
+            <select id="checklistItemEditAssignee" class="w-full p-2 border rounded-lg bg-white"></select>
+          </div>
+          <div>
+            <label for="checklistItemEditCategory" class="block text-sm font-semibold text-gray-700 mb-1">Kategorie</label>
+            <select id="checklistItemEditCategory" class="w-full p-2 border rounded-lg bg-white"></select>
+          </div>
+          <label class="flex items-center justify-between gap-3 p-3 border rounded-lg bg-gray-50 cursor-pointer" for="checklistItemEditImportant">
+            <span class="text-sm font-semibold text-gray-700">Als wichtig markieren</span>
+            <input id="checklistItemEditImportant" type="checkbox" class="h-5 w-5 rounded border-gray-300 text-indigo-600">
+          </label>
+          <button id="checklistItemEditDeleteBtn" type="button" class="w-full py-2 border border-red-200 bg-red-50 text-red-700 font-semibold rounded-lg hover:bg-red-100">Eintrag löschen</button>
+        </div>
+        <div class="p-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-2">
+          <button id="checklistItemEditCancelBtn" type="button" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300">Abbrechen</button>
+          <button id="checklistItemEditSaveBtn" type="button" class="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700">Speichern</button>
+        </div>
+      </div>
+    </div>
+  `);
+
+  const modal = document.getElementById('checklistItemEditModal');
+  if (!modal || modal.dataset.listenersAttached === 'true') return;
+
+  modal.addEventListener('click', async (e) => {
+    if (modal.dataset.busy === 'true') return;
+    if (e.target === modal || e.target.closest('#checklistItemEditModalCloseBtn') || e.target.closest('#checklistItemEditCancelBtn')) {
+      closeChecklistItemEditModal();
+      return;
+    }
+
+    if (e.target.closest('#checklistItemEditDeleteBtn')) {
+      const mode = modal.dataset.mode;
+      const itemId = modal.dataset.itemId;
+      const templateId = modal.dataset.templateId || null;
+      if (!itemId) return;
+      if (!confirm('Eintrag wirklich löschen?')) return;
+
+      modal.dataset.busy = 'true';
+      try {
+        if (mode === 'template') {
+          if (!templateId) throw new Error('Template-ID fehlt.');
+          await deleteDoc(doc(checklistTemplatesCollectionRef, templateId, 'template-items', itemId));
+        } else {
+          await deleteDoc(doc(checklistItemsCollectionRef, itemId));
+        }
+        closeChecklistItemEditModal();
+        alertUser('Gelöscht.', 'success');
+      } catch (err) {
+        console.error(err);
+        modal.dataset.busy = 'false';
+        alertUser('Fehler beim Löschen.', 'error');
+      }
+      return;
+    }
+
+    if (e.target.closest('#checklistItemEditSaveBtn')) {
+      const mode = modal.dataset.mode;
+      const itemId = modal.dataset.itemId;
+      const templateId = modal.dataset.templateId || null;
+      const nameInput = modal.querySelector('#checklistItemEditName');
+      const assigneeSelect = modal.querySelector('#checklistItemEditAssignee');
+      const categorySelect = modal.querySelector('#checklistItemEditCategory');
+      const importantCheckbox = modal.querySelector('#checklistItemEditImportant');
+      const text = (nameInput?.value || '').trim();
+      if (!text) {
+        alertUser('Text darf nicht leer sein.', 'error');
+        return;
+      }
+
+      const assignedTo = assigneeSelect?.value || null;
+      const assignedToName = assignedTo ? (assigneeSelect?.options?.[assigneeSelect.selectedIndex]?.text || null) : null;
+      const categoryId = categorySelect?.value || null;
+      const category = getChecklistCategoryById(categoryId);
+      const payload = {
+        text,
+        assignedTo,
+        assignedToName,
+        categoryId,
+        categoryName: category?.name || null,
+        categoryColor: category?.color || null,
+        important: importantCheckbox?.checked === true,
+        lastEditedBy: getCurrentActorName(),
+        lastEditedAt: serverTimestamp()
+      };
+
+      modal.dataset.busy = 'true';
+      try {
+        if (mode === 'template') {
+          if (!templateId) throw new Error('Template-ID fehlt.');
+          await updateDoc(doc(checklistTemplatesCollectionRef, templateId, 'template-items', itemId), payload);
+        } else {
+          await updateDoc(doc(checklistItemsCollectionRef, itemId), payload);
+        }
+        closeChecklistItemEditModal();
+        alertUser('Gespeichert.', 'success');
+      } catch (err) {
+        console.error(err);
+        modal.dataset.busy = 'false';
+        alertUser('Fehler beim Speichern.', 'error');
+      }
+    }
+  });
+
+  modal.dataset.listenersAttached = 'true';
+}
+
+function openChecklistItemEditModal({ mode, itemId, listId = null, templateId = null }) {
+  ensureChecklistItemEditModal();
+  const modal = document.getElementById('checklistItemEditModal');
+  if (!modal) return;
+
+  const resolved = mode === 'template'
+    ? getTemplateItemContext(itemId, templateId || selectedTemplateId || document.getElementById('template-item-editor')?.dataset.templateId || null)
+    : getChecklistItemContext(itemId, listId || document.getElementById('checklistSettingsView')?.dataset.editingListId || document.getElementById('checklistView')?.dataset.currentListId || null);
+
+  if (!resolved.item) {
+    alertUser('Eintrag konnte nicht geladen werden.', 'error');
+    return;
+  }
+
+  modal.dataset.mode = mode;
+  modal.dataset.itemId = itemId || '';
+  modal.dataset.listId = resolved.listId || '';
+  modal.dataset.templateId = resolved.templateId || '';
+  modal.dataset.busy = 'false';
+
+  const item = resolved.item;
+  const titleEl = modal.querySelector('#checklistItemEditModalTitle');
+  const nameInput = modal.querySelector('#checklistItemEditName');
+  const assigneeSelect = modal.querySelector('#checklistItemEditAssignee');
+  const categorySelect = modal.querySelector('#checklistItemEditCategory');
+  const importantCheckbox = modal.querySelector('#checklistItemEditImportant');
+
+  if (titleEl) titleEl.textContent = mode === 'template' ? 'Container-Eintrag bearbeiten' : 'Checklisten-Eintrag bearbeiten';
+  if (nameInput) nameInput.value = item.text || '';
+  if (assigneeSelect) assigneeSelect.innerHTML = buildChecklistAssigneeOptions(item.assignedTo || '');
+  if (categorySelect) categorySelect.innerHTML = buildChecklistCategoryOptions(item.categoryId || '');
+  if (importantCheckbox) importantCheckbox.checked = item.important === true;
+
+  modal.style.display = 'flex';
+  nameInput?.focus();
+  nameInput?.select();
+}
+
+async function toggleChecklistItemStatusByDoubleClick(itemId, listId, checkboxEl) {
+  const context = getChecklistItemContext(itemId, listId);
+  if (!context.item) {
+    alertUser('Eintrag konnte nicht gefunden werden.', 'error');
+    return;
+  }
+
+  const nextChecked = context.item.status !== 'done';
+  const userName = currentUser?.displayName || currentUser?.name || window.currentUser?.displayName || window.currentUser?.name || 'Unbekannt';
+  const updatePayload = {
+    status: nextChecked ? 'done' : 'open',
+    lastActionBy: nextChecked ? userName : `Zurückgestellt von ${userName}`,
+    lastActionAt: serverTimestamp()
+  };
+
+  if (checkboxEl) {
+    checkboxEl.disabled = true;
+    checkboxEl.checked = nextChecked;
+  }
+
+  try {
+    await updateDoc(doc(checklistItemsCollectionRef, itemId), updatePayload);
+  } catch (err) {
+    console.error('Fehler beim Checkbox-Update:', err);
+    if (checkboxEl) {
+      checkboxEl.checked = context.item.status === 'done';
+      checkboxEl.disabled = false;
+    }
+    alertUser('Fehler beim Speichern.', 'error');
+    return;
+  }
+
+  if (checkboxEl) checkboxEl.disabled = false;
 }
 
 function getActiveTemplateId() {
@@ -120,51 +386,94 @@ function renderTemplateList() {
 export function renderContainerList() {
   const editorDiv = document.getElementById('container-list-editor');
   if (!editorDiv) return;
-  editorDiv.innerHTML = `<h3 class="font-bold text-gray-800 mb-2 mt-6">Bestehende Container verwalten</h3>`;
+  const view = document.getElementById('checklistSettingsView');
+  const editor = document.getElementById('template-item-editor');
+  editorDiv.innerHTML = '';
 
-  const ships = Object.values(CHECKLIST_SHIPS || {});
-  const containers = Object.values(TEMPLATES || {});
-  const shipOptions = `<option value="">Keinem Schiff zuweisen</option>` + ships.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  const ships = Object.values(CHECKLIST_SHIPS || {}).slice().sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'de', { sensitivity: 'base' }));
+  const containers = Object.values(TEMPLATES || {}).slice();
+
+  if (!containers.some(container => container.id === selectedTemplateId)) {
+    selectedTemplateId = null;
+    if (editor) {
+      editor.classList.add('hidden');
+      editor.dataset.templateId = '';
+    }
+    if (typeof unsubscribeTemplateItems === 'function') {
+      unsubscribeTemplateItems();
+      unsubscribeTemplateItems = null;
+    }
+  }
 
   if (!containers.length) {
-    editorDiv.innerHTML += `<p class="text-sm text-center text-gray-400">Keine Container gefunden.</p>`;
+    editorDiv.innerHTML = `<p class="text-sm text-center text-gray-400">Keine Container gefunden.</p>`;
     return;
   }
 
-  // group by ship
   const byShip = {};
-  containers.forEach(c => {
-    const sid = getTemplateShipId(c) || '__noship';
-    byShip[sid] = byShip[sid] || [];
-    byShip[sid].push(c);
+  containers.forEach(container => {
+    const shipKey = getTemplateShipId(container) || '__noship';
+    byShip[shipKey] = byShip[shipKey] || [];
+    byShip[shipKey].push(container);
   });
 
-  // render ships first
-  Object.keys(byShip).forEach(sid => {
-    if (sid === '__noship') return;
-    const ship = CHECKLIST_SHIPS[sid] || {};
-    editorDiv.innerHTML += `<h4 class="font-semibold text-sm text-gray-600 mt-4 mb-1">${ship.name || 'Unbenanntes Schiff'}</h4>`;
-    byShip[sid].forEach(c => editorDiv.innerHTML += createContainerHTML(c, shipOptions));
-  });
+  const shipGroups = ships
+    .filter(ship => (byShip[ship.id] || []).length > 0)
+    .map(ship => ({ id: ship.id, name: ship.name || 'Unbenanntes Schiff', containers: (byShip[ship.id] || []).slice() }));
 
-  // render without ship
-  if (byShip['__noship'] && byShip['__noship'].length) {
-    editorDiv.innerHTML += `<h4 class="font-semibold text-sm text-gray-600 mt-4 mb-1">Ohne Schiff</h4>`;
-    byShip['__noship'].forEach(c => editorDiv.innerHTML += createContainerHTML(c, shipOptions));
+  if ((byShip['__noship'] || []).length > 0) {
+    shipGroups.push({ id: '__noship', name: 'Ohne Schiff', containers: (byShip['__noship'] || []).slice() });
   }
 
-  function createContainerHTML(container, shipOptionsHtml) {
-    const currentShipName = getTemplateShipName(container) || 'Kein Schiff zugewiesen';
+  const selectedShipGroup = selectedTemplateId && TEMPLATES[selectedTemplateId]
+    ? (getTemplateShipId(TEMPLATES[selectedTemplateId]) || '__noship')
+    : '';
+  const currentActiveShipGroup = view?.dataset.activeTemplateShipGroup || '';
+  const effectiveActiveShipGroup = shipGroups.some(group => group.id === currentActiveShipGroup)
+    ? currentActiveShipGroup
+    : (selectedShipGroup && shipGroups.some(group => group.id === selectedShipGroup) ? selectedShipGroup : '');
+
+  if (view) {
+    view.dataset.activeTemplateShipGroup = effectiveActiveShipGroup;
+  }
+
+  editorDiv.innerHTML = shipGroups.map(group => {
+    const isExpanded = effectiveActiveShipGroup === group.id;
+    const sortedContainers = group.containers
+      .slice()
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'de', { sensitivity: 'base' }));
+
     return `
-      <div data-template-id="${container.id}" class="template-selection-item p-2 border rounded-md bg-white cursor-pointer hover:bg-gray-100 mb-2">
-        <p class="font-semibold">${container.name}</p>
+      <div class="border border-gray-200 rounded-xl bg-white overflow-hidden shadow-sm">
+        <button type="button" class="ship-group-toggle w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50 transition ${isExpanded ? 'bg-gray-50' : ''}" data-ship-group-id="${group.id}">
+          <div class="min-w-0">
+            <div class="font-semibold text-gray-800 truncate">${escapeHtml(group.name)}</div>
+            <div class="text-xs text-gray-500">${sortedContainers.length} Container</div>
+          </div>
+          <span class="text-xl leading-none text-gray-400">${isExpanded ? '−' : '+'}</span>
+        </button>
+        <div class="${isExpanded ? 'block' : 'hidden'} border-t border-gray-100 bg-gray-50 p-3 space-y-2">
+          ${sortedContainers.map(container => createContainerHTML(container)).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  function createContainerHTML(container) {
+    const currentShipId = getTemplateShipId(container) || '';
+    const currentShipName = getTemplateShipName(container) || 'Kein Schiff zugewiesen';
+    const isSelected = container.id === selectedTemplateId;
+    const shipOptions = `<option value="" ${!currentShipId ? 'selected' : ''}>Keinem Schiff zuweisen</option>` + ships.map(ship => `<option value="${ship.id}" ${currentShipId === ship.id ? 'selected' : ''}>${escapeHtml(ship.name || '')}</option>`).join('');
+    return `
+      <div data-template-id="${container.id}" class="template-selection-item p-3 border rounded-lg cursor-pointer transition ${isSelected ? 'bg-indigo-50 border-indigo-300' : 'bg-white hover:bg-gray-100 border-gray-200'}">
+        <p class="font-semibold text-gray-800">${escapeHtml(container.name || 'Unbenannter Container')}</p>
         <div class="mt-2 p-2 bg-gray-50 rounded-lg">
-          <div id="ship-display-container-${container.id}" class="flex justify-between items-center">
-            <p class="text-sm">Aktuelles Schiff: <span class="font-bold text-teal-800">${currentShipName}</span></p>
+          <div id="ship-display-container-${container.id}" class="flex justify-between items-center gap-2">
+            <p class="text-sm text-gray-700">Aktuelles Schiff: <span class="font-bold text-teal-800">${escapeHtml(currentShipName)}</span></p>
             <button data-container-id="${container.id}" class="change-ship-btn text-sm font-semibold text-blue-600 hover:underline">ändern</button>
           </div>
           <div id="ship-edit-container-${container.id}" class="hidden flex gap-2 items-center mt-2">
-            <select class="ship-assign-switcher flex-grow p-1 border rounded-lg bg-white text-sm">${shipOptionsHtml}</select>
+            <select class="ship-assign-switcher flex-grow p-1 border rounded-lg bg-white text-sm">${shipOptions}</select>
             <button data-container-id="${container.id}" class="save-ship-assignment-btn py-1 px-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 text-xs">Speichern</button>
           </div>
         </div>
@@ -652,17 +961,17 @@ export function renderChecklistItems(listId) {
 
                         return `
                           <div class="${importantClass} p-3 rounded-lg shadow-sm flex flex-col gap-1 border border-gray-100 transition-all hover:shadow-md" data-item-id="${item.id}">
-                            <div class="flex items-start gap-3">
-                              <input type="checkbox" data-item-id="${item.id}" class="checklist-item-cb h-6 w-6 rounded border-gray-300 text-indigo-600 mt-0.5 cursor-pointer flex-shrink-0" ${item.status === 'done' ? 'checked' : ''}>
+                            <div class="flex items-start justify-between gap-3">
                               <div class="flex-grow min-w-0">
-                                <label class="text-sm font-medium text-gray-800 block leading-snug cursor-pointer select-none break-words" onclick="this.parentElement.previousElementSibling.click()">
+                                <span class="text-sm font-medium text-gray-800 block leading-snug select-none break-words">
                                     ${escapeHtml(item.text || '')}
-                                </label>
+                                </span>
                                 <div class="mt-1 flex flex-wrap gap-1 items-center">
                                     ${badges}
                                 </div>
                                 ${reactivatedInfo}
                               </div>
+                              <input type="checkbox" data-item-id="${item.id}" class="checklist-item-cb h-6 w-6 rounded border-gray-300 text-indigo-600 mt-0.5 cursor-pointer flex-shrink-0" ${item.status === 'done' ? 'checked' : ''}>
                             </div>
                           </div>
                         `;
@@ -695,15 +1004,15 @@ export function renderChecklistItems(listId) {
 
         return `
           <div class="bg-gray-50 p-2 rounded-lg shadow-sm flex flex-col gap-1 opacity-75 mb-2 border border-gray-200" data-item-id="${item.id}">
-            <div class="flex items-start gap-3">
-              <input type="checkbox" data-item-id="${item.id}" class="checklist-item-cb h-5 w-5 rounded border-gray-300 text-gray-400 mt-0.5 cursor-pointer flex-shrink-0" checked>
+            <div class="flex items-start justify-between gap-3">
               <div class="flex-grow min-w-0">
-                <label class="text-sm line-through text-gray-500 cursor-pointer select-none break-words" onclick="this.parentElement.previousElementSibling.click()">${escapeHtml(item.text || '')}</label>
+                <span class="text-sm line-through text-gray-500 select-none break-words">${escapeHtml(item.text || '')}</span>
                 <div class="mt-0.5 flex flex-wrap gap-1 items-center opacity-60">
                     ${badges}
                 </div>
                 ${doneMeta}
               </div>
+              <input type="checkbox" data-item-id="${item.id}" class="checklist-item-cb h-5 w-5 rounded border-gray-300 text-gray-400 mt-0.5 cursor-pointer flex-shrink-0" checked>
             </div>
           </div>
         `;
@@ -718,35 +1027,27 @@ export function renderChecklistItems(listId) {
   const wrapper = document.getElementById('checklist-content-wrapper');
   
   if (wrapper && !wrapper.dataset.checkboxListener) {
-      wrapper.addEventListener('change', async (e) => {
-          if (e.target.classList.contains('checklist-item-cb')) {
-              const cb = e.target;
-              const itemId = cb.dataset.itemId;
-              const checked = cb.checked;
-              
-              const userName = currentUser?.displayName || currentUser?.name || window.currentUser?.displayName || window.currentUser?.name || 'Unbekannt';
-              let actionUser = userName;
-              
-              if (!checked) {
-                  actionUser = `Zurückgestellt von ${userName}`;
-              }
+      wrapper.addEventListener('click', async (e) => {
+          const cb = e.target.closest('.checklist-item-cb');
+          if (!cb) return;
+          e.preventDefault();
+          const itemId = cb.dataset.itemId;
+          const listId = view.dataset.currentListId;
+          const now = Date.now();
+          const lastClick = checklistCheckboxClickTracker.get(itemId) || 0;
 
-              const updatePayload = {
-                status: checked ? 'done' : 'open',
-                lastActionBy: actionUser,
-                lastActionAt: serverTimestamp()
-              };
-
-              try {
-                if (typeof updateDoc === 'function' && checklistItemsCollectionRef) {
-                    await updateDoc(doc(checklistItemsCollectionRef, itemId), updatePayload);
-                }
-              } catch (err) {
-                console.error("Fehler beim Checkbox-Update:", err);
-                cb.checked = !checked; 
-                alertUser('Fehler beim Speichern.', 'error');
-              }
+          if (now - lastClick < 1000) {
+              checklistCheckboxClickTracker.delete(itemId);
+              await toggleChecklistItemStatusByDoubleClick(itemId, listId, cb);
+              return;
           }
+
+          checklistCheckboxClickTracker.set(itemId, now);
+          window.setTimeout(() => {
+              if (checklistCheckboxClickTracker.get(itemId) === now) {
+                  checklistCheckboxClickTracker.delete(itemId);
+              }
+          }, 1000);
       });
       wrapper.dataset.checkboxListener = 'true';
   }
@@ -797,7 +1098,6 @@ export function renderChecklistSettingsItems(listId) {
         </div>
         <div class="flex flex-col items-end gap-2 ml-2">
           <button class="edit-checklist-item-btn p-1 text-blue-500 hover:bg-blue-100 rounded" title="Bearbeiten">✎</button>
-          <button class="delete-checklist-item-btn p-1 text-red-500 hover:bg-red-100 rounded" title="Löschen">🗑</button>
         </div>
       </div>
     `;
@@ -1082,41 +1382,12 @@ function setupListAndItemManagementListeners(view) {
   if (itemsEditor) {
     itemsEditor.addEventListener('click', async (e) => {
       const editBtn = e.target.closest('.edit-checklist-item-btn');
-      const deleteBtn = e.target.closest('.delete-checklist-item-btn');
       
       if (editBtn) {
           const row = editBtn.closest('[data-item-id]');
           if (!row) return;
-          const id = row.dataset.itemId;
-          const currentText = row.querySelector('.item-text')?.textContent || '';
-          
-          const newText = prompt('Eintrag bearbeiten:', currentText);
-          if (newText === null) return; // Abbrechen
-          
-          const trimmed = newText.trim();
-          if (!trimmed) return alertUser('Text darf nicht leer sein.', 'error');
-          
-          try {
-              await updateDoc(doc(checklistItemsCollectionRef, id), { 
-                  text: trimmed, 
-                  lastEditedBy: window.currentUser?.displayName || 'System', 
-                  lastEditedAt: serverTimestamp() 
-              });
-              alertUser('Gespeichert.', 'success');
-          } catch (err) { alertUser('Fehler beim Speichern.', 'error'); }
+          openChecklistItemEditModal({ mode: 'checklist', itemId: row.dataset.itemId, listId: view.dataset.editingListId || null });
           return;
-      }
-
-      if (deleteBtn) {
-          const row = deleteBtn.closest('[data-item-id]');
-          if (!row) return;
-          const id = row.dataset.itemId;
-          if (!confirm('Eintrag wirklich löschen?')) return;
-          
-          try {
-              await deleteDoc(doc(checklistItemsCollectionRef, id));
-              alertUser('Gelöscht.', 'success');
-          } catch (err) { alertUser('Fehler beim Löschen.', 'error'); }
       }
     });
   }
@@ -1353,6 +1624,37 @@ function setupSchiffAndContainerManagementListeners(view) {
 
     console.log("setupSchiffAndContainerManagementListeners: Hänge PRIMÄREN Listener an #card-templates an.");
 
+    const clearTemplateEditorSelection = () => {
+        selectedTemplateId = null;
+        const editor = document.getElementById('template-item-editor');
+        if (editor) {
+            editor.classList.add('hidden');
+            editor.dataset.templateId = '';
+        }
+        if (typeof unsubscribeTemplateItems === 'function') {
+            unsubscribeTemplateItems();
+            unsubscribeTemplateItems = null;
+        }
+    };
+
+    const syncMaintenancePanels = () => {
+        const activePanel = view.dataset.activeTemplateMaintenancePanel || '';
+        const opsSection = view.querySelector('#ship-container-maintenance-section');
+        const contentSection = view.querySelector('#content-maintenance-section');
+        const opsButton = view.querySelector('#toggle-ship-container-maintenance-btn');
+        const contentButton = view.querySelector('#toggle-content-maintenance-btn');
+
+        opsSection?.classList.toggle('hidden', activePanel !== 'ops');
+        contentSection?.classList.toggle('hidden', activePanel !== 'content');
+
+        const opsChevron = opsButton?.querySelector('.maintenance-panel-chevron');
+        const contentChevron = contentButton?.querySelector('.maintenance-panel-chevron');
+        if (opsChevron) opsChevron.textContent = activePanel === 'ops' ? '−' : '+';
+        if (contentChevron) contentChevron.textContent = activePanel === 'content' ? '−' : '+';
+        opsButton?.setAttribute('aria-expanded', String(activePanel === 'ops'));
+        contentButton?.setAttribute('aria-expanded', String(activePanel === 'content'));
+    };
+
     const syncManagedShipForm = () => {
         const shipSelector = view.querySelector('#delete-ship-selector');
         if (!shipSelector) return;
@@ -1367,6 +1669,8 @@ function setupSchiffAndContainerManagementListeners(view) {
             manageShipNameInput.value = shipSelector.value ? (CHECKLIST_SHIPS[shipSelector.value]?.name || '') : '';
         }
     };
+
+    syncMaintenancePanels();
 
     const applyTemplateItemFormSelection = () => {
         const assigneeSelect = document.getElementById('new-template-item-assignee');
@@ -1423,10 +1727,34 @@ function setupSchiffAndContainerManagementListeners(view) {
     };
 
     templatesCard.addEventListener('click', async (e) => {
-        // Der Rest der Funktion bleibt genau gleich wie in der letzten Version
-        // ... (Logik für Schiff erstellen, Schiff löschen, Container erstellen, Container auswählen, Schiff zuweisen, Eintrag hinzufügen, Container löschen) ...
+        const maintenanceOpsToggle = e.target.closest('#toggle-ship-container-maintenance-btn');
+        if (maintenanceOpsToggle) {
+            view.dataset.activeTemplateMaintenancePanel = view.dataset.activeTemplateMaintenancePanel === 'ops' ? '' : 'ops';
+            syncMaintenancePanels();
+            return;
+        }
 
-        // --- Aktionen AUSSERHALB des Editors ---
+        const maintenanceContentToggle = e.target.closest('#toggle-content-maintenance-btn');
+        if (maintenanceContentToggle) {
+            view.dataset.activeTemplateMaintenancePanel = view.dataset.activeTemplateMaintenancePanel === 'content' ? '' : 'content';
+            syncMaintenancePanels();
+            return;
+        }
+
+        const shipGroupToggle = e.target.closest('.ship-group-toggle');
+        if (shipGroupToggle) {
+            const shipGroupId = shipGroupToggle.dataset.shipGroupId || '';
+            const nextShipGroup = view.dataset.activeTemplateShipGroup === shipGroupId ? '' : shipGroupId;
+            const selectedShipGroup = selectedTemplateId && TEMPLATES[selectedTemplateId] ? (getTemplateShipId(TEMPLATES[selectedTemplateId]) || '__noship') : '';
+            if (selectedTemplateId && selectedShipGroup !== nextShipGroup) {
+                clearTemplateEditorSelection();
+            }
+            view.dataset.activeTemplateMaintenancePanel = 'content';
+            view.dataset.activeTemplateShipGroup = nextShipGroup;
+            syncMaintenancePanels();
+            renderContainerList();
+            return;
+        }
 
         // Neues Schiff erstellen
         if (e.target.closest('#checklist-settings-create-ship-btn')) {
@@ -1595,16 +1923,22 @@ function setupSchiffAndContainerManagementListeners(view) {
              const editor = document.getElementById('template-item-editor');
              if (!clickedTemplateId || !editor) { return console.error("ID oder Editor fehlt"); };
 
+             view.dataset.activeTemplateMaintenancePanel = 'content';
+             view.dataset.activeTemplateShipGroup = getTemplateShipId(TEMPLATES[clickedTemplateId]) || '__noship';
+             syncMaintenancePanels();
+
              if (selectedTemplateId === clickedTemplateId) {
-                 selectedTemplateId = null;
-                 editor.classList.add('hidden');
-                 if (typeof unsubscribeTemplateItems === 'function') unsubscribeTemplateItems();
+                 clearTemplateEditorSelection();
              } else {
                 selectedTemplateId = clickedTemplateId;
+                editor.dataset.templateId = clickedTemplateId;
                 document.getElementById('template-editor-title').textContent = `Einträge für Container "${TEMPLATES[selectedTemplateId]?.name || '–'}"`;
                 editor.classList.remove('hidden');
                 applyTemplateItemFormSelection();
-                if (typeof unsubscribeTemplateItems === 'function') unsubscribeTemplateItems();
+                if (typeof unsubscribeTemplateItems === 'function') {
+                    unsubscribeTemplateItems();
+                    unsubscribeTemplateItems = null;
+                }
                 if (typeof onSnapshot === 'function' && checklistTemplatesCollectionRef) {
                     const templateId = clickedTemplateId;
                     const itemsSubCollectionRef = collection(checklistTemplatesCollectionRef, templateId, 'template-items');
@@ -1642,6 +1976,9 @@ function setupSchiffAndContainerManagementListeners(view) {
                         stackName: newShipId ? CHECKLIST_SHIPS[newShipId]?.name : null
                     });
                 } else { throw new Error("updateDoc oder checklistTemplatesCollectionRef fehlt"); }
+                if (selectedTemplateId === cid) {
+                    view.dataset.activeTemplateShipGroup = newShipId || '__noship';
+                }
                 if (typeof alertUser === 'function') alertUser('Schiff-Zuweisung gespeichert.', 'success');
                  renderContainerList();
             } catch (err) {
@@ -1673,10 +2010,7 @@ function setupSchiffAndContainerManagementListeners(view) {
                     const templateRef = doc(checklistTemplatesCollectionRef, idToDelete);
                     await deleteDoc(templateRef);
                     alertUser && alertUser('Container gelöscht.', 'success');
-                    selectedTemplateId = null;
-                    const editor = document.getElementById('template-item-editor');
-                    if (editor) editor.dataset.templateId = '';
-                    if (unsubscribeTemplateItems) unsubscribeTemplateItems();
+                    clearTemplateEditorSelection();
                     renderChecklistSettingsView();
                 } catch (err) {
                     console.error("Fehler beim Löschen des Containers:", err);
@@ -2280,52 +2614,75 @@ function renderChecklistSettingsView(editListId = null) {
     </div>
 
     <div id="card-templates" class="settings-card hidden p-4 bg-white rounded-lg mb-4 space-y-4">
-      <div class="p-3 bg-gray-50 rounded-lg space-y-2">
-        <div class="flex justify-between items-center mb-1">
-            <h4 class="font-bold text-gray-800">Neues Schiff erstellen</h4>
-            <button id="show-delete-ship-form-btn" class="text-xs text-blue-600 font-semibold hover:underline">Schiff verwalten...</button>
-        </div>
-        <div class="flex gap-2">
-          <input type="text" id="checklist-settings-new-ship-name" class="flex-grow p-2 border rounded-lg" placeholder="Name für neues Schiff...">
-          <button id="checklist-settings-create-ship-btn" class="py-2 px-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Erstellen</button>
-        </div>
+      <div class="space-y-3">
+        <div class="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
+          <button id="toggle-ship-container-maintenance-btn" type="button" class="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50 transition">
+            <span class="font-bold text-gray-800">Schiff/Container-Wartung</span>
+            <span class="maintenance-panel-chevron text-xl leading-none text-gray-400">+</span>
+          </button>
+          <div id="ship-container-maintenance-section" class="hidden p-3 bg-gray-50 space-y-3 border-t border-gray-100">
+            <div class="p-3 bg-white rounded-lg space-y-2 border border-gray-200">
+              <div class="flex justify-between items-center mb-1">
+                  <h4 class="font-bold text-gray-800">Neues Schiff erstellen</h4>
+                  <button id="show-delete-ship-form-btn" class="text-xs text-blue-600 font-semibold hover:underline">Schiff verwalten...</button>
+              </div>
+              <div class="flex gap-2">
+                <input type="text" id="checklist-settings-new-ship-name" class="flex-grow p-2 border rounded-lg" placeholder="Name für neues Schiff...">
+                <button id="checklist-settings-create-ship-btn" class="py-2 px-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Erstellen</button>
+              </div>
+            </div>
+
+            <div id="delete-ship-section" class="hidden p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+              <h4 class="font-bold text-blue-800">Schiff verwalten</h4>
+              <select id="delete-ship-selector" class="w-full p-2 border rounded-lg bg-white border-blue-300">
+                  <option value="">Schiff auswählen...</option>
+                  ${Object.values(CHECKLIST_SHIPS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}
+              </select>
+              <input type="text" id="manage-ship-name" class="w-full p-2 border rounded-lg" placeholder="Schiffsname bearbeiten...">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button id="rename-ship-btn" class="w-full py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Ausgewähltes Schiff umbenennen</button>
+                <button id="delete-ship-btn" class="w-full py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700">Ausgewähltes Schiff löschen</button>
+              </div>
+            </div>
+
+            <div class="p-3 bg-white rounded-lg space-y-2 border border-gray-200">
+              <h4 class="font-bold text-gray-800">Neuen Container erstellen</h4>
+              <input type="text" id="checklist-settings-new-container-name" class="w-full p-2 border rounded-lg" placeholder="Name für neuen Container...">
+              <select id="checklist-settings-new-ship-selector" class="w-full p-2 border rounded-lg bg-white"><option value="">Schiff zuweisen...</option></select>
+              <button id="checklist-settings-create-container-btn" class="w-full py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700">Container erstellen</button>
+            </div>
+          </div>
         </div>
 
-      <div id="delete-ship-section" class="hidden p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
-        <h4 class="font-bold text-blue-800">Schiff verwalten</h4>
-        <select id="delete-ship-selector" class="w-full p-2 border rounded-lg bg-white border-blue-300">
-            <option value="">Schiff auswählen...</option>
-            ${Object.values(CHECKLIST_SHIPS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}
-        </select>
-        <input type="text" id="manage-ship-name" class="w-full p-2 border rounded-lg" placeholder="Schiffsname bearbeiten...">
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <button id="rename-ship-btn" class="w-full py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Ausgewähltes Schiff umbenennen</button>
-          <button id="delete-ship-btn" class="w-full py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700">Ausgewähltes Schiff löschen</button>
+        <div class="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
+          <button id="toggle-content-maintenance-btn" type="button" class="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50 transition">
+            <span class="font-bold text-gray-800">Inhaltswartung</span>
+            <span class="maintenance-panel-chevron text-xl leading-none text-gray-400">+</span>
+          </button>
+          <div id="content-maintenance-section" class="hidden p-3 bg-gray-50 space-y-3 border-t border-gray-100">
+            <div>
+              <h4 class="font-bold text-gray-800 mb-2">Bestehende Container verwalten</h4>
+              <div id="container-list-editor" class="space-y-2"></div>
+            </div>
+
+            <div id="template-item-editor" class="hidden p-3 bg-indigo-50 border-t-4 border-indigo-300 rounded-lg space-y-3">
+              <h4 id="template-editor-title" class="font-bold text-gray-800">Einträge für Container...</h4>
+              <div id="template-items-list" class="space-y-2 max-h-48 overflow-y-auto"></div>
+              <h5 class="font-semibold text-sm pt-2 border-t">Neuen Eintrag hinzufügen</h5>
+              <input type="text" id="new-template-item-text" class="w-full p-2 border rounded-lg" placeholder="Text für Eintrag...">
+              <div class="grid grid-cols-2 gap-2">
+                <select id="new-template-item-assignee" class="p-2 border rounded-lg bg-white"><option value="">Zuweisen...</option></select>
+                <select id="new-template-item-category" class="p-2 border rounded-lg bg-white"><option value="">Kategorie...</option></select>
+              </div>
+              <div class="flex items-center">
+                <input type="checkbox" id="new-template-item-important" class="h-4 w-4 rounded">
+                <label for="new-template-item-important" class="ml-2 text-sm text-gray-700">Als wichtig markieren</label>
+              </div>
+              <button id="add-template-item-btn" class="w-full py-2 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700">Eintrag zum Container hinzufügen</button>
+              <button id="delete-template-btn" class="w-full py-1 text-red-600 text-sm font-semibold hover:underline">Diesen Container löschen</button>
+            </div>
+          </div>
         </div>
-      </div>
-      <div class="p-3 bg-gray-50 rounded-lg space-y-2">
-        <h4 class="font-bold text-gray-800">Neuen Container erstellen</h4>
-        <input type="text" id="checklist-settings-new-container-name" class="w-full p-2 border rounded-lg" placeholder="Name für neuen Container...">
-        <select id="checklist-settings-new-ship-selector" class="w-full p-2 border rounded-lg bg-white"><option value="">Schiff zuweisen...</option></select>
-        <button id="checklist-settings-create-container-btn" class="w-full py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700">Container erstellen</button>
-      </div>
-      <div id="container-list-editor" class="space-y-2"></div>
-      
-      <div id="template-item-editor" class="hidden p-3 bg-indigo-50 border-t-4 border-indigo-300 rounded-lg space-y-3">
-        <h4 id="template-editor-title" class="font-bold text-gray-800">Einträge für Container...</h4>
-        <div id="template-items-list" class="space-y-2 max-h-48 overflow-y-auto"></div>
-        <h5 class="font-semibold text-sm pt-2 border-t">Neuen Eintrag hinzufügen</h5>
-        <input type="text" id="new-template-item-text" class="w-full p-2 border rounded-lg" placeholder="Text für Eintrag...">
-        <div class="grid grid-cols-2 gap-2">
-          <select id="new-template-item-assignee" class="p-2 border rounded-lg bg-white"><option value="">Zuweisen...</option></select>
-          <select id="new-template-item-category" class="p-2 border rounded-lg bg-white"><option value="">Kategorie...</option></select>
-        </div>
-        <div class="flex items-center">
-          <input type="checkbox" id="new-template-item-important" class="h-4 w-4 rounded">
-          <label for="new-template-item-important" class="ml-2 text-sm text-gray-700">Als wichtig markieren</label>
-        </div>
-        <button id="add-template-item-btn" class="w-full py-2 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700">Eintrag zum Container hinzufügen</button>
-        <button id="delete-template-btn" class="w-full py-1 text-red-600 text-sm font-semibold hover:underline">Diesen Container löschen</button>
       </div>
     </div>
 
@@ -2932,6 +3289,7 @@ export function populatePersonDropdown() {
 // ERSETZE die Funktion "setupTemplateEditorListeners" in checklist.js:
 
 function setupTemplateEditorListeners() {
+    ensureChecklistItemEditModal();
     // 1. Modal Listener (Einmalig)
     const modal = document.getElementById('templateApplyModal');
     if (modal && !modal.dataset.modalListenersAttached) {
@@ -2945,46 +3303,12 @@ function setupTemplateEditorListeners() {
     const editorList = document.getElementById('template-items-list');
     if (editorList && !editorList.dataset.actionsListenerAttached) {
         editorList.addEventListener('click', async (e) => {
-            // Edit Button
             const editBtn = e.target.closest('.edit-template-item-btn');
             if (editBtn) {
                 const row = editBtn.closest('[data-item-id]');
-                const id = row.dataset.itemId;
-                const currentText = row.querySelector('.item-text').textContent;
-                
-                const newText = prompt("Eintrag im Container bearbeiten:", currentText);
-                if (newText === null) return;
-                const trimmed = newText.trim();
-                if (!trimmed) return alertUser("Text darf nicht leer sein.", "error");
-
-                try {
-                    // Update in der Subcollection
-                    const itemRef = doc(checklistTemplatesCollectionRef, selectedTemplateId, 'template-items', id);
-                    await updateDoc(itemRef, { text: trimmed });
-                    // Kein manuelles Re-Render nötig, der Snapshot Listener macht das
-                } catch (err) {
-                    console.error(err);
-                    alertUser("Fehler beim Speichern.", "error");
-                }
+                if (!row) return;
+                openChecklistItemEditModal({ mode: 'template', itemId: row.dataset.itemId, templateId: row.dataset.templateId || selectedTemplateId || null });
                 return;
-            }
-
-            // Delete Button
-            const deleteBtn = e.target.closest('.delete-template-item-btn');
-            if (deleteBtn) {
-                const row = deleteBtn.closest('[data-item-id]');
-                const id = row.dataset.itemId;
-                
-                if (confirm("Diesen Eintrag aus dem Container löschen?")) {
-                    try {
-                        const itemRef = doc(checklistTemplatesCollectionRef, selectedTemplateId, 'template-items', id);
-                        await deleteDoc(itemRef);
-                        // UI aktualisiert sich via Snapshot
-                    } catch (err) {
-                        console.error(err);
-                        alertUser("Fehler beim Löschen.", "error");
-                    }
-                }
             }
         });
         editorList.dataset.actionsListenerAttached = 'true';
@@ -3018,7 +3342,7 @@ function renderTemplateItemsEditor() {
         }
 
         itemsListContainer.innerHTML += `
-            <div class="p-2 border rounded-md flex justify-between items-center ${isImportantClass} mb-1 shadow-sm" data-item-id="${item.id}">
+            <div class="p-2 border rounded-md flex justify-between items-center ${isImportantClass} mb-1 shadow-sm" data-item-id="${item.id}" data-template-id="${selectedTemplateId || ''}">
                 <div class="flex-grow min-w-0 pr-2">
                     <p class="text-sm font-medium text-gray-800 item-text truncate">${escapeHtml(item.text)}</p>
                     <div class="flex items-center mt-1 flex-wrap">
@@ -3027,7 +3351,6 @@ function renderTemplateItemsEditor() {
                 </div>
                 <div class="flex gap-1 flex-shrink-0">
                     <button class="edit-template-item-btn p-1.5 text-blue-500 hover:bg-blue-100 rounded transition" title="Bearbeiten">✎</button>
-                    <button class="delete-template-item-btn p-1.5 text-red-500 hover:bg-red-100 rounded transition" title="Löschen">🗑</button>
                 </div>
             </div>
         `;

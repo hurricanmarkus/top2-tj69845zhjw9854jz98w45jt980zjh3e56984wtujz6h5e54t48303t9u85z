@@ -1,14 +1,34 @@
 {
-  "version": "1.5.8",
-  "buildId": "20260331-7",
+  "version": "1.5.10",
+  "buildId": "20260331-9",
   "releaseDate": "2026-03-31",
-  "releaseTime": "09:59",
-  "bereich": "Wertguthaben",
+  "releaseTime": "14:32",
+  "bereich": "Checkliste",
   "timezone": "Europe/Vienna",
-  "note": "Wertguthaben blendet Aktionscode bei Verifizierungsfiltern aus, findet maskierte Sternchen-Werte besser, zentriert das Einlöse-System und erlaubt Verifizierung nur noch für den neuesten History-Eintrag.",
-  "commitId": "c20e8d4",
+  "note": "Checkliste: Schiff & Container nutzt jetzt exklusive Wartungsboxen fuer Schiff/Container und Inhalte; bestehende Container sind pro Schiff in exklusiven Ausklappboxen gruppiert.",
+  "commitId": "b1383f2",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.5.10",
+      "buildId": "20260331-9",
+      "releaseDate": "2026-03-31",
+      "releaseTime": "14:32",
+      "bereich": "Checkliste",
+      "note": "Checkliste: Schiff & Container nutzt jetzt exklusive Wartungsboxen fuer Schiff/Container und Inhalte; bestehende Container sind pro Schiff in exklusiven Ausklappboxen gruppiert.",
+      "commitId": "b1383f2",
+      "obligation": "false"
+    },
+    {
+      "version": "1.5.9",
+      "buildId": "20260331-8",
+      "releaseDate": "2026-03-31",
+      "releaseTime": "14:22",
+      "bereich": "Checkliste",
+      "note": "Checkliste: Status-Checkboxen stehen rechts, Statuswechsel erfolgt nur noch per Doppelklick auf die Checkbox und Bearbeiten erfolgt fuer Listen- sowie Container-Eintraege ueber ein gemeinsames Modal mit Loeschfunktion.",
+      "commitId": "b1383f2",
+      "obligation": "false"
+    },
     {
       "version": "1.5.8",
       "buildId": "20260331-7",
