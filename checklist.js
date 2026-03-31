@@ -206,18 +206,18 @@ function syncChecklistFilterUi(view, personOptions, filterState) {
   const textInput = view.querySelector('#checklist-filter-text');
   if (textInput) {
     if (document.activeElement !== textInput) textInput.value = filterState?.text || '';
-    textInput.className = `w-full p-2 border rounded-lg text-sm transition ${hasTextFilter ? activeControlClass : inactiveInputClass}`;
+    textInput.className = `w-full min-w-0 px-2 py-1.5 border rounded-lg text-xs transition ${hasTextFilter ? activeControlClass : inactiveInputClass}`;
   }
 
   const statusSelect = view.querySelector('#checklist-filter-status');
   if (statusSelect) {
     statusSelect.value = filterState?.status || 'all';
-    statusSelect.className = `w-full p-2 border rounded-lg text-sm transition ${hasStatusFilter ? activeControlClass : 'bg-white border-gray-300'}`;
+    statusSelect.className = `w-full min-w-0 px-2 py-1.5 border rounded-lg text-xs transition ${hasStatusFilter ? activeControlClass : 'bg-white border-gray-300'}`;
   }
 
   const personFilterBox = view.querySelector('#checklist-person-filter-box');
   if (personFilterBox) {
-    personFilterBox.className = `rounded-lg border overflow-hidden transition ${hasPersonFilter ? activeControlClass : inactiveBoxClass}`;
+    personFilterBox.className = `min-w-0 rounded-lg border overflow-hidden transition ${hasPersonFilter ? activeControlClass : inactiveBoxClass}`;
   }
 
   const personSummary = view.querySelector('#checklist-person-filter-summary');
@@ -243,9 +243,13 @@ function syncChecklistFilterUi(view, personOptions, filterState) {
   }
 
   const resetButton = view.querySelector('#checklist-filter-reset-btn');
+  const resetRow = view.querySelector('#checklist-filter-reset-row');
   if (resetButton) {
-    resetButton.disabled = !hasAnyFilter;
-    resetButton.className = `w-full lg:w-auto px-3 py-2 rounded-lg text-sm font-semibold border transition ${hasAnyFilter ? 'bg-orange-50 text-orange-700 border-orange-300 hover:bg-orange-100' : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'}`;
+    resetButton.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold border transition bg-orange-50 text-orange-700 border-orange-300 hover:bg-orange-100';
+    resetButton.disabled = false;
+  }
+  if (resetRow) {
+    resetRow.classList.toggle('hidden', !hasAnyFilter);
   }
 
   const personToggle = view.querySelector('#checklist-person-filter-toggle');
@@ -992,33 +996,37 @@ export function renderChecklistView(listId) {
       <select id="checklist-switcher" class="p-2 border rounded-lg bg-gray-50 text-sm" ${disabledAttr}>${groupedListOptions}</select>
     </div>
 
-    <div class="bg-white p-3 rounded-lg shadow-sm mb-4 grid grid-cols-1 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,0.55fr)_minmax(0,1fr)_auto] gap-3 items-start">
-      <input type="text" id="checklist-filter-text" class="w-full p-2 border rounded-lg text-sm" placeholder="Nach Text oder ID suchen...">
-      <select id="checklist-filter-status" class="w-full p-2 border rounded-lg bg-white text-sm">
-        <option value="all">Alle anzeigen</option>
-        <option value="open">Nur Offene</option>
-        <option value="done">Nur Erledigte</option>
-      </select>
-      <div id="checklist-person-filter-box" class="rounded-lg border overflow-hidden bg-white border-gray-200 transition">
-        <button type="button" id="checklist-person-filter-toggle" class="w-full flex items-center justify-between gap-3 px-3 py-2 text-left hover:bg-gray-50 transition">
-          <div class="min-w-0">
-            <div class="text-sm font-semibold text-gray-800">Personenfilter</div>
-            <div id="checklist-person-filter-summary" class="text-xs text-gray-500 truncate">Alle ausgewählt</div>
+    <div class="bg-white p-3 rounded-lg shadow-sm mb-4 space-y-2">
+      <div class="grid grid-cols-[minmax(0,1fr)_104px_138px] gap-2 items-start">
+        <input type="text" id="checklist-filter-text" class="w-full min-w-0 px-2 py-1.5 border rounded-lg text-xs" placeholder="Nach Text oder ID suchen...">
+        <select id="checklist-filter-status" class="w-full min-w-0 px-2 py-1.5 border rounded-lg bg-white text-xs">
+          <option value="all">Alle anzeigen</option>
+          <option value="open">Offen</option>
+          <option value="done">Erledigt</option>
+        </select>
+        <div id="checklist-person-filter-box" class="min-w-0 rounded-lg border overflow-hidden bg-white border-gray-200 transition">
+          <button type="button" id="checklist-person-filter-toggle" class="w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left hover:bg-gray-50 transition">
+            <div class="min-w-0">
+              <div class="text-xs font-semibold text-gray-800 truncate">Personenfilter</div>
+              <div id="checklist-person-filter-summary" class="text-[10px] text-gray-500 truncate">Alle ausgewählt</div>
+            </div>
+            <div class="flex items-center gap-1.5 flex-shrink-0">
+              <span id="checklist-person-filter-count" class="text-[10px] font-semibold text-gray-500">0/0</span>
+              <span id="checklist-person-filter-chevron" class="text-gray-400 text-base leading-none">+</span>
+            </div>
+          </button>
+          <div id="checklist-person-filter-panel" class="hidden border-t border-gray-200 bg-orange-50/40 p-2 space-y-2">
+            <div class="flex gap-2">
+              <button type="button" id="checklist-person-filter-all-btn" class="flex-1 min-w-0 px-2 py-1.5 rounded-lg text-[11px] font-semibold border border-gray-200 bg-white hover:bg-gray-50 transition whitespace-nowrap">Alle auswählen</button>
+              <button type="button" id="checklist-person-filter-none-btn" class="flex-1 min-w-0 px-2 py-1.5 rounded-lg text-[11px] font-semibold border border-gray-200 bg-white hover:bg-gray-50 transition whitespace-nowrap">Alle abwählen</button>
+            </div>
+            <div id="checklist-person-filter-options" class="max-h-56 overflow-y-auto space-y-1"></div>
           </div>
-          <div class="flex items-center gap-2 flex-shrink-0">
-            <span id="checklist-person-filter-count" class="text-xs font-semibold text-gray-500">0/0</span>
-            <span id="checklist-person-filter-chevron" class="text-gray-400 text-lg leading-none">+</span>
-          </div>
-        </button>
-        <div id="checklist-person-filter-panel" class="hidden border-t border-gray-200 bg-orange-50/40 p-3 space-y-3">
-          <div class="flex gap-2">
-            <button type="button" id="checklist-person-filter-all-btn" class="flex-1 px-3 py-2 rounded-lg text-xs font-semibold border border-gray-200 bg-white hover:bg-gray-50 transition">Alle auswählen</button>
-            <button type="button" id="checklist-person-filter-none-btn" class="flex-1 px-3 py-2 rounded-lg text-xs font-semibold border border-gray-200 bg-white hover:bg-gray-50 transition">Alle abwählen</button>
-          </div>
-          <div id="checklist-person-filter-options" class="max-h-56 overflow-y-auto space-y-1"></div>
         </div>
       </div>
-      <button type="button" id="checklist-filter-reset-btn" class="w-full lg:w-auto px-3 py-2 rounded-lg text-sm font-semibold border transition">Filter zurücksetzen</button>
+      <div id="checklist-filter-reset-row" class="hidden flex justify-end">
+        <button type="button" id="checklist-filter-reset-btn" class="px-3 py-1.5 rounded-lg text-xs font-semibold border transition">Filter zurücksetzen</button>
+      </div>
     </div>
 
     <div id="checklist-stats" class="bg-indigo-50 p-3 rounded-lg text-center mb-4 text-sm font-semibold text-indigo-800"></div>

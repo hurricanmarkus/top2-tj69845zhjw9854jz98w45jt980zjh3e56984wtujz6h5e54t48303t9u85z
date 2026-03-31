@@ -1,14 +1,24 @@
 {
-  "version": "1.5.12",
-  "buildId": "20260331-11",
+  "version": "1.5.13",
+  "buildId": "20260331-12",
   "releaseDate": "2026-03-31",
-  "releaseTime": "14:55",
+  "releaseTime": "15:02",
   "bereich": "Checkliste",
   "timezone": "Europe/Vienna",
-  "note": "Checkliste: Die aktuelle Checkliste hat jetzt kompaktere Text-/Statusfilter, einen Personen-Mehrfachfilter mit Alle auswaehlen, Reset und orange markierte aktive Filter; die Auswahl wird ueber userSettings geraeteuebergreifend gespeichert und bei Personen-Aenderungen automatisch zurueckgesetzt.",
+  "note": "Checkliste: Die Filterleiste der aktuellen Checkliste ist weiter verdichtet, die Personenfilter-Buttons sind kleiner und der Button 'Filter zuruecksetzen' erscheint nur noch unterhalb, wenn wirklich ein Filter aktiv ist.",
   "commitId": "b1383f2",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.5.13",
+      "buildId": "20260331-12",
+      "releaseDate": "2026-03-31",
+      "releaseTime": "15:02",
+      "bereich": "Checkliste",
+      "note": "Checkliste: Die Filterleiste der aktuellen Checkliste ist weiter verdichtet, die Personenfilter-Buttons sind kleiner und der Button 'Filter zuruecksetzen' erscheint nur noch unterhalb, wenn wirklich ein Filter aktiv ist.",
+      "commitId": "b1383f2",
+      "obligation": "false"
+    },
     {
       "version": "1.5.12",
       "buildId": "20260331-11",
