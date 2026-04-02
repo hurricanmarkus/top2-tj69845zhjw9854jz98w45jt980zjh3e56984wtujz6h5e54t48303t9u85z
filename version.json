@@ -1,14 +1,24 @@
 {
-  "version": "1.6.2",
-  "buildId": "20260402-6",
+  "version": "1.6.3",
+  "buildId": "20260402-7",
   "releaseDate": "2026-04-02",
-  "releaseTime": "10:05",
+  "releaseTime": "10:24",
   "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste: Meta-Badges wieder auf eindeutige Icons statt Buchstaben umgestellt; Web-Push-Anbindung bleibt aktiv.",
+  "note": "Einkaufsliste: Shared-List-Listener ohne permission-denied, Abgehakt-Liste nicht mehr im Benachrichtigungscenter und Vorlage & Übertragung standardmäßig eingeklappt.",
   "commitId": "66cfbe7",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.6.3",
+      "buildId": "20260402-7",
+      "releaseDate": "2026-04-02",
+      "releaseTime": "10:24",
+      "bereich": "Einkaufsliste",
+      "note": "Einkaufsliste: Shared-List-Listener ohne permission-denied, Abgehakt-Liste nicht mehr im Benachrichtigungscenter und Vorlage & Übertragung standardmäßig eingeklappt.",
+      "commitId": "66cfbe7",
+      "obligation": "false"
+    },
     {
       "version": "1.6.2",
       "buildId": "20260402-6",
