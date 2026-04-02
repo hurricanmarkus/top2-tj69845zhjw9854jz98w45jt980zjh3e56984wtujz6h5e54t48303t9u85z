@@ -1,14 +1,24 @@
 {
-  "version": "1.5.16",
-  "buildId": "20260402-3",
+  "version": "1.6.0",
+  "buildId": "20260402-4",
   "releaseDate": "2026-04-02",
-  "releaseTime": "08:20",
+  "releaseTime": "09:05",
   "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste: Meta-Icons optisch vereinheitlicht und Fokus im Suchfeld der Artikelwartung nach jedem Zeichen stabil gehalten.",
-  "commitId": "",
+  "note": "Einkaufsliste: neuer Modus Benachrichtigungen mit pro Liste speicherbaren Web-Push-Einstellungen, Vorlagen/Übertragung, Direktlinks, PWA-Unterbau, Löschabfrage für Geschäfte und größeren Meta-Icons.",
+  "commitId": "66cfbe7",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.6.0",
+      "buildId": "20260402-4",
+      "releaseDate": "2026-04-02",
+      "releaseTime": "09:05",
+      "bereich": "Einkaufsliste",
+      "note": "Einkaufsliste: neuer Modus Benachrichtigungen mit pro Liste speicherbaren Web-Push-Einstellungen, Vorlagen/Übertragung, Direktlinks, PWA-Unterbau, Löschabfrage für Geschäfte und größeren Meta-Icons.",
+      "commitId": "66cfbe7",
+      "obligation": "false"
+    },
     {
       "version": "1.5.16",
       "buildId": "20260402-3",

@@ -1570,6 +1570,7 @@ async function initializeFirebase() {
                 window.setUserKey = httpsCallable(functions, 'setUserKey');
                 window.migrateUserKeysToSecrets = httpsCallable(functions, 'migrateUserKeysToSecrets');
                 window.sendPasswordReset = httpsCallable(functions, 'sendPasswordReset');
+                window.getEinkaufslisteWebPushConfig = httpsCallable(functions, 'getEinkaufslisteWebPushConfig');
 
                 window.firebaseFunctionsInitialised = true;
                 console.log("Firebase Functions initialisiert und global verfügbar gemacht.");
@@ -1656,6 +1657,16 @@ async function initializeFirebase() {
                         // Fall 4: Navigation zur Ansicht
                         console.log("URL-Parameter 'view=terminplaner' gefunden, navigiere...");
                         navigate('terminplaner');
+                        cleanUrlParams();
+                    } else if (view === 'einkaufsliste') {
+                        const listId = String(urlParams.get('list') || '').trim();
+                        const mode = String(urlParams.get('mode') || '').trim();
+                        try {
+                            if (listId) sessionStorage.setItem('einkaufsliste_pending_list', listId);
+                            if (mode) sessionStorage.setItem('einkaufsliste_pending_mode', mode);
+                        } catch {}
+                        console.log("URL-Parameter 'view=einkaufsliste' gefunden, navigiere...");
+                        navigate('einkaufsliste');
                         cleanUrlParams();
                     }
                 }

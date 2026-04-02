@@ -1,5 +1,5 @@
 // // @ts-check
-const SW_VERSION = 'top2-v20260317-1';
+const SW_VERSION = 'top2-v20260402-4';
 
 const APP_CACHE = `${SW_VERSION}-app`;
 const ASSET_CACHE = `${SW_VERSION}-assets`;
@@ -9,9 +9,22 @@ const APP_SHELL_URLS = [
   '/index.html',
   '/index.html?source=pwa',
   '/manifest.json',
-  '/manifest.json?v=20260317-1',
+  '/manifest.json?v=20260402-4',
   '/style.css'
 ];
+
+function safeJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function notificationUrlFromData(data = {}) {
+  const url = String(data.url || '/index.html?view=einkaufsliste').trim();
+  return url || '/index.html?view=einkaufsliste';
+}
 
 function isCacheableResponse(response) {
   return Boolean(response && response.ok && (response.type === 'basic' || response.type === 'default'));
@@ -41,6 +54,51 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
+});
+
+self.addEventListener('push', (event) => {
+  const raw = event.data ? event.data.text() : '{}';
+  const payload = safeJson(raw) || {};
+  const title = payload.title || 'Einkaufsliste';
+  const body = payload.body || 'Es gibt neue Änderungen in deiner Einkaufsliste.';
+  const data = payload.data || {};
+  const options = {
+    body,
+    icon: 'https://placehold.co/192x192/4f46e5/ffffff?text=T2',
+    badge: 'https://placehold.co/192x192/4f46e5/ffffff?text=T2',
+    tag: payload.tag || `einkaufsliste-${data.listId || 'general'}`,
+    renotify: payload.renotify === true,
+    data: {
+      ...data,
+      url: notificationUrlFromData(data)
+    },
+    actions: Array.isArray(payload.actions) ? payload.actions : []
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const data = event.notification.data || {};
+  let url = notificationUrlFromData(data);
+  if (event.action === 'open-notify') {
+    url = String(data.notifyUrl || data.url || '/index.html?view=einkaufsliste&mode=notify').trim();
+  }
+  event.waitUntil((async () => {
+    const allClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of allClients) {
+      if ('focus' in client) {
+        try {
+          await client.navigate(url);
+        } catch {}
+        await client.focus();
+        return;
+      }
+    }
+    if (clients.openWindow) {
+      await clients.openWindow(url);
+    }
+  })());
 });
 
 self.addEventListener('fetch', (event) => {

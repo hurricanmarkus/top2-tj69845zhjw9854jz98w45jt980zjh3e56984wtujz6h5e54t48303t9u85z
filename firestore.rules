@@ -667,6 +667,21 @@ service cloud.firestore {
         allow create: if canAccessEinkaufslisteList(listId);
         allow update, delete: if false;
       }
+
+      match /notification_settings/{userId} {
+        allow read: if canAccessEinkaufslisteList(listId)
+          && (
+            userId == einkaufslisteActorId()
+            || isEinkaufslisteOwner(listId)
+          );
+        allow create, update: if canAccessEinkaufslisteList(listId)
+          && hasEinkaufslisteActorId()
+          && userId == einkaufslisteActorId()
+          && request.resource.data.userId == einkaufslisteActorId();
+        allow delete: if canAccessEinkaufslisteList(listId)
+          && hasEinkaufslisteActorId()
+          && userId == einkaufslisteActorId();
+      }
     }
 
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/einkaufsliste_master_categories/{categoryId} {
@@ -702,6 +717,20 @@ service cloud.firestore {
       allow create: if hasEinkaufslisteActorId() && request.resource.data.createdBy == einkaufslisteActorId();
       allow update: if hasEinkaufslisteActorId() && resource.data.createdBy == einkaufslisteActorId() && request.resource.data.createdBy == einkaufslisteActorId();
       allow delete: if hasEinkaufslisteActorId() && resource.data.createdBy == einkaufslisteActorId();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/einkaufsliste_notification_subscriptions/{userId}/devices/{deviceId} {
+      allow read, write: if hasEinkaufslisteActorId() && userId == einkaufslisteActorId();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/einkaufsliste_webpush_jobs/{jobId} {
+      allow read: if hasEinkaufslisteActorId() && resource.data.userId == einkaufslisteActorId();
+      allow write: if false;
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/einkaufsliste_webpush_batches/{batchId} {
+      allow read: if hasEinkaufslisteActorId() && resource.data.userId == einkaufslisteActorId();
+      allow write: if false;
     }
 
     // ═══════════════════════════════════════════════════════════════

@@ -2,9 +2,15 @@ import { alertUser, appId, auth, currentUser, db, escapeHtml, GUEST_MODE, naviga
 import { getUserSetting, saveUserSetting } from './log-InOut.js';
 import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, or, query, runTransaction, serverTimestamp, setDoc, Timestamp, updateDoc, where } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
-const MODES = [{ id: 'shop', label: 'Listenmodus' }, { id: 'manage', label: 'Verwaltung' }];
+const MODES = [{ id: 'shop', label: 'Listenmodus' }, { id: 'manage', label: 'Verwaltung' }, { id: 'notify', label: 'Benachrichtigungen' }];
 const MANAGE = [{ id: 'general', label: 'Allgemein' }, { id: 'stores', label: 'Geschäftewartung' }, { id: 'articles', label: 'Artikelwartung' }, { id: 'categories', label: 'Kategorienwartung' }, { id: 'remarks', label: 'Anmerkungswartung' }, { id: 'notes', label: 'Notizwartung' }];
 const UNITS = ['Stück', 'Kg', 'Gramm', 'Liter', 'Milliliter', 'Bund', 'Netz', 'Sack', 'Dose', 'Flasche', 'Becher', 'Packung'];
+const NOTIFY_ACTIONS = [
+    { id: 'added', label: 'Hinzugefügt', description: 'Neue Artikel auf der Liste' },
+    { id: 'checked', label: 'Abgehakt', description: 'Artikel wurden erledigt/gekauft' },
+    { id: 'changed', label: 'Geändert', description: 'Einträge wurden bearbeitet' },
+    { id: 'invited', label: 'Zur Liste eingeladen', description: 'Du wurdest zu einer Liste hinzugefügt' }
+];
 const DEFAULTS = {
     categories: ['Obst', 'Gemüse', 'Tiefkühl', 'Süßigkeiten', 'Saison', 'Hygiene', 'Haushalt', 'Getränke'],
     stores: ['Billa', 'BIPA', 'Penny', 'Lidl', 'Hofer'],
@@ -46,6 +52,8 @@ let holdConsumedKey = '';
 let holdConsumedAt = 0;
 let doubleHintTimers = new Map();
 let pendingFocusRequest = null;
+let pendingNotificationListId = null;
+let pendingNotificationMode = '';
 
 const state = {
     lists: [],
@@ -93,7 +101,14 @@ const state = {
     storeNumbers: false,
     articleSearch: '',
     checkedMenuOpen: false,
-    drafts: { category: '', store: '', remark: '', note: '' }
+    drafts: { category: '', store: '', remark: '', note: '' },
+    notificationSettings: null,
+    notificationTemplate: null,
+    notificationCopyTargets: [],
+    notificationPublicKey: '',
+    notificationSubscribed: false,
+    notificationBusy: false,
+    notificationError: ''
 };
 
 async function deleteListItem(itemId, activityLabel = 'Artikel gelöscht') {
@@ -117,6 +132,9 @@ const listsRef = () => collection(db, 'artifacts', appId, 'public', 'data', 'ein
 const listDoc = (id) => doc(listsRef(), id);
 const sub = (id, name) => collection(listDoc(id), name);
 const master = (name) => collection(db, 'artifacts', appId, 'public', 'data', `einkaufsliste_master_${name}`);
+const webPushSettingsDoc = () => doc(db, 'artifacts', appId, 'public', 'data', 'app-settings', 'einkaufsliste_webpush');
+const notificationSettingsDoc = (listId = state.listId, userId = uid()) => doc(sub(listId, 'notification_settings'), userId);
+const notificationSubscriptionsRef = (userId = uid()) => collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_notification_subscriptions', userId, 'devices');
 const fmtQty = (v) => Number(v || 0).toLocaleString('de-AT', { minimumFractionDigits: Number(v || 0) % 1 ? 2 : 0, maximumFractionDigits: 2 });
 const parseQty = (v) => { const n = Number(String(v || '').replace(',', '.')); return Number.isFinite(n) ? n : 0; };
 const toDate = (v) => v?.toDate ? v.toDate() : (v ? new Date(v) : null);
@@ -205,7 +223,7 @@ function ensureStyle() {
     s.id = 'el-style';
     s.textContent = '.elc{background:#fff;border:1px solid #e5e7eb;border-radius:1rem;padding:.8rem;box-shadow:0 10px 24px rgba(15,23,42,.06)}.elb{border-radius:.8rem;padding:.5rem .75rem;font-size:.78rem;font-weight:800}.elb.a{background:linear-gradient(135deg,#4338ca,#6d28d9);color:#fff}.eli,.els,.elt{width:100%;border:1px solid #d1d5db;border-radius:.8rem;background:#fff;padding:.62rem .75rem;font-size:.83rem}.elt{min-height:82px;resize:vertical}.elm{display:flex;flex-wrap:wrap;gap:.45rem;align-items:center}.elitem{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.6rem;align-items:start;padding:.72rem 0}.elcheck{width:2.25rem;height:2.25rem;border-radius:.8rem;border:1px solid #cbd5e1;background:#fff;font-weight:900}.elmodal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:center;justify-content:center;padding:.8rem;z-index:120}.elmodal.o{display:flex}.elpanel{width:min(100%,760px);max-height:92vh;overflow:auto;background:#fff;border-radius:1.2rem;box-shadow:0 24px 60px rgba(15,23,42,.28)}.elkey{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.45rem}.elkey button{border-radius:.8rem;min-height:2.35rem;border:1px solid #d1d5db;background:#f8fafc;font-weight:800}.elcam{background:#020617;border-radius:1rem;overflow:hidden;position:relative;aspect-ratio:4/3}.elcam video{width:100%;height:100%;object-fit:cover}.elcam:after{content:"";position:absolute;inset:14%;border:3px solid rgba(255,255,255,.85);border-radius:1rem}.elstat{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem}.elstat>div{background:#f8fafc;border:1px solid #e5e7eb;border-radius:.85rem;padding:.55rem}@media(max-width:480px){.elstat{grid-template-columns:repeat(2,minmax(0,1fr))}}';
     s.textContent += '.elitem{padding:.56rem 0}.elstorecat-row{touch-action:none}.elstorecat-row.dragging{opacity:.58;transform:scale(.985)}.elstorecat-row.drop-before{box-shadow:inset 0 4px 0 #6366f1}.elstorecat-row.drop-after{box-shadow:inset 0 -4px 0 #6366f1}.elchipbtn{display:inline-flex;align-items:center;justify-content:center;width:1rem;height:1rem;border-radius:999px;background:rgba(255,255,255,.7);font-size:.72rem;font-weight:900;line-height:1;margin-left:.15rem}.elaction{display:inline-flex;align-items:center;justify-content:center;min-height:2.25rem;min-width:2.25rem;border:1px solid #cbd5e1;border-radius:.8rem;background:#fff;padding:.35rem .55rem;font-size:.78rem;font-weight:900;line-height:1;transition:transform .12s ease,background-color .12s ease,border-color .12s ease}.elaction:active{transform:scale(.96)}.elaction-gear{background:#eef2ff;border-color:#c7d2fe;color:#4338ca}.elaction-trash{background:#fef2f2;border-color:#fecaca;color:#b91c1c}.elaction-qty{background:#ecfdf5;border-color:#a7f3d0;color:#047857;min-width:7.8rem}@media(max-width:480px){.elitem{padding:.48rem 0}.elaction{min-height:2rem;min-width:2rem;padding:.28rem .42rem;font-size:.72rem}.elaction-qty{min-width:auto;max-width:100%}}.elcam.el-scan-success{animation:elcamScanSuccess 750ms ease-in-out 1;box-shadow:0 0 0 4px rgba(34,197,94,.82),0 0 0 12px rgba(34,197,94,.24)}@keyframes elcamScanSuccess{0%{box-shadow:0 0 0 0 rgba(34,197,94,0)}15%{box-shadow:0 0 0 4px rgba(34,197,94,.82),0 0 0 12px rgba(34,197,94,.22)}30%{box-shadow:0 0 0 0 rgba(34,197,94,0)}55%{box-shadow:0 0 0 4px rgba(34,197,94,.82),0 0 0 12px rgba(34,197,94,.22)}70%{box-shadow:0 0 0 0 rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}';
-    s.textContent += '.elmetaicons{display:inline-flex;align-items:center;gap:.28rem;flex-wrap:wrap}.elmetaicon{display:inline-flex;align-items:center;justify-content:center;width:1.25rem;height:1.25rem;border-radius:999px;border:1px solid currentColor;font-size:.68rem;font-weight:900;line-height:1;background:#fff}.elmetaicon-barcode{color:#2563eb;background:#eff6ff}.elmetaicon-note{color:#7c3aed;background:#f5f3ff}.elmetaicon-store{color:#0f766e;background:#ecfeff}.elmetaicon-qty{color:#b45309;background:#fffbeb}.elmetaicon-category{color:#be185d;background:#fdf2f8}.elsuggest{margin-top:.35rem;border:1px solid #dbeafe;border-radius:.9rem;background:#f8fbff;overflow:hidden}.elsuggest-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:.6rem;padding:.65rem .8rem;border:0;border-top:1px solid #e0e7ff;background:transparent;text-align:left}.elsuggest-btn:first-child{border-top:0}.elsuggest-btn:active{background:#eef2ff}.elpresence{display:flex;flex-wrap:wrap;gap:.45rem;align-items:center;min-height:1.5rem}@media(max-width:480px){.elsuggest-btn{padding:.55rem .65rem}.elmetaicon{width:1.15rem;height:1.15rem;font-size:.64rem}}';
+    s.textContent += '.elmetaicons{display:inline-flex;align-items:center;gap:.32rem;flex-wrap:wrap}.elmetaicon{display:inline-flex;align-items:center;justify-content:center;min-width:1.62rem;height:1.52rem;padding:0 .38rem;border-radius:999px;border:1px solid currentColor;font-size:.58rem;font-weight:900;line-height:1;letter-spacing:.02em;background:#fff;box-shadow:0 1px 0 rgba(15,23,42,.03)}.elmetaicon-barcode{color:#2563eb;background:#eff6ff}.elmetaicon-note{color:#7c3aed;background:#f5f3ff}.elmetaicon-store{color:#0f766e;background:#ecfeff}.elmetaicon-qty{color:#b45309;background:#fffbeb}.elmetaicon-category{color:#be185d;background:#fdf2f8}.elsuggest{margin-top:.35rem;border:1px solid #dbeafe;border-radius:.9rem;background:#f8fbff;overflow:hidden}.elsuggest-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:.6rem;padding:.65rem .8rem;border:0;border-top:1px solid #e0e7ff;background:transparent;text-align:left}.elsuggest-btn:first-child{border-top:0}.elsuggest-btn:active{background:#eef2ff}.elpresence{display:flex;flex-wrap:wrap;gap:.45rem;align-items:center;min-height:1.5rem}.elnotifyrow{display:grid;grid-template-columns:minmax(0,1fr) 110px;gap:.75rem;align-items:center}.elnotifytag{display:inline-flex;align-items:center;justify-content:center;min-height:1.8rem;padding:0 .65rem;border-radius:999px;border:1px solid #d1d5db;background:#fff;font-size:.72rem;font-weight:800;color:#334155}.elnotifyselect{display:flex;flex-wrap:wrap;gap:.45rem}.elnotifyselect button{border-radius:999px;border:1px solid #cbd5e1;background:#fff;padding:.42rem .72rem;font-size:.75rem;font-weight:800}.elnotifyselect button.a{background:#e0e7ff;border-color:#a5b4fc;color:#3730a3}@media(max-width:480px){.elsuggest-btn{padding:.55rem .65rem}.elmetaicon{min-width:1.45rem;height:1.42rem;padding:0 .3rem;font-size:.54rem}.elnotifyrow{grid-template-columns:1fr}}';
     document.head.appendChild(s);
 }
 
@@ -322,6 +340,272 @@ function applyPendingFocus() {
     focusInputById(req.id, req.start, req.end);
 }
 
+function sessionStorageRead(key) {
+    try {
+        return String(sessionStorage.getItem(key) || '').trim();
+    } catch {
+        return '';
+    }
+}
+
+function sessionStorageWrite(key, value) {
+    try {
+        if (value) sessionStorage.setItem(key, String(value));
+        else sessionStorage.removeItem(key);
+    } catch {}
+}
+
+function normalizeNotificationInterval(value, fallback = 0) {
+    const num = Number(String(value ?? fallback).replace(',', '.'));
+    if (!Number.isFinite(num) || num < 0) return fallback;
+    return Math.min(1440, Math.round(num));
+}
+
+function defaultNotificationSettings(listId = '') {
+    return {
+        listId,
+        userId: uid(),
+        userName: uname(),
+        enabled: false,
+        onlyOthers: true,
+        directLink: true,
+        pushActions: true,
+        actions: {
+            added: { enabled: true, intervalMinutes: 5 },
+            checked: { enabled: true, intervalMinutes: 60 },
+            changed: { enabled: true, intervalMinutes: 15 },
+            invited: { enabled: true, intervalMinutes: 0 }
+        }
+    };
+}
+
+function cloneNotificationSettings(config = state.notificationSettings || defaultNotificationSettings(state.listId)) {
+    const source = config || defaultNotificationSettings(state.listId);
+    return {
+        listId: source.listId || state.listId || '',
+        userId: uid(),
+        userName: uname(),
+        enabled: source.enabled !== false,
+        onlyOthers: source.onlyOthers !== false,
+        directLink: source.directLink !== false,
+        pushActions: source.pushActions !== false,
+        actions: Object.fromEntries(NOTIFY_ACTIONS.map((entry) => {
+            const current = source.actions?.[entry.id] || {};
+            const fallback = defaultNotificationSettings(state.listId).actions[entry.id];
+            return [entry.id, {
+                enabled: current.enabled !== false,
+                intervalMinutes: normalizeNotificationInterval(current.intervalMinutes, fallback.intervalMinutes)
+            }];
+        }))
+    };
+}
+
+function normalizeNotificationSettings(raw = {}, listId = state.listId || '') {
+    return { ...defaultNotificationSettings(listId), ...cloneNotificationSettings({ ...defaultNotificationSettings(listId), ...raw, listId }) };
+}
+
+function notificationTemplatePayload() {
+    const cloned = cloneNotificationSettings();
+    return {
+        enabled: cloned.enabled,
+        onlyOthers: cloned.onlyOthers,
+        directLink: cloned.directLink,
+        pushActions: cloned.pushActions,
+        actions: cloned.actions
+    };
+}
+
+function webPushSupported() {
+    return typeof window !== 'undefined' && 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window;
+}
+
+function subscriptionDocId(endpoint = '') {
+    const text = String(endpoint || '');
+    let hash = 0;
+    for (let i = 0; i < text.length; i += 1) hash = ((hash << 5) - hash) + text.charCodeAt(i);
+    return `sub_${Math.abs(hash >>> 0).toString(36)}`;
+}
+
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+}
+
+function notificationPermissionLabel() {
+    if (!webPushSupported()) return 'Nicht unterstützt';
+    if (Notification.permission === 'granted') return 'Erlaubt';
+    if (Notification.permission === 'denied') return 'Blockiert';
+    return 'Noch nicht erlaubt';
+}
+
+async function refreshNotificationSubscriptionState() {
+    if (!uid() || uid() === GUEST_MODE) return;
+    state.notificationSubscribed = false;
+    state.notificationError = '';
+    if (!webPushSupported()) {
+        render();
+        return;
+    }
+    try {
+        const registration = await navigator.serviceWorker.ready;
+        const current = await registration.pushManager.getSubscription();
+        state.notificationSubscribed = !!current;
+    } catch (error) {
+        console.warn('Einkaufsliste Web-Push Status konnte nicht gelesen werden:', error);
+    }
+    render();
+}
+
+async function loadNotificationEnvironment() {
+    if (!db || !uid() || uid() === GUEST_MODE) return;
+    state.notificationPublicKey = '';
+    try {
+        if (typeof window.getEinkaufslisteWebPushConfig === 'function') {
+            try {
+                const result = await window.getEinkaufslisteWebPushConfig({});
+                state.notificationPublicKey = String(result?.data?.publicKey || '').trim();
+            } catch (callableError) {
+                console.warn('Einkaufsliste Web-Push Callable noch nicht verfügbar, verwende Firestore-Fallback:', callableError);
+            }
+        }
+        if (!state.notificationPublicKey) {
+            const snap = await getDoc(webPushSettingsDoc());
+            state.notificationPublicKey = snap.exists() ? String(snap.data()?.publicKey || '').trim() : '';
+        }
+    } catch (error) {
+        console.warn('Einkaufsliste Web-Push Konfiguration konnte nicht geladen werden:', error);
+        state.notificationPublicKey = '';
+    }
+    await refreshNotificationSubscriptionState();
+}
+
+async function saveNotificationSettings() {
+    const list = activeList();
+    if (!list || !canRead(list)) return alertUser('Bitte zuerst eine zugängliche Liste auswählen.', 'error');
+    const payload = {
+        ...cloneNotificationSettings(),
+        listId: list.id,
+        userId: uid(),
+        userName: uname(),
+        updatedAt: serverTimestamp(),
+        createdAt: serverTimestamp()
+    };
+    await setDoc(notificationSettingsDoc(list.id), payload, { merge: true });
+    state.notificationSettings = normalizeNotificationSettings(payload, list.id);
+    alertUser('Benachrichtigungseinstellungen gespeichert.', 'success');
+    render();
+}
+
+async function saveNotificationTemplate() {
+    const payload = notificationTemplatePayload();
+    await saveUserSetting(EL_NOTIFY_TEMPLATE_KEY, payload);
+    state.notificationTemplate = payload;
+    alertUser('Vorlage für Benachrichtigungen gespeichert.', 'success');
+    render();
+}
+
+function applyNotificationTemplate() {
+    if (!state.notificationTemplate) return alertUser('Es ist noch keine gespeicherte Vorlage vorhanden.', 'info');
+    state.notificationSettings = normalizeNotificationSettings(state.notificationTemplate, state.listId);
+    render();
+}
+
+function toggleNotificationCopyTarget(listId) {
+    state.notificationCopyTargets = state.notificationCopyTargets.includes(listId)
+        ? state.notificationCopyTargets.filter((id) => id !== listId)
+        : [...state.notificationCopyTargets, listId];
+    render();
+}
+
+async function copyNotificationSettingsToTargets() {
+    const targets = state.notificationCopyTargets.filter(Boolean);
+    if (!targets.length) return alertUser('Bitte mindestens eine Zielliste auswählen.', 'info');
+    const payload = cloneNotificationSettings();
+    await Promise.all(targets.map((listId) => setDoc(notificationSettingsDoc(listId), {
+        ...payload,
+        listId,
+        userId: uid(),
+        userName: uname(),
+        updatedAt: serverTimestamp(),
+        createdAt: serverTimestamp()
+    }, { merge: true })));
+    state.notificationCopyTargets = [];
+    alertUser('Benachrichtigungseinstellungen auf die gewählten Listen übertragen.', 'success');
+    render();
+}
+
+async function syncWebPushSubscription({ requestPermission = false } = {}) {
+    if (!webPushSupported()) return alertUser('Web-Push wird auf diesem Gerät/Browser nicht unterstützt.', 'error');
+    if (!state.notificationPublicKey) return alertUser('Web-Push Public Key ist noch nicht konfiguriert.', 'error');
+    state.notificationBusy = true;
+    state.notificationError = '';
+    render();
+    try {
+        let permission = Notification.permission;
+        if (requestPermission && permission !== 'granted') permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+            state.notificationError = 'Benachrichtigungen wurden nicht erlaubt.';
+            alertUser(state.notificationError, 'info');
+            return;
+        }
+        const registration = await navigator.serviceWorker.ready;
+        let subscription = await registration.pushManager.getSubscription();
+        if (!subscription) {
+            subscription = await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(state.notificationPublicKey)
+            });
+        }
+        const data = subscription.toJSON();
+        await setDoc(doc(notificationSubscriptionsRef(), subscriptionDocId(subscription.endpoint)), {
+            userId: uid(),
+            userName: uname(),
+            endpoint: subscription.endpoint,
+            subscription: data,
+            permission,
+            userAgent: navigator.userAgent || '',
+            updatedAt: serverTimestamp(),
+            createdAt: serverTimestamp()
+        }, { merge: true });
+        state.notificationSubscribed = true;
+        alertUser('Web-Push für dieses Gerät aktiviert/synchronisiert.', 'success');
+    } catch (error) {
+        console.error('Einkaufsliste Web-Push Aktivierung fehlgeschlagen:', error);
+        state.notificationError = error?.message || 'Web-Push konnte nicht aktiviert werden.';
+        alertUser(state.notificationError, 'error');
+    } finally {
+        state.notificationBusy = false;
+        render();
+    }
+}
+
+async function disableWebPushSubscription() {
+    if (!webPushSupported()) return alertUser('Web-Push wird auf diesem Gerät/Browser nicht unterstützt.', 'error');
+    state.notificationBusy = true;
+    state.notificationError = '';
+    render();
+    try {
+        const registration = await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.getSubscription();
+        if (subscription) {
+            const endpoint = subscription.endpoint;
+            await subscription.unsubscribe();
+            await deleteDoc(doc(notificationSubscriptionsRef(), subscriptionDocId(endpoint)));
+        }
+        state.notificationSubscribed = false;
+        alertUser('Web-Push für dieses Gerät deaktiviert.', 'success');
+    } catch (error) {
+        console.error('Einkaufsliste Web-Push Deaktivierung fehlgeschlagen:', error);
+        state.notificationError = error?.message || 'Web-Push konnte nicht deaktiviert werden.';
+        alertUser(state.notificationError, 'error');
+    } finally {
+        state.notificationBusy = false;
+        render();
+    }
+}
+
 function clearPermEntries(listId) {
     Array.from(state.perms.keys()).filter((k) => k.startsWith(`${listId}:`)).forEach((k) => state.perms.delete(k));
 }
@@ -362,9 +646,17 @@ function applyListDocs(docs) {
     docs.forEach((d) => merged.set(d.id, { id: d.id, ...d.data() }));
     state.lists = Array.from(merged.values()).sort((a, b) => (Number(toDate(b.updatedAt)?.getTime() || 0) - Number(toDate(a.updatedAt)?.getTime() || 0)) || String(a.name).localeCompare(String(b.name), 'de'));
     const preferredListId = storedListId();
-    if (preferredListId && state.lists.some((x) => x.id === preferredListId)) state.listId = preferredListId;
+    if (pendingNotificationListId && state.lists.some((x) => x.id === pendingNotificationListId)) {
+        state.listId = pendingNotificationListId;
+        pendingNotificationListId = '';
+        sessionStorageWrite(EL_NOTIFY_PENDING_LIST_KEY, '');
+    } else if (preferredListId && state.lists.some((x) => x.id === preferredListId)) state.listId = preferredListId;
     else if (state.listId && state.lists.some((x) => x.id === state.listId)) state.listId = state.listId;
     if (!state.listId || !state.lists.some((x) => x.id === state.listId)) state.listId = state.lists[0]?.id || null;
+    if (pendingNotificationMode) {
+        pendingNotificationMode = '';
+        sessionStorageWrite(EL_NOTIFY_PENDING_MODE_KEY, '');
+    }
     persistListId();
     listenActiveList();
     render();
@@ -423,13 +715,17 @@ export async function initializeEinkaufsliste() {
     if (!root) return;
     if (!inited) {
         inited = true;
+        pendingNotificationListId = sessionStorageRead(EL_NOTIFY_PENDING_LIST_KEY);
+        pendingNotificationMode = sessionStorageRead(EL_NOTIFY_PENDING_MODE_KEY);
         const storedMode = getUserSetting(EL_MODE_KEY, 'shop');
-        state.mode = storedMode === 'manage' ? 'manage' : 'shop';
+        state.mode = MODES.some((entry) => entry.id === storedMode) ? storedMode : 'shop';
+        if (pendingNotificationMode && MODES.some((entry) => entry.id === pendingNotificationMode)) state.mode = pendingNotificationMode;
         state.listMode = storedMode === 'add' ? 'input' : (getUserSetting(EL_LIST_MODE_KEY, 'search') === 'input' ? 'input' : 'search');
         state.section = getUserSetting(EL_SECTION_KEY, 'general');
         state.storeDisplay = getUserSetting(EL_STORE_KEY, 'split');
         state.storeNumbers = isSettingTrue(EL_STORE_NUMBERS_KEY, false);
         state.listId = storedListId();
+        state.notificationTemplate = getUserSetting(EL_NOTIFY_TEMPLATE_KEY, null) || null;
     }
     try {
         const tokenResult = await auth?.currentUser?.getIdTokenResult?.(true);
@@ -438,6 +734,7 @@ export async function initializeEinkaufsliste() {
             alertUser('Einkaufsliste konnte nicht geladen werden: appUserId-Claim fehlt. Bitte neu anmelden.', 'error');
             return;
         }
+        await runInitStep('loadNotificationEnvironment', () => loadNotificationEnvironment());
         await runInitStep('seedDefaults', () => seedDefaults());
         await runInitStep('ensurePrivateList', () => ensurePrivateList());
         await runInitStep('listenMasters', async () => { listenMasters(); });
@@ -458,6 +755,9 @@ const EL_SECTION_KEY = 'el_section';
 const EL_STORE_KEY = 'el_store';
 const EL_STORE_NUMBERS_KEY = 'el_store_numbers';
 const EL_LIST_KEY = 'el_list';
+const EL_NOTIFY_TEMPLATE_KEY = 'el_notify_template';
+const EL_NOTIFY_PENDING_LIST_KEY = 'einkaufsliste_pending_list';
+const EL_NOTIFY_PENDING_MODE_KEY = 'einkaufsliste_pending_mode';
 
 function listenMasters() {
     if (masterUnsubs.length) return;
@@ -477,7 +777,13 @@ function listenLists() {
 function listenActiveList() {
     stopActive();
     const list = activeList();
-    if (!list) return;
+    if (!list) {
+        state.notificationSettings = null;
+        state.notificationCopyTargets = [];
+        return;
+    }
+    state.notificationSettings = normalizeNotificationSettings({}, list.id);
+    state.notificationCopyTargets = [];
     if (list.ownerId === uid()) {
         activeUnsubs.push(onSnapshot(sub(list.id, 'permissions'), (s) => {
             clearPermEntries(list.id);
@@ -495,6 +801,10 @@ function listenActiveList() {
     activeUnsubs.push(onSnapshot(query(sub(list.id, 'presence'), orderBy('lastSeen', 'desc')), (s) => { state.presence = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((x) => Date.now() - (toDate(x.lastSeen)?.getTime() || 0) <= PRESENCE_MS); render(); }, (error) => reportListenerError('listenActiveList:presence', error)));
     activeUnsubs.push(onSnapshot(query(sub(list.id, 'activity'), orderBy('createdAt', 'desc'), limit(1)), (s) => { state.activity = s.docs[0] ? { id: s.docs[0].id, ...s.docs[0].data() } : null; render(); }, (error) => reportListenerError('listenActiveList:activity', error)));
     activeUnsubs.push(onSnapshot(sub(list.id, 'locks'), (s) => { state.locks.clear(); s.docs.forEach((d) => state.locks.set(d.id, { id: d.id, ...d.data() })); render(); }, (error) => reportListenerError('listenActiveList:locks', error)));
+    activeUnsubs.push(onSnapshot(notificationSettingsDoc(list.id), (snap) => {
+        state.notificationSettings = normalizeNotificationSettings(snap.exists() ? snap.data() : {}, list.id);
+        render();
+    }, (error) => reportListenerError('listenActiveList:notificationSettings', error)));
     touchPresence();
     presenceTimer = setInterval(touchPresence, 30000);
 }
@@ -502,7 +812,7 @@ function listenActiveList() {
 async function touchPresence() {
     const list = activeList();
     if (!list) return;
-    await setDoc(doc(sub(list.id, 'presence'), uid()), { userId: uid(), userName: uname(), currentArea: state.mode === 'manage' ? MANAGE.find((x) => x.id === state.section)?.label || 'Verwaltung' : (state.listMode === 'input' ? 'Listenmodus · Eingeben' : 'Listenmodus · Suchen'), lastSeen: serverTimestamp() }, { merge: true });
+    await setDoc(doc(sub(list.id, 'presence'), uid()), { userId: uid(), userName: uname(), currentArea: state.mode === 'manage' ? MANAGE.find((x) => x.id === state.section)?.label || 'Verwaltung' : (state.mode === 'notify' ? 'Benachrichtigungen' : (state.listMode === 'input' ? 'Listenmodus · Eingeben' : 'Listenmodus · Suchen')), lastSeen: serverTimestamp() }, { merge: true });
 }
 
 async function logActivity(text, payload = {}) {
@@ -565,11 +875,24 @@ function renderScannerPanelActive(embedded = false) {
 }
 
 function renderActionBar() {
-    if (state.mode === 'manage') return '';
+    if (state.mode === 'manage' || state.mode === 'notify') return '';
     if (state.listMode === 'search') {
         return `<div class="elc !p-3 space-y-3"><div class="grid gap-3 lg:grid-cols-[auto_minmax(0,1fr)] items-center"><div class="flex justify-center lg:justify-start">${renderModeToggle()}</div><div class="flex w-full items-center gap-2"><input id="el-search" class="eli text-center" placeholder="Suchen oder scannen..." value="${escapeHtml(state.search)}"><button class="elb ${cameraButtonClass()}" data-a="open-scan" title="Scanner ${state.scanOpen ? 'deaktivieren' : 'aktivieren'}">📷</button></div></div>${renderArticleSuggestionList('search')}${renderPresenceInline()}${state.scanOpen && state.scanMode !== 'article-ean' ? renderScannerPanelActive(true) : ''}</div>`;
     }
     return `<div class="elc !p-3"><div class="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)] items-start"><div class="space-y-2"><div class="flex justify-center lg:justify-start">${renderModeToggle()}</div><div class="grid w-full grid-cols-[minmax(0,1fr)_110px] gap-2 lg:max-w-[210px]"><input id="el-q" class="eli text-center" value="${escapeHtml(state.q)}" placeholder="Menge"><select id="el-unit" class="els">${UNITS.map((u) => `<option value="${u}" ${state.unit === u ? 'selected' : ''}>${u}</option>`).join('')}</select></div></div><div class="w-full space-y-2"><div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center"><select id="el-store-add" class="els"><option value="">Geschäft zuordnen...</option>${state.stores.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}</select><input id="el-note" class="eli" placeholder="Anmerkung optional" value="${escapeHtml(state.note)}"><button class="elb ${cameraButtonClass()}" data-a="open-scan" title="Scanner ${state.scanOpen ? 'deaktivieren' : 'aktivieren'}">📷</button></div><div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_56px] items-center"><input id="el-title" class="eli" placeholder="Artikel eingeben..." value="${escapeHtml(state.title)}"><button class="elb a !px-0" data-a="add-item" ${!canAdd() ? 'disabled' : ''}>+</button></div>${renderArticleSuggestionList('title')}${state.storeIds.length ? `<div class="elm">${state.storeIds.map((id) => chip(`${escapeHtml(state.stores.find((s) => s.id === id)?.name || id)} <button data-a="del-store" data-id="${id}">×</button>`, 'bg-orange-100 text-orange-700')).join(' ')}</div>` : ''}${renderPresenceInline()}${state.scanOpen && state.scanMode !== 'article-ean' ? renderScannerPanelActive(true) : ''}</div></div>`;
+}
+
+function renderNotificationCenter() {
+    const list = activeList();
+    if (!list) return '<div class="elc text-sm text-gray-500">Bitte zuerst eine Liste auswählen.</div>';
+    const cfg = state.notificationSettings || normalizeNotificationSettings({}, list.id);
+    const pushSupported = webPushSupported();
+    const otherLists = state.lists.filter((entry) => entry.id !== list.id);
+    const permissionLabel = notificationPermissionLabel();
+    const templateAvailable = !!state.notificationTemplate;
+    const subscriptionLabel = pushSupported ? (state.notificationSubscribed ? 'Gerät registriert' : 'Kein Gerät registriert') : 'Nicht verfügbar';
+    const webPushHint = state.notificationPublicKey ? '' : '<div class="rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">Web-Push ist im UI und Backend vorbereitet, aber der öffentliche Web-Push-Schlüssel ist noch nicht konfiguriert. Einstellungen können bereits gespeichert und auf andere Listen übertragen werden.</div>';
+    return `<div class="space-y-3"><div class="elc space-y-3"><div class="flex flex-wrap justify-between gap-2 items-start"><div><div class="text-xl font-black text-gray-900">Benachrichtigungen</div><div class="text-sm text-gray-500">Pro Liste kannst du jetzt fein steuern, wann und wie Web-Push gesendet wird.</div></div><div class="text-right text-xs font-bold text-gray-500">Liste: ${escapeHtml(list.name)}</div></div><div class="elm"><span class="elnotifytag">Support: ${escapeHtml(pushSupported ? 'Ja' : 'Nein')}</span><span class="elnotifytag">Erlaubnis: ${escapeHtml(permissionLabel)}</span><span class="elnotifytag">Status: ${escapeHtml(subscriptionLabel)}</span></div>${webPushHint}${state.notificationError ? `<div class="rounded-2xl border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">${escapeHtml(state.notificationError)}</div>` : ''}<div class="flex flex-wrap gap-2"><button class="elb a" data-a="enable-web-push" ${state.notificationBusy ? 'disabled' : ''}>Web-Push aktivieren</button><button class="elb bg-gray-100 text-gray-700" data-a="sync-web-push" ${state.notificationBusy || !pushSupported ? 'disabled' : ''}>Gerät synchronisieren</button><button class="elb bg-red-100 text-red-700" data-a="disable-web-push" ${state.notificationBusy || !pushSupported || !state.notificationSubscribed ? 'disabled' : ''}>Gerät abmelden</button></div></div><div class="elc space-y-3"><div class="flex flex-wrap justify-between gap-2 items-center"><div class="font-black text-sm">Einstellungen für diese Liste</div><button class="elb a" data-a="save-notify-settings">Einstellungen speichern</button></div><label class="inline-flex items-center gap-2 text-sm font-bold text-gray-700"><input type="checkbox" id="el-n-enabled" ${cfg.enabled !== false ? 'checked' : ''}> Benachrichtigungen für diese Liste aktivieren</label><label class="inline-flex items-center gap-2 text-sm font-bold text-gray-700"><input type="checkbox" id="el-n-only-others" ${cfg.onlyOthers !== false ? 'checked' : ''}> Nur bei Änderungen anderer Personen</label><label class="inline-flex items-center gap-2 text-sm font-bold text-gray-700"><input type="checkbox" id="el-n-direct-link" ${cfg.directLink !== false ? 'checked' : ''}> Direktlink in Push mitgeben</label><label class="inline-flex items-center gap-2 text-sm font-bold text-gray-700"><input type="checkbox" id="el-n-push-actions" ${cfg.pushActions !== false ? 'checked' : ''}> Aktionen im Push anzeigen</label><div class="rounded-2xl border border-slate-200 bg-slate-50 p-3 space-y-3">${NOTIFY_ACTIONS.map((entry) => `<div class="elnotifyrow"><div class="space-y-1"><label class="inline-flex items-center gap-2 text-sm font-bold text-gray-800"><input type="checkbox" id="el-n-event-${entry.id}" ${(cfg.actions?.[entry.id]?.enabled ?? true) ? 'checked' : ''}> ${entry.label}</label><div class="text-xs text-gray-500">${entry.description}</div></div><label class="text-sm font-bold text-gray-700">Intervall in Minuten<input id="el-n-int-${entry.id}" class="eli mt-1 text-center" inputmode="numeric" value="${escapeHtml(String(cfg.actions?.[entry.id]?.intervalMinutes ?? 0))}"></label></div>`).join('')}</div><div class="text-xs font-semibold text-gray-500">0 Minuten = jedes Ereignis einzeln senden. Werte größer als 0 erzeugen Sammelbenachrichtigungen im eingestellten Abstand.</div></div><div class="elc space-y-3"><div class="flex flex-wrap justify-between gap-2 items-center"><div class="font-black text-sm">Vorlage & Übertragung</div><div class="flex flex-wrap gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="save-notify-template">Als Vorlage speichern</button><button class="elb bg-indigo-100 text-indigo-700" data-a="apply-notify-template" ${templateAvailable ? '' : 'disabled'}>Vorlage anwenden</button></div></div><div class="text-sm text-gray-500">Du kannst die aktuelle Konfiguration speichern und auf weitere Listen übertragen.</div>${otherLists.length ? `<div class="elnotifyselect">${otherLists.map((entry) => `<button class="${state.notificationCopyTargets.includes(entry.id) ? 'a' : ''}" data-a="toggle-notify-target" data-id="${entry.id}">${escapeHtml(entry.name)}</button>`).join('')}</div><div class="flex flex-wrap gap-2"><button class="elb a" data-a="copy-notify-settings" ${state.notificationCopyTargets.length ? '' : 'disabled'}>Auf gewählte Listen übertragen</button><button class="elb bg-gray-100 text-gray-700" data-a="clear-notify-targets" ${state.notificationCopyTargets.length ? '' : 'disabled'}>Auswahl leeren</button></div>` : '<div class="text-sm text-gray-400">Keine weiteren Listen zum Übertragen vorhanden.</div>'}</div></div>`;
 }
 
 function storeNumberMap(list = activeList()) {
@@ -622,11 +945,11 @@ function articleHasBarcode(article) {
 
 function renderMetaIcons({ hasBarcode = false, hasNote = false, hasStores = false, hasQuantity = false, hasCategory = false } = {}) {
     const icons = [];
-    if (hasBarcode) icons.push('<span class="elmetaicon elmetaicon-barcode" title="Barcode hinterlegt">▦</span>');
-    if (hasNote) icons.push('<span class="elmetaicon elmetaicon-note" title="Anmerkung hinterlegt">✎</span>');
-    if (hasStores) icons.push('<span class="elmetaicon elmetaicon-store" title="Geschäfte zugeordnet">⌂</span>');
-    if (hasQuantity) icons.push('<span class="elmetaicon elmetaicon-qty" title="Mengen-Vorschlag hinterlegt">≋</span>');
-    if (hasCategory) icons.push('<span class="elmetaicon elmetaicon-category" title="Kategorie hinterlegt">◈</span>');
+    if (hasBarcode) icons.push('<span class="elmetaicon elmetaicon-barcode" title="Barcode hinterlegt">BC</span>');
+    if (hasNote) icons.push('<span class="elmetaicon elmetaicon-note" title="Anmerkung hinterlegt">AN</span>');
+    if (hasStores) icons.push('<span class="elmetaicon elmetaicon-store" title="Geschäfte zugeordnet">GS</span>');
+    if (hasQuantity) icons.push('<span class="elmetaicon elmetaicon-qty" title="Mengen-Vorschlag hinterlegt">MG</span>');
+    if (hasCategory) icons.push('<span class="elmetaicon elmetaicon-category" title="Kategorie hinterlegt">KT</span>');
     return icons.length ? `<span class="elmetaicons">${icons.join('')}</span>` : '';
 }
 
@@ -829,6 +1152,7 @@ function renderBody() {
         return `<div class="space-y-3"><div class="elc"><div class="grid grid-cols-[90px_110px_minmax(0,1fr)] gap-2"><input id="el-q" class="eli" value="${escapeHtml(state.q)}"><select id="el-unit" class="els">${UNITS.map((u) => `<option value="${u}" ${state.unit === u ? 'selected' : ''}>${u}</option>`).join('')}</select><input id="el-title" class="eli" placeholder="Artikel eingeben..." value="${escapeHtml(state.title)}"></div><div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"><select id="el-store-add" class="els"><option value="">Geschäft zuordnen...</option>${state.stores.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}</select><input id="el-note" class="eli" placeholder="Anmerkung optional" value="${escapeHtml(state.note)}"><button class="elb a" data-a="add-item" ${!canAdd() ? 'disabled' : ''}>+ Hinzufügen</button></div>${state.storeIds.length ? `<div class="elm">${state.storeIds.map((id) => chip(`${escapeHtml(state.stores.find((s) => s.id === id)?.name || id)} <button data-a="del-store" data-id="${id}">×</button>`, 'bg-orange-100 text-orange-700')).join(' ')}</div>` : '<div class="text-xs text-gray-400">Optional einem oder mehreren Geschäften zuordnen.</div>'}</div>`;
     }
     if (state.mode === 'shop') return `<div class="space-y-3">${groupedOpen().map((g) => `<div class="elc space-y-2"><div class="flex flex-wrap justify-between gap-2 items-center"><div class="font-black text-sm">${escapeHtml(g.label)}</div><div class="text-xs font-bold text-gray-600">${g.items.length} offen</div></div>${g.note ? `<div class="text-xs rounded-xl border border-orange-300 bg-orange-50 px-3 py-2 text-orange-800">${escapeHtml(g.note)}</div>` : ''}${g.items.length ? g.items.map(renderItem).join('') : '<div class="py-3 text-sm text-gray-400">Keine offenen Artikel.</div>'}</div>`).join('') || '<div class="elc text-sm text-gray-400">Keine Artikel gefunden.</div>'}</div>`;
+    if (state.mode === 'notify') return renderNotificationCenter();
     if (!canManage()) return '<div class="elc text-sm text-red-700">Keine Verwaltungsberechtigung für diese Liste.</div>';
     if (state.section === 'general') return `<div class="space-y-3"><div class="elc"><div class="elstat"><div><div class="text-[11px] font-bold uppercase text-gray-500">Aktive Listen</div><div class="text-xl font-black text-indigo-700">${state.lists.filter((l) => l.active !== false).length}</div></div><div><div class="text-[11px] font-bold uppercase text-gray-500">Offene Artikel</div><div class="text-xl font-black text-orange-700">${state.items.filter((x) => x.status !== 'checked').length}</div></div><div><div class="text-[11px] font-bold uppercase text-gray-500">Letztes Update</div><div class="text-sm font-black text-slate-700">${dt(activeList()?.updatedAt)}</div></div></div></div>${state.lists.map((l) => `<div class="elc"><div class="flex justify-between gap-2"><div><div class="font-bold text-sm">${escapeHtml(l.name)}</div><div class="text-xs text-gray-500">${dt(l.updatedAt)} · ${escapeHtml(l.updatedByName || l.ownerName || '—')}</div></div><div class="text-xs font-bold text-gray-600">${l.id === state.listId ? state.items.filter((x) => x.status !== 'checked').length : 0} offen</div></div></div>`).join('')}</div>`;
     if (state.section === 'stores') return `<div class="space-y-3"><div class="elc flex flex-wrap gap-2"><input id="el-draft-store" class="eli" placeholder="Neues Geschäft" value="${escapeHtml(state.drafts.store)}"><button class="elb a" data-a="add-store" ${!canManageWrite() ? 'disabled' : ''}>+ Geschäft</button></div>${(activeList()?.storeOrder?.length ? activeList().storeOrder : state.stores.map((s) => s.id)).map((id, i, arr) => { const s = state.stores.find((x) => x.id === id); if (!s) return ''; const categoryNames = (s.categoryOrder || []).map((catId) => state.categories.find((c) => c.id === catId)?.name).filter(Boolean); return `<div class="elc space-y-2"><div class="flex flex-wrap justify-between gap-2 items-start"><div><div class="font-bold text-sm">${escapeHtml(s.name)}</div><div class="text-xs text-gray-500">${categoryNames.length ? `${categoryNames.length} Kategorie(n) für Sortierung gewählt` : 'Noch keine Kategorien ausgewählt'}</div></div><div class="flex flex-wrap gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="store-up" data-id="${s.id}" ${i === 0 || !canManageWrite() ? 'disabled' : ''}>↑</button><button class="elb bg-gray-100 text-gray-700" data-a="store-down" data-id="${s.id}" ${i === arr.length - 1 || !canManageWrite() ? 'disabled' : ''}>↓</button><button class="elb bg-indigo-100 text-indigo-700" data-a="open-store-categories" data-id="${s.id}" ${!canManageWrite() ? 'disabled' : ''}>Kategorienwartung</button><button class="elb bg-red-600 text-white" data-a="del-store-master" data-id="${s.id}" ${!canManageWrite() ? 'disabled' : ''}>Löschen</button></div></div><div class="elm">${categoryNames.length ? categoryNames.map((name) => chip(escapeHtml(name), 'bg-indigo-100 text-indigo-700')).join(' ') : '<span class="text-xs text-gray-400">Keine Kategorien sortiert.</span>'}</div></div>`; }).join('')}</div>`;
@@ -844,6 +1168,7 @@ function renderBodyActive() {
     if (state.mode === 'shop') {
         return `<div class="space-y-2">${groupedOpen().map((g) => `<div class="elc !p-3 space-y-1.5"><div class="flex flex-wrap justify-between gap-2 items-center"><div class="font-black text-sm">${escapeHtml(g.label)}</div><div class="text-[11px] font-bold text-gray-600">${g.items.length} offen</div></div>${g.note ? `<div class="text-xs rounded-xl border border-orange-300 bg-orange-50 px-3 py-1.5 text-orange-800">${escapeHtml(g.note)}</div>` : ''}${g.items.length ? g.items.map(renderItem).join('') : '<div class="py-2 text-sm text-gray-400">Keine offenen Artikel.</div>'}</div>`).join('') || '<div class="elc text-sm text-gray-400">Keine Artikel gefunden.</div>'}</div>`;
     }
+    if (state.mode === 'notify') return renderBody();
     if (!canManage()) return '<div class="elc text-sm text-red-700">Keine Verwaltungsberechtigung für diese Liste.</div>';
     if (state.section === 'stores') {
         return `<div class="space-y-3"><div class="elc flex flex-wrap gap-2"><input id="el-draft-store" class="eli" placeholder="Neues Geschäft" value="${escapeHtml(state.drafts.store)}"><button class="elb a" data-a="add-store" ${!canManageWrite() ? 'disabled' : ''}>+ Geschäft</button></div>${(activeList()?.storeOrder?.length ? activeList().storeOrder : state.stores.map((s) => s.id)).map((id, i, arr) => { const s = state.stores.find((x) => x.id === id); if (!s) return ''; const categoryNames = (s.categoryOrder || []).map((catId) => state.categories.find((c) => c.id === catId)?.name).filter(Boolean); return `<div class="elc space-y-2"><div class="flex flex-wrap justify-between gap-2 items-start"><div><div class="font-bold text-sm">${escapeHtml(s.name)}</div><div class="text-xs text-gray-500">${categoryNames.length ? `${categoryNames.length} Kategorie(n) für Sortierung gewählt` : 'Noch keine Kategorien ausgewählt'}</div></div><div class="flex flex-wrap gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="store-up" data-id="${s.id}" ${i === 0 || !canManageWrite() ? 'disabled' : ''}>↑</button><button class="elb bg-gray-100 text-gray-700" data-a="store-down" data-id="${s.id}" ${i === arr.length - 1 || !canManageWrite() ? 'disabled' : ''}>↓</button><button class="elb bg-indigo-100 text-indigo-700" data-a="open-store-categories" data-id="${s.id}" ${!canManageWrite() ? 'disabled' : ''}>Kategorienwartung</button><button class="elb bg-red-600 text-white" data-a="del-store-master" data-id="${s.id}" ${!canManageWrite() ? 'disabled' : ''}>Löschen</button></div></div><div class="flex flex-wrap items-center gap-1.5 text-xs">${categoryNames.length ? categoryNames.map((name, index) => `${index ? '<span class="font-black text-slate-400">→</span>' : ''}${chip(escapeHtml(name), 'bg-indigo-100 text-indigo-700')}`).join(' ') : '<span class="text-xs text-gray-400">Keine Kategorien sortiert.</span>'}</div></div>`; }).join('')}</div>`;
@@ -1034,6 +1359,11 @@ function onKeyDownActive(e) {
      if (t.id === 'el-note') state.note = t.value;
      if (t.id === 'el-search') { state.search = t.value; requestFocusAfterRender('el-search', t.selectionStart, t.selectionEnd); render(); return; }
      if (t.id === 'el-article-search') { state.articleSearch = t.value; requestFocusAfterRender('el-article-search', t.selectionStart, t.selectionEnd); render(); return; }
+     if (String(t.id || '').startsWith('el-n-int-')) {
+         const key = String(t.id).replace('el-n-int-', '');
+         if (state.notificationSettings?.actions?.[key]) state.notificationSettings.actions[key].intervalMinutes = normalizeNotificationInterval(t.value, state.notificationSettings.actions[key].intervalMinutes);
+         return;
+     }
      if (t.id === 'el-draft-store') state.drafts.store = t.value;
      if (t.id === 'el-draft-category') state.drafts.category = t.value;
      if (t.id === 'el-draft-remark') state.drafts.remark = t.value;
@@ -1063,6 +1393,14 @@ function onKeyDownActive(e) {
      if (t.id === 'el-cs') state.collab.canShop = t.checked;
      if (t.id === 'el-cm') state.collab.canManage = t.checked;
      if (t.id === 'el-cw') state.collab.canManageWrite = t.checked;
+     if (t.id === 'el-n-enabled' && state.notificationSettings) state.notificationSettings.enabled = t.checked;
+     if (t.id === 'el-n-only-others' && state.notificationSettings) state.notificationSettings.onlyOthers = t.checked;
+     if (t.id === 'el-n-direct-link' && state.notificationSettings) state.notificationSettings.directLink = t.checked;
+     if (t.id === 'el-n-push-actions' && state.notificationSettings) state.notificationSettings.pushActions = t.checked;
+     if (String(t.id || '').startsWith('el-n-event-') && state.notificationSettings) {
+         const key = String(t.id).replace('el-n-event-', '');
+         if (state.notificationSettings.actions?.[key]) state.notificationSettings.actions[key].enabled = t.checked;
+     }
  }
 
  function openStoreCategoryEditor(storeId) {
@@ -1532,7 +1870,7 @@ async function onClick(e) {
     if (a === 'open-mode-picker') { state.modePickerOpen = true; render(); return; }
     if (a === 'close-mode-picker') { state.modePickerOpen = false; render(); return; }
     if (a === 'toggle-details') { state.detailsOpen = !state.detailsOpen; render(); return; }
-    if (a === 'mode') { state.mode = btn.dataset.v === 'manage' ? 'manage' : 'shop'; state.modePickerOpen = false; saveUserSetting(EL_MODE_KEY, state.mode); touchPresence(); render(); return; }
+    if (a === 'mode') { state.mode = MODES.some((entry) => entry.id === btn.dataset.v) ? btn.dataset.v : 'shop'; state.modePickerOpen = false; saveUserSetting(EL_MODE_KEY, state.mode); touchPresence(); render(); return; }
     if (a === 'quick-mode') { state.mode = 'shop'; state.listMode = btn.dataset.v === 'input' ? 'input' : 'search'; saveUserSetting(EL_MODE_KEY, state.mode); saveUserSetting(EL_LIST_MODE_KEY, state.listMode); touchPresence(); render(); return; }
     if (a === 'section') { state.section = btn.dataset.v; saveUserSetting(EL_SECTION_KEY, state.section); touchPresence(); render(); return; }
     if (a === 'store-display') { state.storeDisplay = state.storeDisplay === 'split' ? 'combined' : 'split'; saveUserSetting(EL_STORE_KEY, state.storeDisplay); render(); return; }
@@ -1571,7 +1909,7 @@ async function onClick(e) {
     if (a === 'add-category') { await addMaster('categories', state.drafts.category, 'name'); state.drafts.category = ''; render(); return; }
     if (a === 'del-category') { await deleteDoc(doc(master('categories'), btn.dataset.id)); await logActivity('Kategorie gelöscht', { categoryId: btn.dataset.id }); return; }
     if (a === 'add-store') { const ref = await addMaster('stores', state.drafts.store, 'name'); if (ref?.id && state.listId) { const list = activeList(); const currentOrder = list?.storeOrder?.length ? [...list.storeOrder] : state.stores.map((s) => s.id); if (!currentOrder.includes(ref.id)) await updateDoc(listDoc(state.listId), { storeOrder: [...currentOrder, ref.id], updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() }); } state.drafts.store = ''; render(); return; }
-    if (a === 'del-store-master') { await deleteDoc(doc(master('stores'), btn.dataset.id)); await logActivity('Geschäft gelöscht', { storeId: btn.dataset.id }); return; }
+    if (a === 'del-store-master') { const store = state.stores.find((entry) => entry.id === btn.dataset.id); if (!store) return; if (!confirm(`Geschäft "${store.name}" wirklich löschen?`)) return; await deleteDoc(doc(master('stores'), btn.dataset.id)); await logActivity('Geschäft gelöscht', { storeId: btn.dataset.id, storeName: store.name }); return; }
     if (a === 'store-up' || a === 'store-down') { await moveStore(btn.dataset.id, a === 'store-up' ? -1 : 1); return; }
     if (a === 'open-store-categories') { openStoreCategoryEditor(btn.dataset.id); return; }
     if (a === 'close-store-categories') { state.storeCategoryEditor = null; state.dragStoreCategory = null; render(); return; }
@@ -1586,6 +1924,15 @@ async function onClick(e) {
     if (a === 'create-list') { await createList(); return; }
     if (a === 'save-list') { await saveList(); return; }
     if (a === 'delete-list') { await deleteList(btn.dataset.id); return; }
+    if (a === 'save-notify-settings') { await saveNotificationSettings(); return; }
+    if (a === 'save-notify-template') { await saveNotificationTemplate(); return; }
+    if (a === 'apply-notify-template') { applyNotificationTemplate(); return; }
+    if (a === 'toggle-notify-target') { toggleNotificationCopyTarget(btn.dataset.id); return; }
+    if (a === 'clear-notify-targets') { state.notificationCopyTargets = []; render(); return; }
+    if (a === 'copy-notify-settings') { await copyNotificationSettingsToTargets(); return; }
+    if (a === 'enable-web-push') { await syncWebPushSubscription({ requestPermission: true }); return; }
+    if (a === 'sync-web-push') { await syncWebPushSubscription({ requestPermission: false }); return; }
+    if (a === 'disable-web-push') { await disableWebPushSubscription(); return; }
     if (a === 'save-collab') { await saveCollaborator(); return; }
     if (a === 'del-collab') { await deleteCollaborator(btn.dataset.id); return; }
     if (a === 'save-detail') { await saveDetailItem(); return; }
