@@ -1,14 +1,24 @@
 {
-  "version": "1.6.0",
-  "buildId": "20260402-4",
+  "version": "1.6.1",
+  "buildId": "20260402-5",
   "releaseDate": "2026-04-02",
-  "releaseTime": "09:05",
+  "releaseTime": "09:56",
   "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste: neuer Modus Benachrichtigungen mit pro Liste speicherbaren Web-Push-Einstellungen, Vorlagen/Übertragung, Direktlinks, PWA-Unterbau, Löschabfrage für Geschäfte und größeren Meta-Icons.",
+  "note": "Einkaufsliste: Web-Push-Schlüssel als Firebase-Secrets hinterlegt, Functions und Firestore-Regeln deployed sowie Benachrichtigungsmodus produktiv vervollständigt.",
   "commitId": "66cfbe7",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.6.1",
+      "buildId": "20260402-5",
+      "releaseDate": "2026-04-02",
+      "releaseTime": "09:56",
+      "bereich": "Einkaufsliste",
+      "note": "Einkaufsliste: Web-Push-Schlüssel als Firebase-Secrets hinterlegt, Functions und Firestore-Regeln deployed sowie Benachrichtigungsmodus produktiv vervollständigt.",
+      "commitId": "66cfbe7",
+      "obligation": "false"
+    },
     {
       "version": "1.6.0",
       "buildId": "20260402-4",
