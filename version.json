@@ -1,14 +1,24 @@
 {
-  "version": "1.6.1",
-  "buildId": "20260402-5",
+  "version": "1.6.2",
+  "buildId": "20260402-6",
   "releaseDate": "2026-04-02",
-  "releaseTime": "09:56",
+  "releaseTime": "10:05",
   "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste: Web-Push-Schlüssel als Firebase-Secrets hinterlegt, Functions und Firestore-Regeln deployed sowie Benachrichtigungsmodus produktiv vervollständigt.",
+  "note": "Einkaufsliste: Meta-Badges wieder auf eindeutige Icons statt Buchstaben umgestellt; Web-Push-Anbindung bleibt aktiv.",
   "commitId": "66cfbe7",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.6.2",
+      "buildId": "20260402-6",
+      "releaseDate": "2026-04-02",
+      "releaseTime": "10:05",
+      "bereich": "Einkaufsliste",
+      "note": "Einkaufsliste: Meta-Badges wieder auf eindeutige Icons statt Buchstaben umgestellt; Web-Push-Anbindung bleibt aktiv.",
+      "commitId": "66cfbe7",
+      "obligation": "false"
+    },
     {
       "version": "1.6.1",
       "buildId": "20260402-5",
