@@ -45,6 +45,7 @@ let holdPayload = null;
 let holdConsumedKey = '';
 let holdConsumedAt = 0;
 let doubleHintTimers = new Map();
+let pendingFocusRequest = null;
 
 const state = {
     lists: [],
@@ -204,7 +205,7 @@ function ensureStyle() {
     s.id = 'el-style';
     s.textContent = '.elc{background:#fff;border:1px solid #e5e7eb;border-radius:1rem;padding:.8rem;box-shadow:0 10px 24px rgba(15,23,42,.06)}.elb{border-radius:.8rem;padding:.5rem .75rem;font-size:.78rem;font-weight:800}.elb.a{background:linear-gradient(135deg,#4338ca,#6d28d9);color:#fff}.eli,.els,.elt{width:100%;border:1px solid #d1d5db;border-radius:.8rem;background:#fff;padding:.62rem .75rem;font-size:.83rem}.elt{min-height:82px;resize:vertical}.elm{display:flex;flex-wrap:wrap;gap:.45rem;align-items:center}.elitem{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.6rem;align-items:start;padding:.72rem 0}.elcheck{width:2.25rem;height:2.25rem;border-radius:.8rem;border:1px solid #cbd5e1;background:#fff;font-weight:900}.elmodal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:center;justify-content:center;padding:.8rem;z-index:120}.elmodal.o{display:flex}.elpanel{width:min(100%,760px);max-height:92vh;overflow:auto;background:#fff;border-radius:1.2rem;box-shadow:0 24px 60px rgba(15,23,42,.28)}.elkey{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.45rem}.elkey button{border-radius:.8rem;min-height:2.35rem;border:1px solid #d1d5db;background:#f8fafc;font-weight:800}.elcam{background:#020617;border-radius:1rem;overflow:hidden;position:relative;aspect-ratio:4/3}.elcam video{width:100%;height:100%;object-fit:cover}.elcam:after{content:"";position:absolute;inset:14%;border:3px solid rgba(255,255,255,.85);border-radius:1rem}.elstat{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem}.elstat>div{background:#f8fafc;border:1px solid #e5e7eb;border-radius:.85rem;padding:.55rem}@media(max-width:480px){.elstat{grid-template-columns:repeat(2,minmax(0,1fr))}}';
     s.textContent += '.elitem{padding:.56rem 0}.elstorecat-row{touch-action:none}.elstorecat-row.dragging{opacity:.58;transform:scale(.985)}.elstorecat-row.drop-before{box-shadow:inset 0 4px 0 #6366f1}.elstorecat-row.drop-after{box-shadow:inset 0 -4px 0 #6366f1}.elchipbtn{display:inline-flex;align-items:center;justify-content:center;width:1rem;height:1rem;border-radius:999px;background:rgba(255,255,255,.7);font-size:.72rem;font-weight:900;line-height:1;margin-left:.15rem}.elaction{display:inline-flex;align-items:center;justify-content:center;min-height:2.25rem;min-width:2.25rem;border:1px solid #cbd5e1;border-radius:.8rem;background:#fff;padding:.35rem .55rem;font-size:.78rem;font-weight:900;line-height:1;transition:transform .12s ease,background-color .12s ease,border-color .12s ease}.elaction:active{transform:scale(.96)}.elaction-gear{background:#eef2ff;border-color:#c7d2fe;color:#4338ca}.elaction-trash{background:#fef2f2;border-color:#fecaca;color:#b91c1c}.elaction-qty{background:#ecfdf5;border-color:#a7f3d0;color:#047857;min-width:7.8rem}@media(max-width:480px){.elitem{padding:.48rem 0}.elaction{min-height:2rem;min-width:2rem;padding:.28rem .42rem;font-size:.72rem}.elaction-qty{min-width:auto;max-width:100%}}.elcam.el-scan-success{animation:elcamScanSuccess 750ms ease-in-out 1;box-shadow:0 0 0 4px rgba(34,197,94,.82),0 0 0 12px rgba(34,197,94,.24)}@keyframes elcamScanSuccess{0%{box-shadow:0 0 0 0 rgba(34,197,94,0)}15%{box-shadow:0 0 0 4px rgba(34,197,94,.82),0 0 0 12px rgba(34,197,94,.22)}30%{box-shadow:0 0 0 0 rgba(34,197,94,0)}55%{box-shadow:0 0 0 4px rgba(34,197,94,.82),0 0 0 12px rgba(34,197,94,.22)}70%{box-shadow:0 0 0 0 rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}';
-    s.textContent += '.elmetaicons{display:inline-flex;align-items:center;gap:.22rem;flex-wrap:wrap}.elmetaicon{display:inline-flex;align-items:center;justify-content:center;min-width:1.15rem;height:1.15rem;padding:0 .18rem;border-radius:999px;background:#eef2ff;color:#4338ca;font-size:.68rem;font-weight:900;line-height:1}.elsuggest{margin-top:.35rem;border:1px solid #dbeafe;border-radius:.9rem;background:#f8fbff;overflow:hidden}.elsuggest-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:.6rem;padding:.65rem .8rem;border:0;border-top:1px solid #e0e7ff;background:transparent;text-align:left}.elsuggest-btn:first-child{border-top:0}.elsuggest-btn:active{background:#eef2ff}.elpresence{display:flex;flex-wrap:wrap;gap:.45rem;align-items:center;min-height:1.5rem}@media(max-width:480px){.elsuggest-btn{padding:.55rem .65rem}}';
+    s.textContent += '.elmetaicons{display:inline-flex;align-items:center;gap:.28rem;flex-wrap:wrap}.elmetaicon{display:inline-flex;align-items:center;justify-content:center;width:1.25rem;height:1.25rem;border-radius:999px;border:1px solid currentColor;font-size:.68rem;font-weight:900;line-height:1;background:#fff}.elmetaicon-barcode{color:#2563eb;background:#eff6ff}.elmetaicon-note{color:#7c3aed;background:#f5f3ff}.elmetaicon-store{color:#0f766e;background:#ecfeff}.elmetaicon-qty{color:#b45309;background:#fffbeb}.elmetaicon-category{color:#be185d;background:#fdf2f8}.elsuggest{margin-top:.35rem;border:1px solid #dbeafe;border-radius:.9rem;background:#f8fbff;overflow:hidden}.elsuggest-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:.6rem;padding:.65rem .8rem;border:0;border-top:1px solid #e0e7ff;background:transparent;text-align:left}.elsuggest-btn:first-child{border-top:0}.elsuggest-btn:active{background:#eef2ff}.elpresence{display:flex;flex-wrap:wrap;gap:.45rem;align-items:center;min-height:1.5rem}@media(max-width:480px){.elsuggest-btn{padding:.55rem .65rem}.elmetaicon{width:1.15rem;height:1.15rem;font-size:.64rem}}';
     document.head.appendChild(s);
 }
 
@@ -308,6 +309,17 @@ function focusInputById(id, start = null, end = null) {
             input.setSelectionRange(nextStart, nextEnd);
         }
     });
+}
+
+function requestFocusAfterRender(id, start = null, end = null) {
+    pendingFocusRequest = { id, start, end };
+}
+
+function applyPendingFocus() {
+    if (!pendingFocusRequest) return;
+    const req = pendingFocusRequest;
+    pendingFocusRequest = null;
+    focusInputById(req.id, req.start, req.end);
 }
 
 function clearPermEntries(listId) {
@@ -610,11 +622,11 @@ function articleHasBarcode(article) {
 
 function renderMetaIcons({ hasBarcode = false, hasNote = false, hasStores = false, hasQuantity = false, hasCategory = false } = {}) {
     const icons = [];
-    if (hasBarcode) icons.push('<span class="elmetaicon" title="Barcode hinterlegt">▦</span>');
-    if (hasNote) icons.push('<span class="elmetaicon" title="Anmerkung hinterlegt">✎</span>');
-    if (hasStores) icons.push('<span class="elmetaicon" title="Geschäfte zugeordnet">🏪</span>');
-    if (hasQuantity) icons.push('<span class="elmetaicon" title="Mengen-Vorschlag hinterlegt">⚖</span>');
-    if (hasCategory) icons.push('<span class="elmetaicon" title="Kategorie hinterlegt">🏷</span>');
+    if (hasBarcode) icons.push('<span class="elmetaicon elmetaicon-barcode" title="Barcode hinterlegt">▦</span>');
+    if (hasNote) icons.push('<span class="elmetaicon elmetaicon-note" title="Anmerkung hinterlegt">✎</span>');
+    if (hasStores) icons.push('<span class="elmetaicon elmetaicon-store" title="Geschäfte zugeordnet">⌂</span>');
+    if (hasQuantity) icons.push('<span class="elmetaicon elmetaicon-qty" title="Mengen-Vorschlag hinterlegt">≋</span>');
+    if (hasCategory) icons.push('<span class="elmetaicon elmetaicon-category" title="Kategorie hinterlegt">◈</span>');
     return icons.length ? `<span class="elmetaicons">${icons.join('')}</span>` : '';
 }
 
@@ -807,6 +819,7 @@ function render() {
     renderArticle();
     renderScannerActive();
     renderUnknown();
+    applyPendingFocus();
 }
 
 function renderBody() {
@@ -1017,10 +1030,10 @@ function onKeyDownActive(e) {
  function onInput(e) {
      const t = e.target;
      if (t.id === 'el-q') state.q = t.value;
-     if (t.id === 'el-title') { state.title = t.value; render(); focusInputById('el-title', t.selectionStart, t.selectionEnd); return; }
+     if (t.id === 'el-title') { state.title = t.value; requestFocusAfterRender('el-title', t.selectionStart, t.selectionEnd); render(); return; }
      if (t.id === 'el-note') state.note = t.value;
-     if (t.id === 'el-search') { state.search = t.value; render(); focusInputById('el-search', t.selectionStart, t.selectionEnd); return; }
-     if (t.id === 'el-article-search') { state.articleSearch = t.value; render(); focusInputById('el-article-search', t.selectionStart, t.selectionEnd); return; }
+     if (t.id === 'el-search') { state.search = t.value; requestFocusAfterRender('el-search', t.selectionStart, t.selectionEnd); render(); return; }
+     if (t.id === 'el-article-search') { state.articleSearch = t.value; requestFocusAfterRender('el-article-search', t.selectionStart, t.selectionEnd); render(); return; }
      if (t.id === 'el-draft-store') state.drafts.store = t.value;
      if (t.id === 'el-draft-category') state.drafts.category = t.value;
      if (t.id === 'el-draft-remark') state.drafts.remark = t.value;
@@ -1546,8 +1559,8 @@ async function onClick(e) {
     if (a === 'remove-scanned-code') { removeScannedCodeActive(btn.dataset.id); return; }
     if (a === 'close-unknown') { closeUnknownModal(); return; }
     if (a === 'save-unknown') { await saveUnknownCode(); return; }
-    if (a === 'pick-title-suggestion') { const article = state.articles.find((x) => x.id === btn.dataset.id); if (article) { state.title = article.title || ''; render(); focusInputById('el-title'); } return; }
-    if (a === 'pick-search-suggestion') { const article = state.articles.find((x) => x.id === btn.dataset.id); if (article) { state.search = article.title || ''; render(); focusInputById('el-search'); } return; }
+    if (a === 'pick-title-suggestion') { const article = state.articles.find((x) => x.id === btn.dataset.id); if (article) { state.title = article.title || ''; requestFocusAfterRender('el-title'); render(); } return; }
+    if (a === 'pick-search-suggestion') { const article = state.articles.find((x) => x.id === btn.dataset.id); if (article) { state.search = article.title || ''; requestFocusAfterRender('el-search'); render(); } return; }
     if (a === 'open-article') { state.articleEditor = { title: '', defaultQuantity: 1, defaultUnit: 'Stück', categoryId: '', eanCodes: [], variants: [], persistentNotes: [], storeIds: [] }; render(); return; }
     if (a === 'edit-article') { const article = state.articles.find((x) => x.id === btn.dataset.id); if (article) { state.articleEditor = JSON.parse(JSON.stringify(article)); render(); } return; }
     if (a === 'capture-ean') { openScanner('article-ean', btn.dataset.id); return; }
