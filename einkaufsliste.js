@@ -438,9 +438,11 @@ function ensureRoot() {
     if (!root.querySelector('#el-main')) {
         root.innerHTML = `<div class="space-y-3" id="el-main"></div><div id="el-modepicker"></div><div id="el-settings"></div><div id="el-purchase"></div><div id="el-detail"></div><div id="el-storecat"></div><div id="el-article"></div><div id="el-scanner"></div><div id="el-unknown"></div>`;
     }
+    root.removeEventListener('click', onClickActive);
+    root.removeEventListener('click', onClick);
+    root.addEventListener('click', onClick);
     if (root.dataset.ready === 'true') return;
     root.dataset.ready = 'true';
-    root.addEventListener('click', onClickActive);
     root.addEventListener('input', onInput);
     root.addEventListener('change', onChange);
     root.addEventListener('keydown', onKeyDownActive);

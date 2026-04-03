@@ -1,14 +1,24 @@
 {
-  "version": "1.8.1",
-  "buildId": "20260403-7",
+  "version": "1.8.2",
+  "buildId": "20260403-8",
   "releaseDate": "2026-04-03",
-  "releaseTime": "14:14",
+  "releaseTime": "14:22",
   "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste lädt wieder stabil, weil kollidierende Alt- und Override-Funktionen in einkaufsliste.js sauber getrennt wurden.",
+  "note": "Artikelwartung reagiert wieder auf Buttons, weil der Root-Click-Listener jetzt den aktiven Handler in einkaufsliste.js verwendet.",
   "commitId": "9d095e8",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.8.2",
+      "buildId": "20260403-8",
+      "releaseDate": "2026-04-03",
+      "releaseTime": "14:22",
+      "bereich": "Einkaufsliste",
+      "note": "Artikelwartung reagiert wieder auf Buttons, weil der Root-Click-Listener jetzt den aktiven Handler in einkaufsliste.js verwendet.",
+      "commitId": "9d095e8",
+      "obligation": "false"
+    },
     {
       "version": "1.8.1",
       "buildId": "20260403-7",
