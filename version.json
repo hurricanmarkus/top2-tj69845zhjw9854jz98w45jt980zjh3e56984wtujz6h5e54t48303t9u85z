@@ -1,14 +1,24 @@
 {
-  "version": "1.7.2",
-  "buildId": "20260403-3",
+  "version": "1.7.3",
+  "buildId": "20260403-4",
   "releaseDate": "2026-04-03",
-  "releaseTime": "10:16",
+  "releaseTime": "11:15",
   "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Suchmodus optisch an den Eingabemodus angeglichen: Umschalter mittig und Kamera links im Suchfeld integriert.",
-  "commitId": "660aa62",
+  "note": "Eingabemodus ist nun ebenfalls zentriert, die Abgehakt-Liste ist einklappbar und die Geschäftsnummerierung folgt robuster der gepflegten Reihenfolge.",
+  "commitId": "912ca94",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.7.3",
+      "buildId": "20260403-4",
+      "releaseDate": "2026-04-03",
+      "releaseTime": "11:15",
+      "bereich": "Einkaufsliste",
+      "note": "Eingabemodus ist nun ebenfalls zentriert, die Abgehakt-Liste ist einklappbar und die Geschäftsnummerierung folgt robuster der gepflegten Reihenfolge.",
+      "commitId": "912ca94",
+      "obligation": "false"
+    },
     {
       "version": "1.7.2",
       "buildId": "20260403-3",
