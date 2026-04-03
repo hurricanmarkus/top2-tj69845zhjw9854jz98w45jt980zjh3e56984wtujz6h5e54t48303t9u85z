@@ -1,14 +1,24 @@
 {
-  "version": "1.8.3",
-  "buildId": "20260403-9",
+  "version": "1.8.4",
+  "buildId": "20260403-10",
   "releaseDate": "2026-04-03",
-  "releaseTime": "14:51",
+  "releaseTime": "18:19",
   "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Variantenartikel lassen sich jetzt hierarchisch in den Vorschlägen aufklappen, Varianten können ohne Geschäft gespeichert werden und die Auswahl sperrt das Titelfeld bis zum Entfernen.",
-  "commitId": "a9520ff",
+  "note": "Listenmodus und Artikelwartung der Einkaufsliste wurden für Varianten, EAN-Ausnahmen und kompaktere Einträge bereinigt.",
+  "commitId": "02d83bc",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.8.4",
+      "buildId": "20260403-10",
+      "releaseDate": "2026-04-03",
+      "releaseTime": "18:19",
+      "bereich": "Einkaufsliste",
+      "note": "Listenmodus und Artikelwartung der Einkaufsliste wurden für Varianten, EAN-Ausnahmen und kompaktere Einträge bereinigt.",
+      "commitId": "02d83bc",
+      "obligation": "false"
+    },
     {
       "version": "1.8.3",
       "buildId": "20260403-9",

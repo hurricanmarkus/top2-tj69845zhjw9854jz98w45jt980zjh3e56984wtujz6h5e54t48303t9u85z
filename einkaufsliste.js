@@ -140,6 +140,7 @@ function createEmptyVariant(seed = {}) {
         quantity: formatEditableQty(seed.quantity || 1) || '1',
         unit: normalizeVariantUnit(seed.unit || 'Stück'),
         eanCodes: Array.from(new Set((seed.eanCodes || []).map((entry) => String(entry || '').trim()).filter(Boolean))),
+        noEan: !!seed.noEan,
         storeId: String(seed.storeId || '').trim()
     };
 }
@@ -165,6 +166,7 @@ function normalizeArticle(article = {}) {
         defaultUnit: normalizeVariantUnit(article.defaultUnit || 'Stück'),
         categoryId: String(article.categoryId || '').trim(),
         eanCodes: Array.from(new Set((article.eanCodes || []).map((entry) => String(entry || '').trim()).filter(Boolean))),
+        noEan: !!article.noEan,
         persistentNotes: Array.from(new Set((article.persistentNotes || []).map((entry) => String(entry || '').trim()).filter(Boolean))),
         storeIds: Array.from(new Set((article.storeIds || []).map((entry) => String(entry || '').trim()).filter(Boolean))),
         variants: rawVariants.map((variant, index) => createEmptyVariant({ ...variant, id: variant?.id || `${article.id || 'article'}-${index}` }))
@@ -182,6 +184,7 @@ function createEmptyArticleEditor(mode = 'single') {
         defaultUnit: 'Stück',
         categoryId: '',
         eanCodes: [],
+        noEan: false,
         variants: mode === 'variant' ? [createEmptyVariant()] : [],
         persistentNotes: [],
         storeIds: []
@@ -729,6 +732,7 @@ function syncArticleEditorFromDom() {
     editor.persistentNotes = splitLinesUnique(document.getElementById('ela-note')?.value || '');
     if (String(editor.articleMode || 'single') === 'variant') {
         editor.aliases = splitLinesUnique(document.getElementById('ela-aliases')?.value || '');
+        editor.noEan = false;
         editor.eanCodes = [];
         editor.storeIds = [];
         editor.defaultQuantity = 1;
@@ -740,13 +744,15 @@ function syncArticleEditorFromDom() {
             quantity: parseQty(row.querySelector('[data-variant-field="quantity"]')?.value || '1') || 1,
             unit: row.querySelector('[data-variant-field="unit"]')?.value || 'Stück',
             storeId: row.querySelector('[data-variant-field="store"]')?.value || '',
-            eanCodes: splitLinesUnique(row.querySelector('[data-variant-field="ean"]')?.value || '')
+            eanCodes: splitLinesUnique(row.querySelector('[data-variant-field="ean"]')?.value || ''),
+            noEan: row.querySelector('[data-variant-field="no-ean"]')?.checked === true
         }));
     } else {
         editor.aliases = [];
         editor.defaultQuantity = parseQty(document.getElementById('ela-q')?.value || '1') || 1;
         editor.defaultUnit = normalizeVariantUnit(document.getElementById('ela-unit')?.value || 'Stück');
         editor.eanCodes = splitLinesUnique(document.getElementById('ela-ean')?.value || '');
+        editor.noEan = document.getElementById('ela-no-ean')?.checked === true;
         editor.variants = [];
         editor.storeIds = Array.from(document.querySelectorAll('[data-a="art-store"]:checked')).map((entry) => String(entry.dataset.id || '').trim()).filter(Boolean);
     }
@@ -1211,9 +1217,7 @@ function sortItemsForShopDisplay(items, forcedStoreId = '') {
 function filteredManageArticles() {
     return state.articles.filter((a) => {
         const query = state.articleSearch.trim().toLowerCase();
-        const hasAnyEan = isVariantArticle(a)
-            ? !!(a.eanCodes?.length || a.variants?.every((variant) => (variant.eanCodes || []).length))
-            : !!(a.eanCodes?.length);
+        const hasAnyEan = articleHasResolvedEan(a);
         const searchTexts = [
             a.title,
             ...(a.aliases || []),
@@ -1223,6 +1227,25 @@ function filteredManageArticles() {
         const matchesSearch = !query || searchTexts.some((text) => text.includes(query));
         return (!state.missingEanOnly || !hasAnyEan) && matchesSearch;
     });
+}
+
+function variantHasResolvedEan(variant) {
+    return !!variant && !!(variant.noEan || (variant.eanCodes || []).length);
+}
+
+function articleHasResolvedEan(article) {
+    if (!article) return false;
+    if (isVariantArticle(article)) {
+        const variants = article.variants || [];
+        return !!variants.length && variants.every((variant) => variantHasResolvedEan(variant));
+    }
+    return !!(article.noEan || (article.eanCodes || []).length);
+}
+
+function articleMissingEanLabel(article) {
+    if (!article) return 'EAN fehlt';
+    if (isVariantArticle(article)) return articleHasResolvedEan(article) ? 'EAN OK' : 'Varianten-EAN fehlt';
+    return articleHasResolvedEan(article) ? 'EAN OK' : 'EAN fehlt';
 }
 
 function articleHasBarcode(article) {
@@ -1397,9 +1420,7 @@ function renderPresenceInline() {
 }
 
 function nextMissingEanArticle(currentId = '') {
-    const missing = filteredManageArticles().filter((a) => (isVariantArticle(a)
-        ? !(a.variants || []).length || (a.variants || []).some((variant) => !(variant.eanCodes || []).length)
-        : !(a.eanCodes || []).length));
+    const missing = filteredManageArticles().filter((a) => !articleHasResolvedEan(a));
     if (!missing.length) return null;
     if (!currentId) return missing[0];
     const index = missing.findIndex((a) => a.id === currentId);
@@ -1410,16 +1431,12 @@ function nextMissingEanTarget(currentArticleId = '', currentVariantId = '') {
     const targets = [];
     filteredManageArticles().forEach((article) => {
         if (isVariantArticle(article)) {
-            if (!(article.variants || []).length) {
-                targets.push({ article, variant: null, articleId: article.id, variantId: '', label: article.title || 'Artikel' });
-                return;
-            }
             (article.variants || []).forEach((variant) => {
-                if (!(variant.eanCodes || []).length) targets.push({ article, variant, articleId: article.id, variantId: variant.id, label: buildVariantGeneratedTitle(article, variant) });
+                if (!variantHasResolvedEan(variant)) targets.push({ article, variant, articleId: article.id, variantId: variant.id, label: buildVariantGeneratedTitle(article, variant) });
             });
             return;
         }
-        if (!(article.eanCodes || []).length) targets.push({ article, variant: null, articleId: article.id, variantId: '', label: article.title || 'Artikel' });
+        if (!articleHasResolvedEan(article)) targets.push({ article, variant: null, articleId: article.id, variantId: '', label: article.title || 'Artikel' });
     });
     if (!targets.length) return null;
     if (!currentArticleId && !currentVariantId) return targets[0];
@@ -1564,19 +1581,10 @@ function render() {
 function renderBody() {
     const list = activeList();
     if (!list) return '<div class="elc text-sm text-gray-500">Bitte zuerst eine Liste auswählen.</div>';
+    if (state.mode !== 'shop' && state.mode !== 'notify' && canManage() && state.section === 'articles') return renderManageArticlesSection();
     if (state.mode === 'shop') {
         return `<div class="space-y-3"><div class="elc"><div class="grid grid-cols-[90px_110px_minmax(0,1fr)] gap-2"><input id="el-q" class="eli" value="${escapeHtml(state.q)}"><select id="el-unit" class="els">${UNITS.map((u) => `<option value="${u}" ${state.unit === u ? 'selected' : ''}>${u}</option>`).join('')}</select><input id="el-title" class="eli" placeholder="Artikel eingeben..." value="${escapeHtml(state.title)}"></div><div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"><select id="el-store-add" class="els"><option value="">Geschäft zuordnen...</option>${state.stores.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}</select><input id="el-note" class="eli" placeholder="Anmerkung optional" value="${escapeHtml(state.note)}"><button class="elb a" data-a="add-item" ${!canAdd() ? 'disabled' : ''}>+ Hinzufügen</button></div>${state.storeIds.length ? `<div class="elm">${state.storeIds.map((id) => chip(`${escapeHtml(state.stores.find((s) => s.id === id)?.name || id)} <button data-a="del-store" data-id="${id}">×</button>`, 'bg-orange-100 text-orange-700')).join(' ')}</div>` : '<div class="text-xs text-gray-400">Optional einem oder mehreren Geschäften zuordnen.</div>'}</div>`;
     }
-    if (state.mode === 'shop') return `<div class="space-y-3">${groupedOpen().map((g) => `<div class="elc space-y-2"><div class="flex flex-wrap justify-between gap-2 items-center"><div class="font-black text-sm">${escapeHtml(g.label)}</div><div class="text-xs font-bold text-gray-600">${g.items.length} offen</div></div>${g.note ? `<div class="text-xs rounded-xl border border-orange-300 bg-orange-50 px-3 py-2 text-orange-800">${escapeHtml(g.note)}</div>` : ''}${g.items.length ? g.items.map(renderItem).join('') : '<div class="py-3 text-sm text-gray-400">Keine offenen Artikel.</div>'}</div>`).join('') || '<div class="elc text-sm text-gray-400">Keine Artikel gefunden.</div>'}</div>`;
-    if (state.mode === 'notify') return renderNotificationCenter();
-    if (!canManage()) return '<div class="elc text-sm text-red-700">Keine Verwaltungsberechtigung für diese Liste.</div>';
-    if (state.section === 'general') return `<div class="space-y-3"><div class="elc"><div class="elstat"><div><div class="text-[11px] font-bold uppercase text-gray-500">Aktive Listen</div><div class="text-xl font-black text-indigo-700">${state.lists.filter((l) => l.active !== false).length}</div></div><div><div class="text-[11px] font-bold uppercase text-gray-500">Offene Artikel</div><div class="text-xl font-black text-orange-700">${state.items.filter((x) => x.status !== 'checked').length}</div></div><div><div class="text-[11px] font-bold uppercase text-gray-500">Letztes Update</div><div class="text-sm font-black text-slate-700">${dt(activeList()?.updatedAt)}</div></div></div></div>${state.lists.map((l) => `<div class="elc"><div class="flex justify-between gap-2"><div><div class="font-bold text-sm">${escapeHtml(l.name)}</div><div class="text-xs text-gray-500">${dt(l.updatedAt)} · ${escapeHtml(l.updatedByName || l.ownerName || '—')}</div></div><div class="text-xs font-bold text-gray-600">${l.id === state.listId ? state.items.filter((x) => x.status !== 'checked').length : 0} offen</div></div></div>`).join('')}</div>`;
-    if (state.section === 'stores') return `<div class="space-y-3"><div class="elc flex flex-wrap gap-2"><input id="el-draft-store" class="eli" placeholder="Neues Geschäft" value="${escapeHtml(state.drafts.store)}"><button class="elb a" data-a="add-store" ${!canManageWrite() ? 'disabled' : ''}>+ Geschäft</button></div>${effectiveStoreOrder(activeList()).map((id, i, arr) => { const s = state.stores.find((x) => x.id === id); if (!s) return ''; const categoryNames = (s.categoryOrder || []).map((catId) => state.categories.find((c) => c.id === catId)?.name).filter(Boolean); return `<div class="elc space-y-2"><div class="flex flex-wrap justify-between gap-2 items-start"><div><div class="font-bold text-sm">${escapeHtml(s.name)}</div><div class="text-xs text-gray-500">${categoryNames.length ? `${categoryNames.length} Kategorie(n) für Sortierung gewählt` : 'Noch keine Kategorien ausgewählt'}</div></div><div class="flex flex-wrap gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="store-up" data-id="${s.id}" ${i === 0 || !canManageWrite() ? 'disabled' : ''}>↑</button><button class="elb bg-gray-100 text-gray-700" data-a="store-down" data-id="${s.id}" ${i === arr.length - 1 || !canManageWrite() ? 'disabled' : ''}>↓</button><button class="elb bg-indigo-100 text-indigo-700" data-a="open-store-categories" data-id="${s.id}" ${!canManageWrite() ? 'disabled' : ''}>Kategorienwartung</button><button class="elb bg-red-600 text-white" data-a="del-store-master" data-id="${s.id}" ${!canManageWrite() ? 'disabled' : ''}>Löschen</button></div></div><div class="elm">${categoryNames.length ? categoryNames.map((name) => chip(escapeHtml(name), 'bg-indigo-100 text-indigo-700')).join(' ') : '<span class="text-xs text-gray-400">Keine Kategorien sortiert.</span>'}</div></div>`; }).join('')}</div>`;
-    if (state.section === 'articles') return `<div class="space-y-3"><div class="elc flex flex-wrap gap-2"><input id="el-article-search" class="eli" placeholder="Artikel suchen..." value="${escapeHtml(state.articleSearch)}"><label class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold bg-slate-100 text-slate-700"><input type="checkbox" id="el-missing-ean" ${state.missingEanOnly ? 'checked' : ''}> Ohne EAN</label><button class="elb a" data-a="open-article" ${!canManageWrite() ? 'disabled' : ''}>+ Artikel</button></div>${filteredManageArticles().map((a) => { const missingEan = isVariantArticle(a) ? !(a.variants || []).length || (a.variants || []).some((variant) => !(variant.eanCodes || []).length) : !(a.eanCodes || []).length; const summary = isVariantArticle(a) ? `${a.variants.length} Variante(n)${a.aliases?.length ? ` · ${a.aliases.length} Alias` : ''}` : `${fmtQty(a.defaultQuantity || 1)} ${escapeHtml(a.defaultUnit || 'Stück')}`; return `<div class="elc space-y-2"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="flex flex-wrap items-center gap-2"><div class="font-bold text-sm">${escapeHtml(a.title)}</div>${isVariantArticle(a) ? chip('Variantenartikel', 'bg-amber-100 text-amber-800') : chip('Ein Artikel', 'bg-slate-100 text-slate-700')}${renderArticleMetaIcons(a)}</div><div class="text-xs text-gray-500">${summary}${a.categoryId ? ` · ${escapeHtml(state.categories.find((c) => c.id === a.categoryId)?.name || 'Ohne Kategorie')}` : ''}</div></div><div class="flex flex-wrap gap-2">${missingEan ? `<button class="elb bg-red-100 text-red-700" data-a="capture-ean" data-id="${a.id}" ${!canManageWrite() ? 'disabled' : ''}>EAN scannen</button>` : chip('EAN OK', 'bg-emerald-100 text-emerald-700')}<button class="elb bg-gray-100 text-gray-700" data-a="edit-article" data-id="${a.id}" ${!canManageWrite() ? 'disabled' : ''}>Bearbeiten</button></div></div>${a.aliases?.length ? `<div class="text-xs text-slate-500">Alias: ${escapeHtml(a.aliases.join(', '))}</div>` : ''}<div class="text-xs text-gray-600">${escapeHtml((a.persistentNotes || []).join(' · ')) || '<span class="text-gray-400">Keine permanente Anmerkung.</span>'}</div><div class="elm">${isVariantArticle(a) ? (a.variants || []).map((variant) => chip(`${escapeHtml(buildVariantGeneratedTitle(a, variant))} · ${escapeHtml(state.stores.find((store) => store.id === variant.storeId)?.name || 'Ohne Geschäft')} · ${(variant.eanCodes || []).length} EAN`, 'bg-indigo-50 text-indigo-700')).join(' ') || '<span class="text-xs text-gray-400">Keine Varianten angelegt.</span>' : ((a.eanCodes || []).length ? (a.eanCodes || []).map((code) => chip(escapeHtml(code))).join(' ') : '<span class="text-xs text-gray-400">Keine Haupt-EAN</span>')}</div></div>`; }).join('') || '<div class="elc text-sm text-gray-400">Keine Artikel gefunden.</div>'}</div>`;
-    if (state.section === 'categories') return `<div class="space-y-3"><div class="elc flex flex-wrap gap-2"><input id="el-draft-category" class="eli" placeholder="Neue Kategorie" value="${escapeHtml(state.drafts.category)}"><button class="elb a" data-a="add-category" ${!canManageWrite() ? 'disabled' : ''}>+ Kategorie</button></div>${state.categories.map((c) => `<div class="elc flex flex-wrap justify-between gap-2"><div class="font-bold text-sm">${escapeHtml(c.name)}</div><button class="elb bg-red-600 text-white" data-a="del-category" data-id="${c.id}" ${!canManageWrite() ? 'disabled' : ''}>Löschen</button></div>`).join('')}</div>`;
-    if (state.section === 'remarks') return `<div class="space-y-3"><div class="elc flex flex-wrap gap-2"><input id="el-draft-remark" class="eli" placeholder="Häufige Anmerkung" value="${escapeHtml(state.drafts.remark)}"><button class="elb a" data-a="add-remark" ${!canManageWrite() ? 'disabled' : ''}>+ Anmerkung</button></div>${state.remarks.map((n) => `<div class="elc flex flex-wrap justify-between gap-2"><div class="font-bold text-sm">${escapeHtml(n.text || n.name || '')}</div><button class="elb bg-red-600 text-white" data-a="del-remark" data-id="${n.id}" ${!canManageWrite() ? 'disabled' : ''}>Löschen</button></div>`).join('') || '<div class="elc text-sm text-gray-400">Keine Anmerkungen.</div>'}</div>`;
-    return `<div class="space-y-3"><div class="elc flex flex-wrap gap-2"><input id="el-draft-note" class="eli" placeholder="Meta-Notiz" value="${escapeHtml(state.drafts.note)}"><button class="elb a" data-a="add-note" ${!canManageWrite() ? 'disabled' : ''}>+ Notiz</button></div>${state.notes.map((n) => `<div class="elc flex flex-wrap justify-between gap-2"><div class="font-bold text-sm">${escapeHtml(n.text || n.name || '')}</div><button class="elb bg-red-600 text-white" data-a="del-note" data-id="${n.id}" ${!canManageWrite() ? 'disabled' : ''}>Löschen</button></div>`).join('') || '<div class="elc text-sm text-gray-400">Keine Notizen.</div>'}</div>`;
-}
 
 function renderBodyActive() {
     const list = activeList();
@@ -1592,6 +1600,24 @@ function renderBodyActive() {
     return renderBody();
 }
 
+function renderManageArticlesSection() {
+    const entries = filteredManageArticles();
+    return `<div class="space-y-3"><div class="elc flex flex-wrap gap-2"><input id="el-article-search" class="eli" placeholder="Artikel suchen..." value="${escapeHtml(state.articleSearch)}"><label class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold bg-slate-100 text-slate-700"><input type="checkbox" id="el-missing-ean" ${state.missingEanOnly ? 'checked' : ''}> Ohne EAN</label><button class="elb a" data-a="open-article" ${!canManageWrite() ? 'disabled' : ''}>+ Artikel</button></div>${entries.map((article) => {
+        const isVariant = isVariantArticle(article);
+        const summary = isVariant
+            ? `${article.variants.length} Variante(n)${article.aliases?.length ? ` · ${article.aliases.length} Alias` : ''}`
+            : `${fmtQty(article.defaultQuantity || 1)} ${escapeHtml(article.defaultUnit || 'Stück')}`;
+        const categoryName = article.categoryId ? state.categories.find((c) => c.id === article.categoryId)?.name || 'Ohne Kategorie' : '';
+        const statusResolved = articleHasResolvedEan(article);
+        const statusUi = isVariant
+            ? chip(statusResolved ? 'EAN OK' : 'Varianten-EAN fehlt', statusResolved ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700')
+            : statusResolved
+                ? chip('EAN OK', 'bg-emerald-100 text-emerald-700')
+                : `<button class="elb bg-red-100 text-red-700" data-a="capture-ean" data-id="${article.id}" ${!canManageWrite() ? 'disabled' : ''}>EAN scannen</button>`;
+        return `<div class="elc space-y-2"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="flex flex-wrap items-center gap-2"><div class="font-bold text-sm">${escapeHtml(article.title)}</div>${isVariant ? chip('Variantenartikel', 'bg-amber-100 text-amber-800') : ''}${renderArticleMetaIcons(article)}</div><div class="text-xs text-gray-500">${summary}${categoryName ? ` · ${escapeHtml(categoryName)}` : ''}</div></div><div class="flex flex-wrap gap-2">${statusUi}<button class="elb bg-gray-100 text-gray-700" data-a="edit-article" data-id="${article.id}" ${!canManageWrite() ? 'disabled' : ''}>Bearbeiten</button></div></div>${article.aliases?.length ? `<div class="text-xs text-slate-500">Alias: ${escapeHtml(article.aliases.join(', '))}</div>` : ''}${isVariant ? `<div class="space-y-1">${(article.variants || []).map((variant) => `<div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2"><div class="flex flex-wrap items-center justify-between gap-2"><div><div class="text-sm font-bold text-slate-800">${escapeHtml(buildVariantGeneratedTitle(article, variant))}</div><div class="text-xs text-slate-500">${fmtQty(variant.quantity || 1)} ${escapeHtml(variant.unit || 'Stück')}${variant.storeId ? ` · ${escapeHtml(state.stores.find((store) => store.id === variant.storeId)?.name || 'Ohne Geschäft')}` : ''}</div></div><div class="text-xs font-bold ${variantHasResolvedEan(variant) ? 'text-emerald-700' : 'text-red-700'}">${variantHasResolvedEan(variant) ? 'EAN OK' : 'EAN fehlt'}</div></div></div>`).join('')}</div>` : ''}</div>`;
+    }).join('') || '<div class="elc text-sm text-gray-400">Keine Artikel gefunden.</div>'}</div>`;
+}
+
 function renderItem(item) {
     const lock = state.locks.get(item.id);
     const locked = lock && lock.userId !== uid() && Date.now() < ((toDate(lock.expiresAt)?.getTime() || 0));
@@ -1599,9 +1625,18 @@ function renderItem(item) {
     const restItem = isRestItem(item);
     const itemActionsVisible = isItemActionVisible(item.id);
     const qtyActionVisible = isQuantityActionVisible(item.id);
+    const article = state.articles.find((a) => a.id === item.articleId);
+    const metaIcons = renderMetaIcons({
+        hasBarcode: !!((item.eanCodes || []).length || articleHasBarcode(article)),
+        hasNote: !!(item.note || item.persistentNote || article?.persistentNotes?.length)
+    });
+    const category = state.categories.find((c) => c.id === item.categoryId);
+    const quantityLabel = `${fmtQty(item.quantity)} ${String(item.unit || '').trim()}`.trim();
+    const restoredInfo = item.restoredAt ? `Wiederhergestellt von ${escapeHtml(item.restoredByName || '—')} · ${dt(item.restoredAt)}` : '';
     const controls = itemActionsVisible
         ? `<button class="elaction elaction-trash" data-a="delete-item-direct" data-id="${item.id}" title="Eintrag ohne Rückfrage löschen">🗑</button><button class="elaction elaction-gear" data-a="open-detail-item" data-id="${item.id}" title="Produkt bearbeiten">⚙</button>`
         : `<button class="elcheck" data-a="check" data-id="${item.id}" title="Abhaken">✓</button>`;
+    return `<div class="elitem border-t border-gray-100 flex items-start gap-2"><button type="button" class="text-left min-w-0 flex-1" data-a="edit-item" data-id="${item.id}" title="Doppelklick für Bearbeitungsaktionen"><div class="flex flex-wrap items-center gap-2"><div class="font-bold text-sm text-gray-900 truncate flex-1">${escapeHtml(ell(item.title, 40))}</div>${metaIcons}${locked ? chip(`gesperrt von ${escapeHtml(lock.userName || lock.userId)}`, 'bg-red-100 text-red-700') : ''}${restItem ? chip('Rest', 'bg-orange-100 text-orange-800 ring-1 ring-orange-300') : ''}</div>${category || restoredInfo ? `<div class="mt-1 flex flex-wrap items-center gap-2">${category ? chip(escapeHtml(category.name), 'bg-amber-50 text-amber-700') : ''}${restoredInfo ? `<span class="text-xs text-gray-500">${restoredInfo}</span>` : ''}</div>` : ''}${item.persistentNote ? `<div class="text-xs text-gray-600 mt-2">${escapeHtml(item.persistentNote)}</div>` : ''}${item.note ? `<div class="text-xs text-gray-600 mt-1">${escapeHtml(item.note)}</div>` : ''}</button><div class="flex items-center justify-end gap-1 sm:gap-2 flex-wrap sm:flex-nowrap shrink-0">${chip(escapeHtml(quantityLabel), 'bg-indigo-50 text-indigo-700 whitespace-nowrap')}${qtyActionVisible ? `<button class="elaction elaction-qty text-[11px] sm:text-xs px-2 sm:px-3 whitespace-nowrap" data-a="quantity" data-id="${item.id}" title="Menge übernehmen"><span class="sm:hidden">Menge</span><span class="hidden sm:inline">Menge übernehmen</span></button>` : ''}${controls}</div></div>`;
     const variantInfo = item.variantId ? chip(`Variante${item.variantBrand ? ` · ${escapeHtml(item.variantBrand)}` : ''}${item.variantStoreId ? ` · ${escapeHtml(state.stores.find((store) => store.id === item.variantStoreId)?.name || 'Ohne Geschäft')}` : ''}`, 'bg-indigo-100 text-indigo-700') : '';
     return `<div class="elitem border-t border-gray-100"><button type="button" class="text-left min-w-0 flex-1" data-a="edit-item" data-id="${item.id}" title="Doppelklick für Bearbeitungsaktionen"><div class="flex flex-wrap gap-2 items-center"><div class="font-bold text-sm text-gray-900 truncate flex-1">${escapeHtml(ell(item.title, 40))}</div>${renderItemMetaIcons(item)}${chip(`${fmtQty(item.quantity)} ${escapeHtml(item.unit || '')}`, 'bg-indigo-50 text-indigo-700')}${state.categories.find((c) => c.id === item.categoryId) ? chip(escapeHtml(state.categories.find((c) => c.id === item.categoryId).name), 'bg-amber-50 text-amber-700') : ''}${variantInfo}${locked ? chip(`gesperrt von ${escapeHtml(lock.userName || lock.userId)}`, 'bg-red-100 text-red-700') : ''}${restItem ? chip('Rest', 'bg-orange-100 text-orange-800 ring-1 ring-orange-300') : ''}</div><div class="text-xs text-gray-500 mt-1">${escapeHtml(stores)}${item.variantLabel ? ` · ${escapeHtml(item.variantLabel)}` : ''}${item.restoredAt ? ` · Wiederhergestellt von ${escapeHtml(item.restoredByName || '—')} · ${dt(item.restoredAt)}` : ''}</div>${item.persistentNote ? `<div class="text-xs text-gray-600 mt-2">${escapeHtml(item.persistentNote)}</div>` : ''}${item.note ? `<div class="text-xs text-gray-600 mt-1">${escapeHtml(item.note)}</div>` : ''}</button><div class="flex items-center justify-end gap-1 sm:gap-2 flex-wrap sm:flex-nowrap">${qtyActionVisible ? `<button class="elaction elaction-qty text-[11px] sm:text-xs px-2 sm:px-3 whitespace-nowrap" data-a="quantity" data-id="${item.id}" title="Menge übernehmen"><span class="sm:hidden">Menge</span><span class="hidden sm:inline">Menge übernehmen</span></button>` : ''}${controls}</div></div>`;
 }
@@ -1972,6 +2007,8 @@ async function saveDetailItem() {
     await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() });
     await logActivity('Artikel bearbeitet', { itemId: item.id, title, quantity });
     Object.assign(item, itemData);
+    state.detailId = null;
+    state.detailDraft = null;
     render();
 }
 
@@ -2434,7 +2471,16 @@ function renderArticle() {
     if (!a) { el.innerHTML = ''; return; }
     const mode = String(a.articleMode || 'single') === 'variant' ? 'variant' : 'single';
     const variants = a.variants || [];
+    const writeDisabled = !canManageWrite();
+    const singleNoEan = !!a.noEan;
+    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="text-xl font-black text-gray-900">${a.id ? 'Artikel bearbeiten' : 'Artikel anlegen'}</div><div class="text-sm text-gray-500">Pflege Artikel oder Variantenartikel direkt in diesem Dialog.</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-article">Schließen</button></div><div class="grid gap-2 sm:grid-cols-2"><button class="elb ${mode === 'single' ? 'a' : 'bg-gray-100 text-gray-700'}" data-a="article-mode" data-v="single" ${writeDisabled ? 'disabled' : ''}>Artikel</button><button class="elb ${mode === 'variant' ? 'a' : 'bg-gray-100 text-gray-700'}" data-a="article-mode" data-v="variant" ${writeDisabled ? 'disabled' : ''}>Artikelvarianten</button></div><div class="space-y-2"><div class="text-xs font-black uppercase text-gray-500">Produkt / Überbegriff</div><input id="ela-title" class="eli" placeholder="Produkt" value="${escapeHtml(a.title || '')}" ${writeDisabled ? 'disabled' : ''}></div><div class="grid gap-3 sm:grid-cols-2"><select id="ela-cat" class="els" ${writeDisabled ? 'disabled' : ''}><option value="">Kategorie wählen...</option>${state.categories.map((c) => `<option value="${c.id}" ${a.categoryId === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}</select>${mode === 'single' ? `<div class="grid gap-3 grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"><input id="ela-q" class="eli text-center" placeholder="Standardmenge" value="${escapeHtml(formatEditableQty(a.defaultQuantity || 1))}" ${writeDisabled ? 'disabled' : ''}><select id="ela-unit" class="els" ${writeDisabled ? 'disabled' : ''}>${UNITS.map((u) => `<option value="${u}" ${a.defaultUnit === u ? 'selected' : ''}>${u}</option>`).join('')}</select></div>` : `<textarea id="ela-aliases" class="elt" placeholder="Alternative Begriffe, eine Zeile pro Alias" ${writeDisabled ? 'disabled' : ''}>${escapeHtml((a.aliases || []).join('\n'))}</textarea>`}</div>${mode === 'single' ? `<div class="space-y-2"><div class="flex flex-wrap items-center justify-between gap-2"><div class="text-xs font-black uppercase text-gray-500">EAN</div><label class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700"><input type="checkbox" id="ela-no-ean" ${singleNoEan ? 'checked' : ''} ${writeDisabled ? 'disabled' : ''}> Kein EAN vorhanden</label></div><textarea id="ela-ean" class="elt ${singleNoEan ? 'bg-slate-100 cursor-not-allowed' : ''}" placeholder="${singleNoEan ? 'Für diesen Artikel ist kein EAN vorgesehen.' : 'EAN-Codes, eine Zeile pro Code'}" ${singleNoEan || writeDisabled ? 'disabled' : ''}>${escapeHtml((a.eanCodes || []).join('\n'))}</textarea>${a.id && !singleNoEan ? `<div class="flex justify-end"><button class="elb bg-red-100 text-red-700" data-a="capture-ean" data-id="${a.id}" ${writeDisabled ? 'disabled' : ''}>EAN scannen</button></div>` : ''}<div class="elm">${state.stores.map((s) => `<label class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold ${(a.storeIds || []).includes(s.id) ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}"><input type="checkbox" data-a="art-store" data-id="${s.id}" ${(a.storeIds || []).includes(s.id) ? 'checked' : ''} ${writeDisabled ? 'disabled' : ''}> ${escapeHtml(s.name)}</label>`).join(' ')}</div></div>` : `<div class="space-y-3"><div class="flex flex-wrap items-center justify-between gap-2"><div><div class="text-xs font-black uppercase text-gray-500">Variantenfunktion</div><div class="text-sm text-gray-500">Jede Variante kann einen eigenen Status für EAN oder kein EAN erhalten.</div></div><button class="elb a" data-a="add-article-variant" ${writeDisabled ? 'disabled' : ''}>+ Variante</button></div>${variants.length ? variants.map((variant, index) => renderArticleVariantEditorCard(a.id || '', variant, index, writeDisabled)).join('') : '<div class="rounded-2xl border border-dashed border-slate-300 px-3 py-4 text-sm text-slate-400">Noch keine Varianten angelegt.</div>'}</div>`}<div class="space-y-2"><div class="text-xs font-black uppercase text-gray-500">Permanente Anmerkungen</div><textarea id="ela-note" class="elt" placeholder="Permanente Anmerkungen, je Zeile" ${writeDisabled ? 'disabled' : ''}>${escapeHtml((a.persistentNotes || []).join('\n'))}</textarea></div><div class="flex flex-wrap justify-end gap-2">${a.id ? `<button class="elb bg-red-600 text-white" data-a="delete-article" data-id="${a.id}" ${writeDisabled ? 'disabled' : ''}>Löschen</button>` : ''}<button class="elb bg-emerald-600 text-white" data-a="save-article" ${writeDisabled ? 'disabled' : ''}>Speichern</button></div></div>`;
+    return;
     el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="text-xl font-black text-gray-900">${a.id ? 'Artikel bearbeiten' : 'Artikel anlegen'}</div><div class="text-sm text-gray-500">Pflege Einzelartikel oder Variantenartikel direkt in diesem Dialog.</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-article">Schließen</button></div><div class="grid gap-2 sm:grid-cols-2"><button class="elb ${mode === 'single' ? 'a' : 'bg-gray-100 text-gray-700'}" data-a="article-mode" data-v="single">Ein Artikel</button><button class="elb ${mode === 'variant' ? 'a' : 'bg-gray-100 text-gray-700'}" data-a="article-mode" data-v="variant">Artikelvarianten</button></div><div class="space-y-2"><div class="text-xs font-black uppercase text-gray-500">Produkt / Überbegriff</div><input id="ela-title" class="eli" placeholder="Produkt" value="${escapeHtml(a.title || '')}"></div><div class="grid gap-3 sm:grid-cols-2"><select id="ela-cat" class="els"><option value="">Kategorie wählen...</option>${state.categories.map((c) => `<option value="${c.id}" ${a.categoryId === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}</select>${mode === 'single' ? `<div class="grid gap-3 grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"><input id="ela-q" class="eli text-center" placeholder="Standardmenge" value="${escapeHtml(formatEditableQty(a.defaultQuantity || 1))}"><select id="ela-unit" class="els">${UNITS.map((u) => `<option value="${u}" ${a.defaultUnit === u ? 'selected' : ''}>${u}</option>`).join('')}</select></div>` : `<textarea id="ela-aliases" class="elt" placeholder="Alternative Begriffe, eine Zeile pro Alias">${escapeHtml((a.aliases || []).join('\n'))}</textarea>`}</div>${mode === 'single' ? `<div class="space-y-2"><textarea id="ela-ean" class="elt" placeholder="EAN-Codes, eine Zeile pro Code">${escapeHtml((a.eanCodes || []).join('\n'))}</textarea>${a.id ? `<div class="flex justify-end"><button class="elb bg-red-100 text-red-700" data-a="capture-ean" data-id="${a.id}">EAN scannen</button></div>` : ''}<div class="elm">${state.stores.map((s) => `<label class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold ${(a.storeIds || []).includes(s.id) ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}"><input type="checkbox" data-a="art-store" data-id="${s.id}" ${(a.storeIds || []).includes(s.id) ? 'checked' : ''}> ${escapeHtml(s.name)}</label>`).join(' ')}</div></div>` : `<div class="space-y-3"><div class="flex flex-wrap items-center justify-between gap-2"><div><div class="text-xs font-black uppercase text-gray-500">Variantenfunktion</div><div class="text-sm text-gray-500">Jede Variante kann auch ohne Geschäft angelegt werden.</div></div><button class="elb a" data-a="add-article-variant">+ Variante</button></div>${variants.length ? variants.map((variant, index) => `<div class="rounded-2xl border border-indigo-100 bg-indigo-50 p-3 space-y-3" data-variant-row data-variant-id="${variant.id}"><div class="flex flex-wrap items-center justify-between gap-2"><div class="text-sm font-black text-indigo-900">Variante ${index + 1}</div><div class="flex flex-wrap gap-2"><button class="elb bg-white text-indigo-700" data-a="capture-variant-ean" data-id="${a.id || ''}" data-variant="${variant.id}" ${!a.id ? 'disabled' : ''}>EAN scannen</button><button class="elb bg-red-100 text-red-700" data-a="remove-article-variant" data-variant="${variant.id}">Entfernen</button></div></div><div class="grid gap-3 md:grid-cols-2"><input class="eli" data-variant-field="brand" placeholder="Marke" value="${escapeHtml(variant.brand || '')}"><input class="eli" data-variant-field="label" placeholder="Bezeichnung" value="${escapeHtml(variant.label || '')}"></div><div class="grid gap-3 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:grid-cols-[120px_160px_minmax(0,1fr)]"><input class="eli text-center" data-variant-field="quantity" placeholder="Menge" value="${escapeHtml(formatEditableQty(variant.quantity || 1))}"><select class="els" data-variant-field="unit">${UNITS.map((unit) => `<option value="${unit}" ${variant.unit === unit ? 'selected' : ''}>${unit}</option>`).join('')}</select><select class="els" data-variant-field="store"><option value="">Ohne Geschäft</option>${state.stores.map((store) => `<option value="${store.id}" ${variant.storeId === store.id ? 'selected' : ''}>${escapeHtml(store.name)}</option>`).join('')}</select></div><textarea class="elt" data-variant-field="ean" placeholder="EAN-Codes, eine Zeile pro Code">${escapeHtml((variant.eanCodes || []).join('\n'))}</textarea></div>`).join('') : '<div class="rounded-2xl border border-dashed border-slate-300 px-3 py-4 text-sm text-slate-400">Noch keine Varianten angelegt.</div>'}</div>`}<div class="space-y-2"><div class="text-xs font-black uppercase text-gray-500">Permanente Anmerkungen</div><textarea id="ela-note" class="elt" placeholder="Permanente Anmerkungen, je Zeile">${escapeHtml((a.persistentNotes || []).join('\n'))}</textarea></div><div class="flex flex-wrap justify-end gap-2">${a.id ? `<button class="elb bg-red-600 text-white" data-a="delete-article" data-id="${a.id}">Löschen</button>` : ''}<button class="elb bg-emerald-600 text-white" data-a="save-article">Speichern</button></div></div>`;
+}
+
+function renderArticleVariantEditorCard(articleId, variant, index, disabled = false) {
+    const noEan = !!variant.noEan;
+    return `<div class="rounded-2xl border border-indigo-100 bg-indigo-50 p-3 space-y-3" data-variant-row data-variant-id="${variant.id}"><div class="flex flex-wrap items-center justify-between gap-2"><div class="text-sm font-black text-indigo-900">Variante ${index + 1}</div><div class="flex flex-wrap gap-2">${articleId && !noEan ? `<button class="elb bg-white text-indigo-700" data-a="capture-variant-ean" data-id="${articleId}" data-variant="${variant.id}" ${disabled ? 'disabled' : ''}>EAN scannen</button>` : ''}<button class="elb bg-red-100 text-red-700" data-a="remove-article-variant" data-variant="${variant.id}" ${disabled ? 'disabled' : ''}>Entfernen</button></div></div><div class="grid gap-3 md:grid-cols-2"><input class="eli" data-variant-field="brand" placeholder="Marke" value="${escapeHtml(variant.brand || '')}" ${disabled ? 'disabled' : ''}><input class="eli" data-variant-field="label" placeholder="Bezeichnung" value="${escapeHtml(variant.label || '')}" ${disabled ? 'disabled' : ''}></div><div class="grid gap-3 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:grid-cols-[120px_160px_minmax(0,1fr)]"><input class="eli text-center" data-variant-field="quantity" placeholder="Menge" value="${escapeHtml(formatEditableQty(variant.quantity || 1))}" ${disabled ? 'disabled' : ''}><select class="els" data-variant-field="unit" ${disabled ? 'disabled' : ''}>${UNITS.map((unit) => `<option value="${unit}" ${variant.unit === unit ? 'selected' : ''}>${unit}</option>`).join('')}</select><select class="els" data-variant-field="store" ${disabled ? 'disabled' : ''}><option value="">Ohne Geschäft</option>${state.stores.map((store) => `<option value="${store.id}" ${variant.storeId === store.id ? 'selected' : ''}>${escapeHtml(store.name)}</option>`).join('')}</select></div><label class="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-bold text-slate-700"><input type="checkbox" data-variant-field="no-ean" ${noEan ? 'checked' : ''} ${disabled ? 'disabled' : ''}> Kein EAN für diese Variante</label><textarea class="elt ${noEan ? 'bg-slate-100 cursor-not-allowed' : ''}" data-variant-field="ean" placeholder="${noEan ? 'Für diese Variante ist kein EAN vorgesehen.' : 'EAN-Codes, eine Zeile pro Code'}" ${noEan || disabled ? 'disabled' : ''}>${escapeHtml((variant.eanCodes || []).join('\n'))}</textarea></div>`;
 }
 
 function openScanner(mode = 'shopping', articleId = '', variantId = '') {
@@ -2593,12 +2639,12 @@ async function saveScannedCodesActive(openNext = false) {
     if (!state.scanCodes.length) return alertUser('Bitte zuerst mindestens einen Code erfassen.', 'error');
     const variant = findVariantById(article, state.scanVariantId);
     if (variant) {
-        const variants = (article.variants || []).map((entry) => entry.id === variant.id ? { ...entry, eanCodes: Array.from(new Set([...(entry.eanCodes || []), ...state.scanCodes])) } : entry);
+        const variants = (article.variants || []).map((entry) => entry.id === variant.id ? { ...entry, noEan: false, eanCodes: Array.from(new Set([...(entry.eanCodes || []), ...state.scanCodes])) } : entry);
         await updateDoc(doc(master('articles'), article.id), { variants, updatedAt: serverTimestamp() });
         await logActivity('EANs zur Variante hinzugefügt', { articleId: article.id, variantId: variant.id, count: state.scanCodes.length });
     } else {
         const eanCodes = Array.from(new Set([...(article.eanCodes || []), ...state.scanCodes]));
-        await updateDoc(doc(master('articles'), article.id), { eanCodes, updatedAt: serverTimestamp() });
+        await updateDoc(doc(master('articles'), article.id), { eanCodes, noEan: false, updatedAt: serverTimestamp() });
         await logActivity('EANs zum Artikel hinzugefügt', { articleId: article.id, count: state.scanCodes.length });
     }
     flashScanSuccess();
@@ -2710,11 +2756,11 @@ async function saveUnknownCode() {
     const code = state.unknownCode;
     if (isVariantArticle(article)) {
         if (!state.unknownVariantId) return alertUser('Bitte zuerst eine Variante auswählen.', 'error');
-        const variants = (article.variants || []).map((variant) => variant.id === state.unknownVariantId ? { ...variant, eanCodes: Array.from(new Set([...(variant.eanCodes || []), code])) } : variant);
+        const variants = (article.variants || []).map((variant) => variant.id === state.unknownVariantId ? { ...variant, noEan: false, eanCodes: Array.from(new Set([...(variant.eanCodes || []), code])) } : variant);
         await updateDoc(doc(master('articles'), article.id), { variants, updatedAt: serverTimestamp() });
         await logActivity('Unbekannter Code Variante zugeordnet', { articleId: article.id, variantId: state.unknownVariantId, code });
     } else {
-        await updateDoc(doc(master('articles'), article.id), { eanCodes: Array.from(new Set([...(article.eanCodes || []), code])), updatedAt: serverTimestamp() });
+        await updateDoc(doc(master('articles'), article.id), { eanCodes: Array.from(new Set([...(article.eanCodes || []), code])), noEan: false, updatedAt: serverTimestamp() });
         await logActivity('Unbekannter Code zugeordnet', { articleId: article.id, code });
     }
     closeUnknownModal();
@@ -2728,12 +2774,12 @@ async function saveArticle() {
     const basePayload = { articleMode: mode, title, aliases: mode === 'variant' ? draft.aliases : [], categoryId: draft.categoryId || '', persistentNotes: draft.persistentNotes || [], updatedAt: serverTimestamp(), createdBy: uid(), createdByName: uname() };
     let payload = null;
     if (mode === 'variant') {
-        const variants = (draft.variants || []).filter((variant) => variant.label || variant.brand || variant.storeId || (variant.eanCodes || []).length).map((variant) => ({ id: variant.id || makeLocalId('variant'), brand: String(variant.brand || '').trim(), label: String(variant.label || '').trim(), quantity: parseQty(variant.quantity || '1') || 1, unit: normalizeVariantUnit(variant.unit || 'Stück'), eanCodes: Array.from(new Set((variant.eanCodes || []).map((entry) => String(entry || '').trim()).filter(Boolean))), storeId: String(variant.storeId || '').trim() }));
+        const variants = (draft.variants || []).filter((variant) => variant.label || variant.brand || variant.storeId || (variant.eanCodes || []).length || variant.noEan).map((variant) => ({ id: variant.id || makeLocalId('variant'), brand: String(variant.brand || '').trim(), label: String(variant.label || '').trim(), quantity: parseQty(variant.quantity || '1') || 1, unit: normalizeVariantUnit(variant.unit || 'Stück'), eanCodes: Array.from(new Set((variant.eanCodes || []).map((entry) => String(entry || '').trim()).filter(Boolean))), noEan: !!variant.noEan, storeId: String(variant.storeId || '').trim() }));
         if (!variants.length) return alertUser('Bitte mindestens eine Variante anlegen.', 'error');
         if (variants.some((variant) => !variant.label)) return alertUser('Jede Variante braucht eine Bezeichnung.', 'error');
-        payload = { ...basePayload, defaultQuantity: 1, defaultUnit: 'Stück', eanCodes: [], variants, storeIds: [] };
+        payload = { ...basePayload, defaultQuantity: 1, defaultUnit: 'Stück', eanCodes: [], noEan: false, variants, storeIds: [] };
     } else {
-        payload = { ...basePayload, defaultQuantity: parseQty(draft.defaultQuantity || '1') || 1, defaultUnit: normalizeVariantUnit(draft.defaultUnit || 'Stück'), eanCodes: draft.eanCodes || [], variants: [], storeIds: draft.storeIds || [] };
+        payload = { ...basePayload, defaultQuantity: parseQty(draft.defaultQuantity || '1') || 1, defaultUnit: normalizeVariantUnit(draft.defaultUnit || 'Stück'), eanCodes: draft.eanCodes || [], noEan: !!draft.noEan, variants: [], storeIds: draft.storeIds || [] };
     }
     if (draft.id) await updateDoc(doc(master('articles'), draft.id), payload); else await addDoc(master('articles'), { ...payload, createdAt: serverTimestamp() });
     await logActivity('Artikel gespeichert', { title, articleMode: mode });
@@ -2777,6 +2823,8 @@ function onChange(e) {
     if (t.id === 'el-unit') state.unit = t.value;
     if (t.id === 'el-d-cat' && state.detailDraft) { state.detailDraft.categoryId = t.value; return; }
     if (t.id === 'el-d-store' && state.detailDraft) { state.detailDraft.storeId = t.value; return; }
+    if (t.id === 'ela-no-ean' && state.articleEditor) { syncArticleEditorFromDom(); renderArticle(); return; }
+    if (t.matches?.('[data-variant-field="no-ean"]') && state.articleEditor) { syncArticleEditorFromDom(); renderArticle(); return; }
     if (t.id === 'el-list-select' && t.value) { selectList(t.value); return; }
     if (t.id === 'el-store-add') {
         state.storeIds = t.value ? [t.value] : [];
