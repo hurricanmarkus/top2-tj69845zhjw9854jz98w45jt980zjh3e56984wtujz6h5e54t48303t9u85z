@@ -84,6 +84,7 @@ const state = {
     modePickerOpen: false,
     purchase: null,
     detailId: null,
+    detailDraft: null,
     storeCategoryEditor: null,
     articleEditor: null,
     scanOpen: false,
@@ -977,7 +978,7 @@ function metaIconSvg(kind) {
         barcode: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M3 5h1v14H3V5Zm3 0h2v14H6V5Zm4 0h1v14h-1V5Zm3 0h3v14h-3V5Zm5 0h1v14h-1V5Z"/></svg>',
         note: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm8 1.5V9h4.5L14 4.5ZM8 12h8v1.5H8V12Zm0 4h8v1.5H8V16Z"/></svg>',
         store: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M4 4h16l1 4a3 3 0 0 1-2 2.82V20a1 1 0 0 1-1 1h-4v-6h-4v6H6a1 1 0 0 1-1-1v-9.18A3 3 0 0 1 3 8l1-4Zm3 7v8h2v-6h6v6h2v-8H7Z"/></svg>',
-        quantity: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 4a2 2 0 1 1 0 4a2 2 0 0 1 0-4Zm-6.5 8.5L10 9h4l4.5 3.5l-.92 1.19L14 10.92V20h-1.5v-5h-1v5H10v-9.08l-3.58 2.77L5.5 12.5Z"/></svg>',
+        quantity: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M4 7h16v2H4V7Zm0 4h10v2H4v-2Zm0 4h7v2H4v-2Zm12-8h4v10h-4V7Zm1.5 1.5v7h1V8.5h-1Z"/></svg>',
         category: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M4 5a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v3H4V5Zm0 6h16v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8Z"/></svg>'
     };
     return icons[kind] || '';
@@ -1014,10 +1015,23 @@ function renderItemMetaIcons(item) {
     });
 }
 
-function articleSuggestions(term) {
+function listSuggestionArticles() {
+    const articleIds = new Set();
+    const titles = new Set();
+    state.items.filter((item) => item.status !== 'checked').forEach((item) => {
+        const articleId = String(item.articleId || '').trim();
+        const title = String(item.title || '').trim().toLowerCase();
+        if (articleId) articleIds.add(articleId);
+        if (title) titles.add(title);
+    });
+    return state.articles.filter((article) => articleIds.has(String(article.id || '').trim()) || titles.has(String(article.title || '').trim().toLowerCase()));
+}
+
+function articleSuggestions(term, field = 'title') {
     const query = String(term || '').trim().toLowerCase();
     if (!query) return [];
-    return state.articles
+    const source = field === 'search' ? listSuggestionArticles() : state.articles;
+    return source
         .map((article) => {
             const title = String(article.title || '').toLowerCase();
             if (!title.includes(query)) return null;
@@ -1032,7 +1046,7 @@ function articleSuggestions(term) {
 
 function renderArticleSuggestionList(field) {
     const term = field === 'search' ? state.search : state.title;
-    const suggestions = articleSuggestions(term);
+    const suggestions = articleSuggestions(term, field);
     if (!suggestions.length) return '';
     const action = field === 'search' ? 'pick-search-suggestion' : 'pick-title-suggestion';
     return `<div class="elsuggest">${suggestions.map((article) => `<button type="button" class="elsuggest-btn" data-a="${action}" data-id="${article.id}"><span class="min-w-0 flex-1"><span class="block truncate text-sm font-bold text-slate-800">${escapeHtml(article.title || '')}</span><span class="block truncate text-[11px] text-slate-500">${fmtQty(article.defaultQuantity || 1)} ${escapeHtml(article.defaultUnit || 'Stück')}${article.categoryId ? ` · ${escapeHtml(state.categories.find((c) => c.id === article.categoryId)?.name || 'Ohne Kategorie')}` : ''}</span></span>${renderArticleMetaIcons(article)}</button>`).join('')}</div>`;
@@ -1040,6 +1054,30 @@ function renderArticleSuggestionList(field) {
 
 function articlePrefillNote(article) {
     return String((article?.persistentNotes || []).map((entry) => String(entry || '').trim()).filter(Boolean).join(' · ')).trim();
+}
+
+function parseDetailPersistentNotes(value) {
+    return Array.from(new Set(String(value || '').split(/\n|\s+[·•]\s+/).map((entry) => String(entry || '').trim()).filter(Boolean)));
+}
+
+function buildDetailPersistentNoteValue(entries) {
+    return (entries || []).map((entry) => String(entry || '').trim()).filter(Boolean).join(' · ');
+}
+
+function initDetailDraft(item, article = state.articles.find((entry) => entry.id === item?.articleId)) {
+    if (!item) { state.detailDraft = null; return; }
+    const activeNotes = parseDetailPersistentNotes(item.persistentNote);
+    const articleNotes = Array.from(new Set((article?.persistentNotes || []).map((entry) => String(entry || '').trim()).filter(Boolean)));
+    state.detailDraft = {
+        itemId: item.id,
+        title: String(item.title || ''),
+        quantity: formatEditableQty(item.quantity || '1'),
+        categoryId: String(item.categoryId || ''),
+        note: String(item.note || ''),
+        storeId: String(item.storeIds?.[0] || ''),
+        persistentNotes: [...activeNotes],
+        removedPersistentNotes: articleNotes.filter((entry) => !activeNotes.includes(entry))
+    };
 }
 
 function prefillInputFromArticle(article) {
@@ -1335,8 +1373,12 @@ function renderDetail() {
     const article = item ? state.articles.find((a) => a.id === item.articleId) : null;
     const otherLists = state.lists.filter((x) => x.id !== state.listId).filter((x) => canAdd(x) || canShop(x));
     el.className = `elmodal ${item ? 'o' : ''}`;
-    if (!item) { el.innerHTML = ''; return; }
-    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-start"><div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><div class="text-xl font-black text-gray-900">Produkt bearbeiten</div>${isRestItem(item) ? chip('REST', 'bg-orange-100 text-orange-800 ring-1 ring-orange-300') : ''}</div><div class="text-sm text-gray-500">${isRestItem(item) ? `Automatisch angelegt als Rest von ${escapeHtml(String(item.title || '').replace(/^Rest von\s+/i, '').trim() || item.title || 'Artikel')}.` : 'Über das Zahnradsymbol des Eintrags wird dieses Fenster geöffnet.'}</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-detail">Schließen</button></div>${isRestItem(item) ? '<div class="rounded-2xl border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-800">Dieser Eintrag ist ein automatisch erzeugter Rest-Eintrag und kann wie jeder andere Eintrag bearbeitet oder gelöscht werden.</div>' : ''}<div class="grid gap-3 sm:grid-cols-2"><input id="el-d-title" class="eli" value="${escapeHtml(item.title || '')}" ${!canEditItems() ? 'disabled' : ''}><input id="el-d-qty" class="eli" value="${escapeHtml(formatEditableQty(item.quantity || '1'))}" ${!canEditItems() ? 'disabled' : ''}></div><div class="grid gap-3 sm:grid-cols-2"><select id="el-d-cat" class="els" ${!canEditItems() ? 'disabled' : ''}><option value="">Kategorie wählen...</option>${state.categories.map((c) => `<option value="${c.id}" ${item.categoryId === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}</select><div class="flex items-center rounded-2xl border border-gray-200 bg-slate-50 px-3 text-sm font-bold text-gray-600">Einheit: ${escapeHtml(item.unit || 'Stück')}</div></div><textarea id="el-d-note" class="elt" placeholder="Anmerkung für diese Position" ${!canEditItems() ? 'disabled' : ''}>${escapeHtml(item.note || '')}</textarea><textarea id="el-d-pnote" class="elt" placeholder="Gespeicherte Anmerkung" ${!canEditItems() ? 'disabled' : ''}>${escapeHtml(item.persistentNote || '')}</textarea><div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]"><select id="el-d-move-list" class="els" ${!otherLists.length || !canEditItems() ? 'disabled' : ''}><option value="">Auf andere Liste verschieben...</option>${otherLists.map((list) => `<option value="${list.id}">${escapeHtml(list.name)}</option>`).join('')}</select><button class="elb bg-gray-100 text-gray-700" data-a="move-detail" ${!otherLists.length || !canEditItems() ? 'disabled' : ''}>Verschieben</button></div><div class="elc space-y-2 bg-slate-50 text-sm"><div><b>Artikel:</b> ${escapeHtml(article?.title || item.title || '—')}</div><div><b>Status:</b> ${escapeHtml(item.status || 'open')}</div><div><b>Erfasst:</b> ${dt(item.createdAt)}</div><div><b>Gekauft:</b> ${item.checkedAt ? `${dt(item.checkedAt)} · ${escapeHtml(item.checkedByName || '—')}` : '—'}</div>${item.restoredAt ? `<div><b>Wiederhergestellt:</b> ${dt(item.restoredAt)} · ${escapeHtml(item.restoredByName || '—')}</div>` : ''}${item.purchasedQuantity ? `<div><b>Gekauft-Menge:</b> ${fmtQty(item.purchasedQuantity)}</div>` : ''}</div><div class="flex flex-wrap justify-end gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="close-detail">Schließen</button>${canEditItems() ? '<button class="elb bg-red-600 text-white" data-a="delete-detail-item">Löschen</button><button class="elb a" data-a="save-detail">Speichern</button>' : ''}</div></div>`;
+    if (!item) { state.detailDraft = null; el.innerHTML = ''; return; }
+    if (!state.detailDraft || state.detailDraft.itemId !== item.id) initDetailDraft(item, article);
+    const draft = state.detailDraft || { itemId: item.id, title: String(item.title || ''), quantity: formatEditableQty(item.quantity || '1'), categoryId: String(item.categoryId || ''), note: String(item.note || ''), storeId: String(item.storeIds?.[0] || ''), persistentNotes: parseDetailPersistentNotes(item.persistentNote), removedPersistentNotes: [] };
+    const activeNotes = draft.persistentNotes || [];
+    const removedNotes = draft.removedPersistentNotes || [];
+    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-start"><div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><div class="text-xl font-black text-gray-900">Produkt bearbeiten</div>${isRestItem(item) ? chip('REST', 'bg-orange-100 text-orange-800 ring-1 ring-orange-300') : ''}</div><div class="text-sm text-gray-500">${isRestItem(item) ? `Automatisch angelegt als Rest von ${escapeHtml(String(item.title || '').replace(/^Rest von\s+/i, '').trim() || item.title || 'Artikel')}.` : 'Über das Zahnradsymbol des Eintrags wird dieses Fenster geöffnet.'}</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-detail">Schließen</button></div>${isRestItem(item) ? '<div class="rounded-2xl border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-800">Dieser Eintrag ist ein automatisch erzeugter Rest-Eintrag und kann wie jeder andere Eintrag bearbeitet oder gelöscht werden.</div>' : ''}<div class="space-y-2"><div class="text-xs font-black uppercase text-gray-500">Geschäft zuordnen</div><select id="el-d-store" class="els" ${!canEditItems() ? 'disabled' : ''}><option value="">Keine Zuordnung</option>${state.stores.map((store) => `<option value="${store.id}" ${draft.storeId === store.id ? 'selected' : ''}>${escapeHtml(store.name)}</option>`).join('')}</select></div><div class="grid gap-3 sm:grid-cols-2"><input id="el-d-title" class="eli" value="${escapeHtml(draft.title || '')}" ${!canEditItems() ? 'disabled' : ''}><input id="el-d-qty" class="eli" value="${escapeHtml(draft.quantity || '')}" ${!canEditItems() ? 'disabled' : ''}></div><div class="grid gap-3 sm:grid-cols-2"><select id="el-d-cat" class="els" ${!canEditItems() ? 'disabled' : ''}><option value="">Kategorie wählen...</option>${state.categories.map((c) => `<option value="${c.id}" ${draft.categoryId === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}</select><div class="flex items-center rounded-2xl border border-gray-200 bg-slate-50 px-3 text-sm font-bold text-gray-600">Einheit: ${escapeHtml(item.unit || 'Stück')}</div></div><textarea id="el-d-note" class="elt" placeholder="Anmerkung für diese Position" ${!canEditItems() ? 'disabled' : ''}>${escapeHtml(draft.note || '')}</textarea><div class="space-y-2"><div class="text-xs font-black uppercase text-gray-500">Gespeicherte Anmerkungen</div>${activeNotes.length ? `<div class="elm">${activeNotes.map((entry, index) => chip(`${escapeHtml(entry)} ${canEditItems() ? `<button type="button" class="elchipbtn" data-a="remove-detail-pnote" data-index="${index}">×</button>` : ''}`, 'bg-indigo-100 text-indigo-700')).join(' ')}</div>` : '<div class="text-sm text-gray-400">Keine gespeicherte Anmerkung aktiv.</div>'}</div>${removedNotes.length ? `<div class="space-y-2"><div class="text-xs font-black uppercase text-gray-500">Entfernte Anmerkungen wiederherstellen</div><div class="elm">${removedNotes.map((entry, index) => chip(`${escapeHtml(entry)} ${canEditItems() ? `<button type="button" class="elchipbtn" data-a="restore-detail-pnote" data-index="${index}">↺</button>` : ''}`, 'bg-slate-100 text-slate-700')).join(' ')}</div></div>` : ''}<div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]"><select id="el-d-move-list" class="els" ${!otherLists.length || !canEditItems() ? 'disabled' : ''}><option value="">Auf andere Liste verschieben...</option>${otherLists.map((list) => `<option value="${list.id}">${escapeHtml(list.name)}</option>`).join('')}</select><button class="elb bg-gray-100 text-gray-700" data-a="move-detail" ${!otherLists.length || !canEditItems() ? 'disabled' : ''}>Verschieben</button></div><div class="elc space-y-2 bg-slate-50 text-sm"><div><b>Artikel:</b> ${escapeHtml(article?.title || item.title || '—')}</div><div><b>Status:</b> ${escapeHtml(item.status || 'open')}</div><div><b>Erfasst:</b> ${dt(item.createdAt)}</div><div><b>Gekauft:</b> ${item.checkedAt ? `${dt(item.checkedAt)} · ${escapeHtml(item.checkedByName || '—')}` : '—'}</div>${item.restoredAt ? `<div><b>Wiederhergestellt:</b> ${dt(item.restoredAt)} · ${escapeHtml(item.restoredByName || '—')}</div>` : ''}${item.purchasedQuantity ? `<div><b>Gekauft-Menge:</b> ${fmtQty(item.purchasedQuantity)}</div>` : ''}</div><div class="flex flex-wrap justify-end gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="close-detail">Schließen</button>${canEditItems() ? '<button class="elb bg-red-600 text-white" data-a="delete-detail-item">Löschen</button><button class="elb a" data-a="save-detail">Speichern</button>' : ''}</div></div>`;
 }
 
 function renderArticle() {
@@ -1433,11 +1475,16 @@ function onKeyDownActive(e) {
      if (t.id === 'el-draft-note') state.drafts.note = t.value;
      if (t.id === 'el-c-from') state.collab.accessFrom = t.value;
      if (t.id === 'el-c-until') state.collab.accessUntil = t.value;
+     if (t.id === 'el-d-title' && state.detailDraft) { state.detailDraft.title = t.value; return; }
+     if (t.id === 'el-d-qty' && state.detailDraft) { state.detailDraft.quantity = t.value; return; }
+     if (t.id === 'el-d-note' && state.detailDraft) { state.detailDraft.note = t.value; return; }
  }
 
  function onChange(e) {
      const t = e.target;
      if (t.id === 'el-unit') state.unit = t.value;
+     if (t.id === 'el-d-cat' && state.detailDraft) { state.detailDraft.categoryId = t.value; return; }
+     if (t.id === 'el-d-store' && state.detailDraft) { state.detailDraft.storeId = t.value; return; }
      if (t.id === 'el-list-select' && t.value) { selectList(t.value); return; }
      if (t.id === 'el-store-add' && t.value) {
          if (!state.storeIds.includes(t.value)) state.storeIds.push(t.value);
@@ -1596,17 +1643,19 @@ async function saveDetailItem() {
     if (!item) return;
     if (!canEditItems()) return alertUser('Keine Berechtigung zum Bearbeiten.', 'error');
     if (!(await acquireLock(item.id))) return;
-    const title = document.getElementById('el-d-title')?.value?.trim();
-    const quantity = parseQty(document.getElementById('el-d-qty')?.value || String(item.quantity || '1'));
-    const categoryId = String(document.getElementById('el-d-cat')?.value || '');
-    const note = String(document.getElementById('el-d-note')?.value || '').trim();
-    const persistentNote = String(document.getElementById('el-d-pnote')?.value || '').trim();
+    const draft = state.detailDraft?.itemId === item.id ? state.detailDraft : null;
+    const title = String(draft?.title ?? document.getElementById('el-d-title')?.value ?? '').trim();
+    const quantity = parseQty((draft?.quantity ?? document.getElementById('el-d-qty')?.value) || String(item.quantity || '1'));
+    const categoryId = String((draft?.categoryId ?? document.getElementById('el-d-cat')?.value) || '');
+    const note = String((draft?.note ?? document.getElementById('el-d-note')?.value) || '').trim();
+    const storeId = String(draft?.storeId || '').trim();
+    const persistentNote = buildDetailPersistentNoteValue(draft?.persistentNotes || parseDetailPersistentNotes(item.persistentNote));
     if (!title) return alertUser('Bitte Produktnamen eingeben.', 'error');
-    const unit = String(document.getElementById('el-d-unit')?.value || item.unit || 'Stück');
-    const itemData = { title, quantity, categoryId, note, persistentNote, unit };
+    const itemData = { title, quantity, categoryId, note, persistentNote, storeIds: storeId ? [storeId] : [] };
     await updateDoc(doc(sub(state.listId, 'items'), item.id), itemData);
     await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() });
     await logActivity('Artikel bearbeitet', { itemId: item.id, title, quantity });
+    Object.assign(item, itemData);
     render();
 }
 
@@ -1981,12 +2030,14 @@ async function onClick(e) {
     if (a === 'del-store') { state.storeIds = state.storeIds.filter((x) => x !== btn.dataset.id); render(); return; }
     if (a === 'add-item') { await addItem(); return; }
     if (a === 'edit-item') { await handleDouble(btn.dataset.id, 'edit-item'); return; }
-    if (a === 'open-detail-item') { hideItemActionButtons(btn.dataset.id); state.detailId = btn.dataset.id; render(); return; }
+    if (a === 'open-detail-item') { const item = state.items.find((x) => x.id === btn.dataset.id); hideItemActionButtons(btn.dataset.id); state.detailId = btn.dataset.id; initDetailDraft(item); render(); return; }
     if (a === 'delete-item-direct') { hideItemActionButtons(btn.dataset.id); hideQuantityActionButton(btn.dataset.id); await deleteListItem(btn.dataset.id, 'Artikel gelöscht'); return; }
     if (a === 'check' || a === 'restore') { await handleDouble(btn.dataset.id, a); return; }
     if (a === 'quantity') { await handleDouble(btn.dataset.id, 'quantity'); return; }
-    if (a === 'detail') { state.detailId = btn.dataset.id; render(); return; }
-    if (a === 'close-detail') { state.detailId = null; render(); return; }
+    if (a === 'detail') { const item = state.items.find((x) => x.id === btn.dataset.id); state.detailId = btn.dataset.id; initDetailDraft(item); render(); return; }
+    if (a === 'close-detail') { state.detailId = null; state.detailDraft = null; render(); return; }
+    if (a === 'remove-detail-pnote') { const index = Number(btn.dataset.index); if (state.detailDraft && index >= 0 && index < state.detailDraft.persistentNotes.length) { const [entry] = state.detailDraft.persistentNotes.splice(index, 1); if (entry && !state.detailDraft.removedPersistentNotes.includes(entry)) state.detailDraft.removedPersistentNotes.push(entry); render(); } return; }
+    if (a === 'restore-detail-pnote') { const index = Number(btn.dataset.index); if (state.detailDraft && index >= 0 && index < state.detailDraft.removedPersistentNotes.length) { const [entry] = state.detailDraft.removedPersistentNotes.splice(index, 1); if (entry && !state.detailDraft.persistentNotes.includes(entry)) state.detailDraft.persistentNotes.push(entry); render(); } return; }
     if (a === 'toggle-checked-section') { state.checkedOpen = !state.checkedOpen; if (!state.checkedOpen) state.checkedMenuOpen = false; render(); return; }
     if (a === 'toggle-checked-menu') { state.checkedMenuOpen = !state.checkedMenuOpen; render(); return; }
     if (a === 'delete-all-checked') { await deleteAllCheckedItems(); return; }

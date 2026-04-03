@@ -1,14 +1,24 @@
 {
-  "version": "1.7.3",
-  "buildId": "20260403-4",
+  "version": "1.7.4",
+  "buildId": "20260403-5",
   "releaseDate": "2026-04-03",
-  "releaseTime": "11:15",
+  "releaseTime": "11:41",
   "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Eingabemodus ist nun ebenfalls zentriert, die Abgehakt-Liste ist einklappbar und die Geschäftsnummerierung folgt robuster der gepflegten Reihenfolge.",
-  "commitId": "912ca94",
+  "note": "Suchvorschläge zeigen jetzt nur Listenartikel, und im Produktdialog gibt es Geschäftsauswahl sowie entfern- und wiederherstellbare gespeicherte Anmerkungen.",
+  "commitId": "6c9dc6a",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.7.4",
+      "buildId": "20260403-5",
+      "releaseDate": "2026-04-03",
+      "releaseTime": "11:41",
+      "bereich": "Einkaufsliste",
+      "note": "Suchvorschläge zeigen jetzt nur Listenartikel, und im Produktdialog gibt es Geschäftsauswahl sowie entfern- und wiederherstellbare gespeicherte Anmerkungen.",
+      "commitId": "6c9dc6a",
+      "obligation": "false"
+    },
     {
       "version": "1.7.3",
       "buildId": "20260403-4",
