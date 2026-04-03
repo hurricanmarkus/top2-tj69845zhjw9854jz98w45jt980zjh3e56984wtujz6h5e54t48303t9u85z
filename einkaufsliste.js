@@ -1392,7 +1392,7 @@ function canConfirmPurchase(p = state.purchase) {
     return !!p && Number(p.quantity || 0) > 0;
 }
 
-function openScanner(mode = 'shopping', articleId = '') {
+function openScannerLegacy(mode = 'shopping', articleId = '') {
     document.activeElement?.blur?.();
     state.scanOpen = true;
     state.scanMode = mode;
@@ -1404,7 +1404,7 @@ function openScanner(mode = 'shopping', articleId = '') {
     render();
 }
 
-function closeScannerModal() {
+function closeScannerModalLegacy() {
     state.scanOpen = false;
     state.scanMode = 'shopping';
     state.scanArticleId = '';
@@ -1416,7 +1416,7 @@ function closeScannerModal() {
     render();
 }
 
-function closeUnknownModal() {
+function closeUnknownModalLegacy() {
     state.unknownCode = '';
     state.unknownArticleId = '';
     render();
@@ -1597,7 +1597,7 @@ function renderStoreCategoryEditorActive() {
     el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="text-xl font-black text-gray-900">Kategorienwartung</div><div class="text-sm text-gray-500">${escapeHtml(store?.name || 'Geschäft')} sortiert die Anzeige im Einkaufsmodus.</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-store-categories">Schließen</button></div><div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"><div class="elc space-y-2"><div class="text-sm font-black text-gray-900">Verfügbare Kategorien</div>${available.length ? available.map((c) => `<label class="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"><input type="checkbox" data-a="toggle-store-category" data-id="${c.id}"> ${escapeHtml(c.name)}</label>`).join('') : '<div class="text-sm text-gray-400">Alle Kategorien sind bereits ausgewählt.</div>'}</div><div class="elc space-y-2"><div class="flex items-center justify-between gap-2"><div class="text-sm font-black text-gray-900">Ausgewählte Reihenfolge</div><div class="text-xs font-semibold text-slate-400">Ziehen zum Sortieren</div></div>${selected.length ? selected.map((c, index) => { const dropClass = drag?.overId === c.id ? (drag.after ? ' drop-after' : ' drop-before') : ''; const draggingClass = drag?.id === c.id ? ' dragging' : ''; return `<div class="elstorecat-row flex items-center justify-between gap-2 rounded-2xl border border-indigo-100 bg-indigo-50 px-3 py-2${dropClass}${draggingClass}" data-store-category-row data-id="${c.id}"><div class="flex items-center gap-3 min-w-0"><button type="button" class="cursor-grab rounded-xl border border-indigo-200 bg-white px-2 py-1 text-base font-black text-indigo-700" data-drag-store-category data-id="${c.id}" aria-label="Kategorie ziehen">↕</button><div class="text-sm font-bold text-indigo-900">${index + 1}. ${escapeHtml(c.name)}</div></div><div class="flex gap-2"><button class="elb bg-white text-gray-700" data-a="store-category-up" data-id="${c.id}" ${index === 0 ? 'disabled' : ''}>↑</button><button class="elb bg-white text-gray-700" data-a="store-category-down" data-id="${c.id}" ${index === selected.length - 1 ? 'disabled' : ''}>↓</button><button class="elb bg-red-100 text-red-700" data-a="toggle-store-category" data-id="${c.id}">Entfernen</button></div></div>`; }).join('') : '<div class="text-sm text-gray-400">Noch keine Kategorie gewählt.</div>'}</div></div><div class="flex flex-wrap justify-end gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="close-store-categories">Abbruch</button><button class="elb bg-emerald-600 text-white" data-a="save-store-categories">Speichern</button></div></div>`;
 }
 
-function renderScannerActive() {
+function renderScannerActiveLegacy() {
     const el = document.getElementById('el-scanner');
     if (!el) return;
     const isArticleMode = state.scanOpen && state.scanMode === 'article-ean';
@@ -1658,15 +1658,15 @@ function renderDetail() {
     el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-start"><div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><div class="text-xl font-black text-gray-900">Produkt bearbeiten</div>${isRestItem(item) ? chip('REST', 'bg-orange-100 text-orange-800 ring-1 ring-orange-300') : ''}</div><div class="text-sm text-gray-500">${isRestItem(item) ? `Automatisch angelegt als Rest von ${escapeHtml(String(item.title || '').replace(/^Rest von\s+/i, '').trim() || item.title || 'Artikel')}.` : 'Über das Zahnradsymbol des Eintrags wird dieses Fenster geöffnet.'}</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-detail">Schließen</button></div>${isRestItem(item) ? '<div class="rounded-2xl border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-800">Dieser Eintrag ist ein automatisch erzeugter Rest-Eintrag und kann wie jeder andere Eintrag bearbeitet oder gelöscht werden.</div>' : ''}<div class="space-y-2"><div class="text-xs font-black uppercase text-gray-500">Geschäft zuordnen</div><select id="el-d-store" class="els" ${!canEditItems() ? 'disabled' : ''}><option value="">Keine Zuordnung</option>${state.stores.map((store) => `<option value="${store.id}" ${draft.storeId === store.id ? 'selected' : ''}>${escapeHtml(store.name)}</option>`).join('')}</select></div><div class="grid gap-3 sm:grid-cols-2"><input id="el-d-title" class="eli" value="${escapeHtml(draft.title || '')}" ${!canEditItems() ? 'disabled' : ''}><input id="el-d-qty" class="eli" value="${escapeHtml(draft.quantity || '')}" ${!canEditItems() ? 'disabled' : ''}></div><div class="grid gap-3 sm:grid-cols-2"><select id="el-d-cat" class="els" ${!canEditItems() ? 'disabled' : ''}><option value="">Kategorie wählen...</option>${state.categories.map((c) => `<option value="${c.id}" ${draft.categoryId === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}</select><div class="flex items-center rounded-2xl border border-gray-200 bg-slate-50 px-3 text-sm font-bold text-gray-600">Einheit: ${escapeHtml(item.unit || 'Stück')}</div></div><textarea id="el-d-note" class="elt" placeholder="Anmerkung für diese Position" ${!canEditItems() ? 'disabled' : ''}>${escapeHtml(draft.note || '')}</textarea><div class="space-y-2"><div class="text-xs font-black uppercase text-gray-500">Gespeicherte Anmerkungen</div>${activeNotes.length ? `<div class="elm">${activeNotes.map((entry, index) => chip(`${escapeHtml(entry)} ${canEditItems() ? `<button type="button" class="elchipbtn" data-a="remove-detail-pnote" data-index="${index}">×</button>` : ''}`, 'bg-indigo-100 text-indigo-700')).join(' ')}</div>` : '<div class="text-sm text-gray-400">Keine gespeicherte Anmerkung aktiv.</div>'}</div>${removedNotes.length ? `<div class="space-y-2"><div class="text-xs font-black uppercase text-gray-500">Entfernte Anmerkungen wiederherstellen</div><div class="elm">${removedNotes.map((entry, index) => chip(`${escapeHtml(entry)} ${canEditItems() ? `<button type="button" class="elchipbtn" data-a="restore-detail-pnote" data-index="${index}">↺</button>` : ''}`, 'bg-slate-100 text-slate-700')).join(' ')}</div></div>` : ''}<div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]"><select id="el-d-move-list" class="els" ${!otherLists.length || !canEditItems() ? 'disabled' : ''}><option value="">Auf andere Liste verschieben...</option>${otherLists.map((list) => `<option value="${list.id}">${escapeHtml(list.name)}</option>`).join('')}</select><button class="elb bg-gray-100 text-gray-700" data-a="move-detail" ${!otherLists.length || !canEditItems() ? 'disabled' : ''}>Verschieben</button></div><div class="elc space-y-2 bg-slate-50 text-sm"><div><b>Artikel:</b> ${escapeHtml(article?.title || item.title || '—')}</div><div><b>Status:</b> ${escapeHtml(item.status || 'open')}</div><div><b>Erfasst:</b> ${dt(item.createdAt)}</div><div><b>Gekauft:</b> ${item.checkedAt ? `${dt(item.checkedAt)} · ${escapeHtml(item.checkedByName || '—')}` : '—'}</div>${item.restoredAt ? `<div><b>Wiederhergestellt:</b> ${dt(item.restoredAt)} · ${escapeHtml(item.restoredByName || '—')}</div>` : ''}${item.purchasedQuantity ? `<div><b>Gekauft-Menge:</b> ${fmtQty(item.purchasedQuantity)}</div>` : ''}</div><div class="flex flex-wrap justify-end gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="close-detail">Schließen</button>${canEditItems() ? '<button class="elb bg-red-600 text-white" data-a="delete-detail-item">Löschen</button><button class="elb a" data-a="save-detail">Speichern</button>' : ''}</div></div>`;
 }
 
-function renderArticle() {
+function renderArticleLegacy() {
     const el = document.getElementById('el-article'); if (!el) return; const a = state.articleEditor; el.className = `elmodal ${a ? 'o' : ''}`; if (!a) { el.innerHTML = ''; return; } el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-center"><div class="text-xl font-black text-gray-900">${a.id ? 'Artikel bearbeiten' : 'Artikel anlegen'}</div><button class="elb bg-gray-100 text-gray-700" data-a="close-article">Schließen</button></div><div class="grid gap-2 sm:grid-cols-2"><input id="ela-title" class="eli" placeholder="Bezeichnung" value="${escapeHtml(a.title || '')}"><input id="ela-q" class="eli" placeholder="Standardmenge" value="${escapeHtml(String(a.defaultQuantity || '1'))}"><select id="ela-unit" class="els">${UNITS.map((u) => `<option value="${u}" ${a.defaultUnit === u ? 'selected' : ''}>${u}</option>`).join('')}</select><select id="ela-cat" class="els"><option value="">Kategorie wählen...</option>${state.categories.map((c) => `<option value="${c.id}" ${a.categoryId === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}</select></div><textarea id="ela-ean" class="elt" placeholder="EAN-Codes, eine Zeile pro Code">${escapeHtml((a.eanCodes || []).join('\n'))}</textarea>${a.id ? `<div class="flex justify-end"><button class="elb bg-red-100 text-red-700" data-a="capture-ean" data-id="${a.id}">Ohne EAN scannen</button></div>` : ''}<textarea id="ela-var" class="elt" placeholder="Varianten je Zeile: Name|EAN1,EAN2">${escapeHtml((a.variants || []).map((v) => `${v.label || ''}|${(v.eanCodes || []).join(',')}`).join('\n'))}</textarea><textarea id="ela-note" class="elt" placeholder="Permanente Anmerkungen, je Zeile">${escapeHtml((a.persistentNotes || []).join('\n'))}</textarea><div class="elm">${state.stores.map((s) => `<label class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold ${(a.storeIds || []).includes(s.id) ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}"><input type="checkbox" data-a="art-store" data-id="${s.id}" ${(a.storeIds || []).includes(s.id) ? 'checked' : ''}> ${escapeHtml(s.name)}</label>`).join(' ')}</div><div class="flex flex-wrap justify-end gap-2">${a.id ? `<button class="elb bg-red-600 text-white" data-a="delete-article" data-id="${a.id}">Löschen</button>` : ''}<button class="elb bg-emerald-600 text-white" data-a="save-article">Speichern</button></div></div>`;
 }
 
-function renderScanner() {
+function renderScannerLegacy() {
     const el = document.getElementById('el-scanner'); if (!el) return; el.className = `elmodal ${state.scanOpen ? 'o' : ''}`; if (!state.scanOpen) { el.innerHTML = ''; stopScanner(); return; } el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="text-xl font-black text-gray-900">Scanner</div><div class="text-sm text-gray-500">Barcode + QR live, ohne Refresh.</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-scan">Schließen</button></div><div class="elcam"><video id="el-video" autoplay playsinline muted></video></div><div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"><input id="el-scan-manual" class="eli" placeholder="EAN/QR manuell eingeben"><button class="elb a" data-a="manual-scan">Code übernehmen</button></div><div id="el-scan-status" class="text-sm text-gray-500">Kamera wird gestartet...</div></div>`; startScanner();
 }
 
-function renderUnknown() {
+function renderUnknownLegacy() {
     const el = document.getElementById('el-unknown'); if (!el) return; el.className = `elmodal ${state.unknownCode ? 'o' : ''}`; if (!state.unknownCode) { el.innerHTML = ''; return; } el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="text-xl font-black text-gray-900">Unbekannter Code</div><div class="text-sm text-gray-500">Bitte zuerst einem bestehenden Artikel zuordnen.</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-unknown">Abbruch</button></div><div class="elc bg-slate-50 text-sm"><div><b>Code:</b> ${escapeHtml(state.unknownCode)}</div><select id="el-unknown-article" class="els"><option value="">Bestehendem Artikel zuordnen...</option>${state.articles.map((a) => `<option value="${a.id}" ${state.unknownArticleId === a.id ? 'selected' : ''}>${escapeHtml(a.title)}</option>`).join('')}</select><div class="flex flex-wrap justify-end gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="close-unknown">Abbruch</button><button class="elb bg-emerald-600 text-white" data-a="save-unknown">Zuordnen</button></div></div>`;
 }
 
@@ -1734,7 +1734,7 @@ function onKeyDownActive(e) {
      }
  }
 
- function onInput(e) {
+ function onInputLegacy(e) {
      const t = e.target;
      if (t.id === 'el-q') state.q = t.value;
      if (t.id === 'el-title') { state.title = t.value; updateInputTitleUi(); return; }
@@ -1757,7 +1757,7 @@ function onKeyDownActive(e) {
      if (t.id === 'el-d-note' && state.detailDraft) { state.detailDraft.note = t.value; return; }
  }
 
- function onChange(e) {
+ function onChangeLegacy(e) {
      const t = e.target;
      if (t.id === 'el-unit') state.unit = t.value;
      if (t.id === 'el-d-cat' && state.detailDraft) { state.detailDraft.categoryId = t.value; return; }
@@ -1896,7 +1896,7 @@ async function addFree(ref, value) {
     await addDoc(ref, { text: v, createdBy: uid(), createdByName: uname(), createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
 }
 
-async function addItem() {
+async function addItemLegacy() {
     if (!canAdd()) return alertUser('Keine Berechtigung zum Hinzufügen.', 'error');
     const title = String(state.title || '').trim();
     if (!title) return alertUser('Bitte Artikel eingeben.', 'error');
@@ -2028,7 +2028,7 @@ async function deleteAllCheckedItems() {
     render();
 }
 
-function openPurchase(itemOrArticle, isScan) {
+function openPurchaseLegacy(itemOrArticle, isScan) {
     const item = itemOrArticle?.status ? itemOrArticle : null;
     const article = item ? state.articles.find((a) => a.id === item.articleId) : itemOrArticle;
     const title = item?.title || article?.title || 'Artikel';
@@ -2045,7 +2045,7 @@ function resetAutoScan(isScan = state.purchase?.kind === 'scan') {
     if (isScan && state.purchase) autoScanTimer = setTimeout(() => { if (state.purchase) confirmPurchase(); }, AUTO_SCAN_MS);
 }
 
-async function confirmPurchase() {
+async function confirmPurchaseLegacy() {
     const p = state.purchase; if (!p) return;
     const qty = Number(p.quantity || 0); if (!(qty > 0)) return alertUser('Bitte eine Menge eingeben.', 'error');
     closePurchaseModal();
@@ -2100,7 +2100,7 @@ async function submitScannerManualInputActive() {
     await processScannerCodeActive(value);
 }
 
-async function processScannerCodeActive(rawCode) {
+async function processScannerCodeActiveLegacy(rawCode) {
     const code = String(rawCode || '').trim();
     if (!code) return false;
     const now = Date.now();
@@ -2140,7 +2140,7 @@ async function addScannedArticleToList(article, code = '') {
     flashScanSuccess();
 }
 
-async function saveScannedCodesActive(openNext = false) {
+async function saveScannedCodesActiveLegacy(openNext = false) {
     const article = state.articles.find((a) => a.id === state.scanArticleId);
     if (!article) return alertUser('Artikel für die EAN-Erfassung wurde nicht gefunden.', 'error');
     if (!state.scanCodes.length) return alertUser('Bitte zuerst mindestens einen Code erfassen.', 'error');
@@ -2166,7 +2166,7 @@ async function saveScannedCodesActive(openNext = false) {
     closeScannerModal();
 }
 
-async function startScannerActive() {
+async function startScannerActiveLegacy() {
     try {
         const video = document.getElementById('el-video');
         const status = document.getElementById('el-scan-status');
@@ -2200,7 +2200,7 @@ async function startScannerActive() {
     }
 }
 
-async function handleScanCode(code) {
+async function handleScanCodeLegacy(code) {
     const article = state.articles.find((a) => (a.eanCodes || []).includes(code) || (a.variants || []).some((v) => (v.eanCodes || []).includes(code)));
     if (!article) {
         state.scanStatus = `EAN nicht gefunden: ${code}`;
@@ -2220,7 +2220,7 @@ async function handleScanCode(code) {
     openPurchase(article, true);
 }
 
-async function saveUnknownCode() {
+async function saveUnknownCodeLegacy() {
     if (!state.unknownCode) return;
     if (!state.unknownArticleId) return alertUser('Bitte Artikel auswählen.', 'error');
     const article = state.articles.find((x) => x.id === state.unknownArticleId);
@@ -2232,7 +2232,7 @@ async function saveUnknownCode() {
     render();
 }
 
-async function saveArticle() {
+async function saveArticleLegacy() {
     const a = state.articleEditor; if (!a) return; const title = document.getElementById('ela-title')?.value?.trim() || ''; if (!title) return alertUser('Bitte Bezeichnung eingeben.', 'error');
     const payload = { title, defaultQuantity: parseQty(document.getElementById('ela-q')?.value || '1') || 1, defaultUnit: document.getElementById('ela-unit')?.value || 'Stück', categoryId: document.getElementById('ela-cat')?.value || '', eanCodes: String(document.getElementById('ela-ean')?.value || '').split('\n').map((x) => x.trim()).filter(Boolean), variants: String(document.getElementById('ela-var')?.value || '').split('\n').map((line) => line.trim()).filter(Boolean).map((line) => { const [label, codes] = line.split('|'); return { label: (label || '').trim(), eanCodes: String(codes || '').split(',').map((x) => x.trim()).filter(Boolean) }; }), persistentNotes: String(document.getElementById('ela-note')?.value || '').split('\n').map((x) => x.trim()).filter(Boolean), storeIds: a.storeIds || [], updatedAt: serverTimestamp(), createdBy: uid(), createdByName: uname() };
     if (a.id) await updateDoc(doc(master('articles'), a.id), payload); else await addDoc(master('articles'), { ...payload, createdAt: serverTimestamp() });
@@ -2282,11 +2282,11 @@ async function deleteCollaborator(userId) {
     await logActivity('Mitbearbeiter entfernt', { userId });
 }
 
-async function onClickActive(e) {
+async function onClickActiveLegacy(e) {
     return onClick(e);
 }
 
-async function onClick(e) {
+async function onClickLegacy(e) {
     const btn = e.target.closest('[data-a]');
     if (!btn) return;
     const a = btn.dataset.a;

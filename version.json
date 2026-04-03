@@ -1,14 +1,24 @@
 {
-  "version": "1.8.0",
-  "buildId": "20260403-6",
+  "version": "1.8.1",
+  "buildId": "20260403-7",
   "releaseDate": "2026-04-03",
-  "releaseTime": "13:32",
+  "releaseTime": "14:14",
   "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste unterstützt jetzt Artikelvarianten mit Alias-Suche, Variantenwahl, variantenbezogenem EAN-Scan und Übernahme in die Liste.",
-  "commitId": "6b43fa1",
+  "note": "Einkaufsliste lädt wieder stabil, weil kollidierende Alt- und Override-Funktionen in einkaufsliste.js sauber getrennt wurden.",
+  "commitId": "9d095e8",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.8.1",
+      "buildId": "20260403-7",
+      "releaseDate": "2026-04-03",
+      "releaseTime": "14:14",
+      "bereich": "Einkaufsliste",
+      "note": "Einkaufsliste lädt wieder stabil, weil kollidierende Alt- und Override-Funktionen in einkaufsliste.js sauber getrennt wurden.",
+      "commitId": "9d095e8",
+      "obligation": "false"
+    },
     {
       "version": "1.8.0",
       "buildId": "20260403-6",
