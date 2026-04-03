@@ -77,6 +77,7 @@ const state = {
     title: '',
     note: '',
     storeIds: [],
+    inputDetailsOpen: false,
     search: '',
     settingsOpen: false,
     detailsOpen: false,
@@ -224,6 +225,7 @@ function ensureStyle() {
     s.textContent = '.elc{background:#fff;border:1px solid #e5e7eb;border-radius:1rem;padding:.8rem;box-shadow:0 10px 24px rgba(15,23,42,.06)}.elb{border-radius:.8rem;padding:.5rem .75rem;font-size:.78rem;font-weight:800}.elb.a{background:linear-gradient(135deg,#4338ca,#6d28d9);color:#fff}.eli,.els,.elt{width:100%;border:1px solid #d1d5db;border-radius:.8rem;background:#fff;padding:.62rem .75rem;font-size:.83rem}.elt{min-height:82px;resize:vertical}.elm{display:flex;flex-wrap:wrap;gap:.45rem;align-items:center}.elitem{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.6rem;align-items:start;padding:.72rem 0}.elcheck{width:2.25rem;height:2.25rem;border-radius:.8rem;border:1px solid #cbd5e1;background:#fff;font-weight:900}.elmodal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:center;justify-content:center;padding:.8rem;z-index:120}.elmodal.o{display:flex}.elpanel{width:min(100%,760px);max-height:92vh;overflow:auto;background:#fff;border-radius:1.2rem;box-shadow:0 24px 60px rgba(15,23,42,.28)}.elkey{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.45rem}.elkey button{border-radius:.8rem;min-height:2.35rem;border:1px solid #d1d5db;background:#f8fafc;font-weight:800}.elcam{background:#020617;border-radius:1rem;overflow:hidden;position:relative;aspect-ratio:4/3}.elcam video{width:100%;height:100%;object-fit:cover}.elcam:after{content:"";position:absolute;inset:14%;border:3px solid rgba(255,255,255,.85);border-radius:1rem}.elstat{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem}.elstat>div{background:#f8fafc;border:1px solid #e5e7eb;border-radius:.85rem;padding:.55rem}@media(max-width:480px){.elstat{grid-template-columns:repeat(2,minmax(0,1fr))}}';
     s.textContent += '.elitem{padding:.56rem 0}.elstorecat-row{touch-action:none}.elstorecat-row.dragging{opacity:.58;transform:scale(.985)}.elstorecat-row.drop-before{box-shadow:inset 0 4px 0 #6366f1}.elstorecat-row.drop-after{box-shadow:inset 0 -4px 0 #6366f1}.elchipbtn{display:inline-flex;align-items:center;justify-content:center;width:1rem;height:1rem;border-radius:999px;background:rgba(255,255,255,.7);font-size:.72rem;font-weight:900;line-height:1;margin-left:.15rem}.elaction{display:inline-flex;align-items:center;justify-content:center;min-height:2.25rem;min-width:2.25rem;border:1px solid #cbd5e1;border-radius:.8rem;background:#fff;padding:.35rem .55rem;font-size:.78rem;font-weight:900;line-height:1;transition:transform .12s ease,background-color .12s ease,border-color .12s ease}.elaction:active{transform:scale(.96)}.elaction-gear{background:#eef2ff;border-color:#c7d2fe;color:#4338ca}.elaction-trash{background:#fef2f2;border-color:#fecaca;color:#b91c1c}.elaction-qty{background:#ecfdf5;border-color:#a7f3d0;color:#047857;min-width:7.8rem}@media(max-width:480px){.elitem{padding:.48rem 0}.elaction{min-height:2rem;min-width:2rem;padding:.28rem .42rem;font-size:.72rem}.elaction-qty{min-width:auto;max-width:100%}}.elcam.el-scan-success{animation:elcamScanSuccess 750ms ease-in-out 1;box-shadow:0 0 0 4px rgba(34,197,94,.82),0 0 0 12px rgba(34,197,94,.24)}@keyframes elcamScanSuccess{0%{box-shadow:0 0 0 0 rgba(34,197,94,0)}15%{box-shadow:0 0 0 4px rgba(34,197,94,.82),0 0 0 12px rgba(34,197,94,.22)}30%{box-shadow:0 0 0 0 rgba(34,197,94,0)}55%{box-shadow:0 0 0 4px rgba(34,197,94,.82),0 0 0 12px rgba(34,197,94,.22)}70%{box-shadow:0 0 0 0 rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}';
     s.textContent += '.elmetaicons{display:inline-flex;align-items:center;gap:.32rem;flex-wrap:wrap}.elmetaicon{display:inline-flex;align-items:center;justify-content:center;min-width:1.85rem;height:1.68rem;padding:0 .4rem;border-radius:999px;border:1px solid currentColor;line-height:1;background:#fff;box-shadow:0 1px 0 rgba(15,23,42,.03)}.elmetaicon svg{width:1rem;height:1rem;display:block}.elmetaicon-barcode{color:#2563eb;background:#eff6ff}.elmetaicon-note{color:#7c3aed;background:#f5f3ff}.elmetaicon-store{color:#0f766e;background:#ecfeff}.elmetaicon-qty{color:#b45309;background:#fffbeb}.elmetaicon-category{color:#be185d;background:#fdf2f8}.elsuggest{margin-top:.35rem;border:1px solid #dbeafe;border-radius:.9rem;background:#f8fbff;overflow:hidden}.elsuggest-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:.6rem;padding:.65rem .8rem;border:0;border-top:1px solid #e0e7ff;background:transparent;text-align:left}.elsuggest-btn:first-child{border-top:0}.elsuggest-btn:active{background:#eef2ff}.elpresence{display:flex;flex-wrap:wrap;gap:.45rem;align-items:center;min-height:1.5rem}.elnotifyrow{display:grid;grid-template-columns:minmax(0,1fr) 110px;gap:.75rem;align-items:center}.elnotifytag{display:inline-flex;align-items:center;justify-content:center;min-height:1.8rem;padding:0 .65rem;border-radius:999px;border:1px solid #d1d5db;background:#fff;font-size:.72rem;font-weight:800;color:#334155}.elnotifyselect{display:flex;flex-wrap:wrap;gap:.45rem}.elnotifyselect button{border-radius:999px;border:1px solid #cbd5e1;background:#fff;padding:.42rem .72rem;font-size:.75rem;font-weight:800}.elnotifyselect button.a{background:#e0e7ff;border-color:#a5b4fc;color:#3730a3}@media(max-width:480px){.elsuggest-btn{padding:.55rem .65rem}.elmetaicon{min-width:1.68rem;height:1.54rem;padding:0 .34rem}.elmetaicon svg{width:.92rem;height:.92rem}.elnotifyrow{grid-template-columns:1fr}}';
+    s.textContent += '.elinputstack{display:flex;flex-direction:column;gap:.45rem;min-width:0}.elinputgrid{display:grid;grid-template-columns:minmax(0,1fr) 108px 72px 50px;gap:.5rem;align-items:center}.eltitlewrap{position:relative;min-width:0}.eltitleinput{padding-left:2.8rem}.eltitlecam{position:absolute;left:.5rem;top:50%;transform:translateY(-50%);width:1.9rem;height:1.9rem;border-radius:.7rem;border:1px solid #cbd5e1;background:#fff;color:#475569;display:inline-flex;align-items:center;justify-content:center;font-size:.9rem;line-height:1}.eltitlecam.a{background:#fef2f2;border-color:#fecaca;color:#b91c1c}.eltitlecam.h{display:none}.eldetailtoggle{display:inline-flex;align-items:center;gap:.35rem;border:0;background:transparent;color:#64748b;font-size:.76rem;font-weight:800;padding:.1rem 0}.eldetailtoggle:active{transform:scale(.98)}.eldetailtoggle .arr{transition:transform .15s ease}.eldetailtoggle.o .arr{transform:rotate(180deg)}.eldetailpanel{display:grid;gap:.5rem}.eldetailrow{display:grid;gap:.5rem;align-items:center}@media(max-width:480px){.elinputgrid{grid-template-columns:minmax(0,1fr) 96px 64px 46px;gap:.35rem}.eltitleinput{padding-left:2.55rem}.eltitlecam{width:1.75rem;height:1.75rem;left:.45rem}.eldetailrow{grid-template-columns:1fr}}@media(min-width:481px){.eldetailrow{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}';
     document.head.appendChild(s);
 }
 
@@ -869,8 +871,8 @@ function renderScannerPanelActive(embedded = false) {
     const article = state.articles.find((a) => a.id === state.scanArticleId);
     const isArticleMode = state.scanMode === 'article-ean';
     const scannerTitle = isArticleMode ? `EAN zuordnen: ${escapeHtml(article?.title || 'Artikel')}` : state.scanMode === 'list-add' ? 'Scanner · Eingeben' : 'Scanner · Listenmodus';
-    const scannerText = isArticleMode ? 'Mehrere Codes können gesammelt und gemeinsam gespeichert werden.' : state.scanMode === 'list-add' ? 'Gefundene EANs werden direkt mit Menge, Einheit, Geschäft und Anmerkung hinzugefügt.' : 'Gefundene EANs öffnen die Mengenübernahme. Der Scan bleibt aktiv.';
-    const manualLabel = isArticleMode ? 'Code hinzufügen' : state.scanMode === 'list-add' ? 'Artikel hinzufügen' : 'Code übernehmen';
+    const scannerText = isArticleMode ? 'Mehrere Codes können gesammelt und gemeinsam gespeichert werden.' : state.scanMode === 'list-add' ? 'Gefundene EANs übernehmen Titel, Einheit, Menge und Details in die Eingabefelder. Hinzugefügt wird erst mit +.' : 'Gefundene EANs öffnen die Mengenübernahme. Der Scan bleibt aktiv.';
+    const manualLabel = isArticleMode ? 'Code hinzufügen' : state.scanMode === 'list-add' ? 'Werte übernehmen' : 'Code übernehmen';
     const shellClass = embedded ? 'mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 space-y-3' : 'elpanel p-4 sm:p-5 space-y-4';
     const titleClass = embedded ? 'text-base font-black text-gray-900' : 'text-xl font-black text-gray-900';
     const videoWrapClass = embedded ? 'elcam mx-auto w-full max-w-[92vw] sm:max-w-[70%]' : 'elcam';
@@ -882,7 +884,7 @@ function renderActionBar() {
     if (state.listMode === 'search') {
         return `<div class="elc !p-3 space-y-3"><div class="grid grid-cols-[auto_minmax(0,1fr)] gap-3"><div class="flex justify-center lg:justify-start">${renderModeToggle()}</div><div class="flex w-full items-center gap-2"><input id="el-search" class="eli text-center" placeholder="Suchen oder scannen..." value="${escapeHtml(state.search)}"><button class="elb ${cameraButtonClass()}" data-a="open-scan" title="Scanner ${state.scanOpen ? 'deaktivieren' : 'aktivieren'}">📷</button></div></div>${renderArticleSuggestionList('search')}${renderPresenceInline()}${state.scanOpen && state.scanMode !== 'article-ean' ? renderScannerPanelActive(true) : ''}</div>`;
     }
-    return `<div class="elc !p-3"><div class="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)] items-start"><div class="space-y-2"><div class="flex justify-center lg:justify-start">${renderModeToggle()}</div><div class="grid w-full grid-cols-[minmax(0,1fr)_110px] gap-2 lg:max-w-[210px]"><input id="el-q" class="eli text-center" value="${escapeHtml(state.q)}" placeholder="Menge"><select id="el-unit" class="els">${UNITS.map((u) => `<option value="${u}" ${state.unit === u ? 'selected' : ''}>${u}</option>`).join('')}</select></div></div><div class="w-full space-y-2"><div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center"><select id="el-store-add" class="els"><option value="">Geschäft zuordnen...</option>${state.stores.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}</select><input id="el-note" class="eli" placeholder="Anmerkung optional" value="${escapeHtml(state.note)}"><button class="elb ${cameraButtonClass()}" data-a="open-scan" title="Scanner ${state.scanOpen ? 'deaktivieren' : 'aktivieren'}">📷</button></div><div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_56px] items-center"><input id="el-title" class="eli" placeholder="Artikel eingeben..." value="${escapeHtml(state.title)}"><button class="elb a !px-0" data-a="add-item" ${!canAdd() ? 'disabled' : ''}>+</button></div>${renderArticleSuggestionList('title')}${state.storeIds.length ? `<div class="elm">${state.storeIds.map((id) => chip(`${escapeHtml(state.stores.find((s) => s.id === id)?.name || id)} <button data-a="del-store" data-id="${id}">×</button>`, 'bg-orange-100 text-orange-700')).join(' ')}</div>` : ''}${renderPresenceInline()}${state.scanOpen && state.scanMode !== 'article-ean' ? renderScannerPanelActive(true) : ''}</div></div>`;
+    return `<div class="elc !p-3 space-y-3"><div class="flex justify-center lg:justify-start">${renderModeToggle()}</div><div class="elinputstack"><div class="elinputgrid"><div class="eltitlewrap"><input id="el-title" class="eli eltitleinput" placeholder="Artikel eingeben..." value="${escapeHtml(state.title)}"><button id="el-title-scan" class="eltitlecam ${state.scanOpen ? 'a ' : ''}${String(state.title || '').trim() ? 'h' : ''}" data-a="open-scan" title="Scanner ${state.scanOpen ? 'deaktivieren' : 'aktivieren'}">📷</button></div><select id="el-unit" class="els">${UNITS.map((u) => `<option value="${u}" ${state.unit === u ? 'selected' : ''}>${u}</option>`).join('')}</select><input id="el-q" class="eli text-center" value="${escapeHtml(state.q)}" placeholder="Menge"><button class="elb a !px-0" data-a="add-item" ${!canAdd() ? 'disabled' : ''}>+</button></div><div id="el-title-suggestions">${renderArticleSuggestionList('title')}</div><div><button class="eldetailtoggle ${state.inputDetailsOpen ? 'o' : ''}" data-a="toggle-input-details"><span class="arr">⌄</span><span>Details hinzufügen</span></button></div>${state.inputDetailsOpen ? `<div class="eldetailpanel"><div class="eldetailrow"><select id="el-store-add" class="els"><option value="">Geschäft zuordnen...</option>${state.stores.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}</select><input id="el-note" class="eli" placeholder="Anmerkung optional" value="${escapeHtml(state.note)}"></div>${state.storeIds.length ? `<div class="elm">${state.storeIds.map((id) => chip(`${escapeHtml(state.stores.find((s) => s.id === id)?.name || id)} <button data-a="del-store" data-id="${id}">×</button>`, 'bg-orange-100 text-orange-700')).join(' ')}</div>` : ''}</div>` : ''}${renderPresenceInline()}${state.scanOpen && state.scanMode !== 'article-ean' ? renderScannerPanelActive(true) : ''}</div></div>`;
 }
 
 function renderNotificationCenterLegacy() {
@@ -1028,6 +1030,29 @@ function renderArticleSuggestionList(field) {
     return `<div class="elsuggest">${suggestions.map((article) => `<button type="button" class="elsuggest-btn" data-a="${action}" data-id="${article.id}"><span class="min-w-0 flex-1"><span class="block truncate text-sm font-bold text-slate-800">${escapeHtml(article.title || '')}</span><span class="block truncate text-[11px] text-slate-500">${fmtQty(article.defaultQuantity || 1)} ${escapeHtml(article.defaultUnit || 'Stück')}${article.categoryId ? ` · ${escapeHtml(state.categories.find((c) => c.id === article.categoryId)?.name || 'Ohne Kategorie')}` : ''}</span></span>${renderArticleMetaIcons(article)}</button>`).join('')}</div>`;
 }
 
+function articlePrefillNote(article) {
+    return String((article?.persistentNotes || []).map((entry) => String(entry || '').trim()).filter(Boolean).join(' · ')).trim();
+}
+
+function prefillInputFromArticle(article) {
+    if (!article) return;
+    const note = articlePrefillNote(article);
+    state.title = String(article.title || '');
+    state.q = formatEditableQty(article.defaultQuantity || 1) || '1';
+    state.unit = String(article.defaultUnit || 'Stück');
+    state.storeIds = [...(article.storeIds || [])];
+    state.note = note;
+    state.inputDetailsOpen = !!(state.storeIds.length || note);
+}
+
+function updateInputTitleUi() {
+    if (state.listMode !== 'input') return;
+    const suggestionHost = root?.querySelector('#el-title-suggestions');
+    if (suggestionHost) suggestionHost.innerHTML = renderArticleSuggestionList('title');
+    const scanButton = root?.querySelector('#el-title-scan');
+    if (scanButton) scanButton.classList.toggle('h', !!String(state.title || '').trim());
+}
+
 function renderPresenceInline() {
     if (!activeList()) return '';
     return `<div class="elpresence">${state.presence.length ? state.presence.map((p) => chip(`${escapeHtml(p.userName || p.userId)} (${escapeHtml(p.currentArea || 'Liste')})`, 'bg-emerald-100 text-emerald-700')).join(' ') : '<span class="text-xs text-gray-400">Niemand sonst gerade aktiv.</span>'}</div>`;
@@ -1051,7 +1076,7 @@ function openScanner(mode = 'shopping', articleId = '') {
     state.scanMode = mode;
     state.scanArticleId = articleId;
     state.scanCodes = [];
-    state.scanStatus = mode === 'article-ean' ? 'Kamera wird für die EAN-Erfassung gestartet...' : mode === 'list-add' ? 'Kamera wird gestartet. Gefundene EANs werden direkt hinzugefügt...' : 'Kamera wird gestartet. Gefundene EANs öffnen die Mengenübernahme...';
+    state.scanStatus = mode === 'article-ean' ? 'Kamera wird für die EAN-Erfassung gestartet...' : mode === 'list-add' ? 'Kamera wird gestartet. Gefundene EANs übernehmen die Eingabefelder...' : 'Kamera wird gestartet. Gefundene EANs öffnen die Mengenübernahme...';
     state.scanLastCode = '';
     state.scanLastAt = 0;
     render();
@@ -1385,7 +1410,7 @@ function onKeyDownActive(e) {
  function onInput(e) {
      const t = e.target;
      if (t.id === 'el-q') state.q = t.value;
-     if (t.id === 'el-title') { state.title = t.value; requestFocusAfterRender('el-title', t.selectionStart, t.selectionEnd); render(); return; }
+     if (t.id === 'el-title') { state.title = t.value; updateInputTitleUi(); return; }
      if (t.id === 'el-note') state.note = t.value;
      if (t.id === 'el-search') { state.search = t.value; requestFocusAfterRender('el-search', t.selectionStart, t.selectionEnd); render(); return; }
      if (t.id === 'el-article-search') { state.articleSearch = t.value; requestFocusAfterRender('el-article-search', t.selectionStart, t.selectionEnd); render(); return; }
@@ -1549,11 +1574,13 @@ async function addItem() {
         const ref = await addDoc(master('articles'), { title, defaultQuantity: quantity, defaultUnit: state.unit, categoryId: '', eanCodes: [], variants: [], persistentNotes: [], storeIds: [...state.storeIds], createdBy: uid(), createdByName: uname(), createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
         article = { id: ref.id, title, defaultQuantity: quantity, defaultUnit: state.unit, persistentNotes: [], eanCodes: [], storeIds: [...state.storeIds] };
     }
-    const persistentNote = article.persistentNotes?.length ? article.persistentNotes.join(' · ') : '';
-    await addDoc(sub(state.listId, 'items'), { articleId: article.id, title: article.title, quantity, unit: state.unit, categoryId: article.categoryId || '', storeIds: [...state.storeIds], status: 'open', note: state.note || '', persistentNote, eanCodes: article.eanCodes || [], createdAt: serverTimestamp(), createdBy: uid(), createdByName: uname() });
+    const persistentNote = articlePrefillNote(article);
+    const note = String(state.note || '').trim();
+    const itemNote = note && note === persistentNote ? '' : note;
+    await addDoc(sub(state.listId, 'items'), { articleId: article.id, title: article.title, quantity, unit: state.unit, categoryId: article.categoryId || '', storeIds: [...state.storeIds], status: 'open', note: itemNote, persistentNote, eanCodes: article.eanCodes || [], createdAt: serverTimestamp(), createdBy: uid(), createdByName: uname() });
     await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname(), storeOrder: activeList()?.storeOrder?.length ? activeList().storeOrder : state.stores.map((s) => s.id) });
     await logActivity('Artikel hinzugefügt', { title, quantity, unit: state.unit });
-    state.q = '1'; state.title = ''; state.note = ''; state.storeIds = []; render();
+    state.q = '1'; state.unit = 'Stück'; state.title = ''; state.note = ''; state.storeIds = []; state.inputDetailsOpen = false; render();
 }
 
 async function saveDetailItem() {
@@ -1768,8 +1795,10 @@ async function addScannedArticleToList(article, code = '') {
     const quantity = parseQty(state.q || String(article.defaultQuantity || '1')) || Number(article.defaultQuantity || 1) || 1;
     const unit = String(state.unit || article.defaultUnit || 'Stück') || 'Stück';
     const storeIds = state.storeIds.length ? [...state.storeIds] : [...(article.storeIds || [])];
-    const persistentNote = article.persistentNotes?.length ? article.persistentNotes.join(' · ') : '';
-    await addDoc(sub(state.listId, 'items'), { articleId: article.id, title: article.title, quantity, unit, categoryId: article.categoryId || '', storeIds, status: 'open', note: state.note || '', persistentNote, eanCodes: article.eanCodes || [], createdAt: serverTimestamp(), createdBy: uid(), createdByName: uname() });
+    const persistentNote = articlePrefillNote(article);
+    const note = String(state.note || '').trim();
+    const itemNote = note && note === persistentNote ? '' : note;
+    await addDoc(sub(state.listId, 'items'), { articleId: article.id, title: article.title, quantity, unit, categoryId: article.categoryId || '', storeIds, status: 'open', note: itemNote, persistentNote, eanCodes: article.eanCodes || [], createdAt: serverTimestamp(), createdBy: uid(), createdByName: uname() });
     await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname(), storeOrder: activeList()?.storeOrder?.length ? activeList().storeOrder : state.stores.map((s) => s.id) });
     await logActivity('Artikel per Scan hinzugefügt', { articleId: article.id, title: article.title, code, quantity, unit });
     state.scanStatus = `Hinzugefügt: ${article.title}`;
@@ -1846,7 +1875,9 @@ async function handleScanCode(code) {
         return;
     }
     if (state.scanMode === 'list-add') {
-        await addScannedArticleToList(article, code);
+        prefillInputFromArticle(article);
+        flashScanSuccess();
+        closeScannerModal();
         return;
     }
     state.scanStatus = `Gefunden: ${article.title}`;
@@ -1933,6 +1964,7 @@ async function onClick(e) {
     if (a === 'toggle-details') { state.detailsOpen = !state.detailsOpen; render(); return; }
     if (a === 'mode') { state.mode = MODES.some((entry) => entry.id === btn.dataset.v) ? btn.dataset.v : 'shop'; state.modePickerOpen = false; saveUserSetting(EL_MODE_KEY, state.mode); touchPresence(); render(); return; }
     if (a === 'quick-mode') { state.mode = 'shop'; state.listMode = btn.dataset.v === 'input' ? 'input' : 'search'; saveUserSetting(EL_MODE_KEY, state.mode); saveUserSetting(EL_LIST_MODE_KEY, state.listMode); touchPresence(); render(); return; }
+    if (a === 'toggle-input-details') { state.inputDetailsOpen = !state.inputDetailsOpen; render(); return; }
     if (a === 'section') { state.section = btn.dataset.v; saveUserSetting(EL_SECTION_KEY, state.section); touchPresence(); render(); return; }
     if (a === 'store-display') { state.storeDisplay = state.storeDisplay === 'split' ? 'combined' : 'split'; saveUserSetting(EL_STORE_KEY, state.storeDisplay); render(); return; }
     if (a === 'list') { selectList(btn.dataset.id); return; }
