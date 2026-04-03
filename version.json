@@ -1,14 +1,24 @@
 {
-  "version": "1.6.3",
-  "buildId": "20260402-7",
+  "version": "1.6.4",
+  "buildId": "20260402-8",
   "releaseDate": "2026-04-02",
-  "releaseTime": "10:24",
+  "releaseTime": "17:49",
   "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste: Shared-List-Listener ohne permission-denied, Abgehakt-Liste nicht mehr im Benachrichtigungscenter und Vorlage & Übertragung standardmäßig eingeklappt.",
-  "commitId": "66cfbe7",
+  "note": "Detailbearbeitung behält Einheiten und Verschieben von Artikeln zwischen Listen funktioniert wieder.",
+  "commitId": "f3ed029",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.6.4",
+      "buildId": "20260402-8",
+      "releaseDate": "2026-04-02",
+      "releaseTime": "17:49",
+      "bereich": "Einkaufsliste",
+      "note": "Detailbearbeitung behält Einheiten und Verschieben von Artikeln zwischen Listen funktioniert wieder.",
+      "commitId": "f3ed029",
+      "obligation": "false"
+    },
     {
       "version": "1.6.3",
       "buildId": "20260402-7",

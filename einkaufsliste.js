@@ -1567,11 +1567,42 @@ async function saveDetailItem() {
     const note = String(document.getElementById('el-d-note')?.value || '').trim();
     const persistentNote = String(document.getElementById('el-d-pnote')?.value || '').trim();
     if (!title) return alertUser('Bitte Produktnamen eingeben.', 'error');
-    const unit = String(document.getElementById('el-d-unit')?.value || '');
+    const unit = String(document.getElementById('el-d-unit')?.value || item.unit || 'Stück');
     const itemData = { title, quantity, categoryId, note, persistentNote, unit };
     await updateDoc(doc(sub(state.listId, 'items'), item.id), itemData);
     await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() });
     await logActivity('Artikel bearbeitet', { itemId: item.id, title, quantity });
+    render();
+}
+
+async function moveDetailItem() {
+    const item = state.items.find((x) => x.id === state.detailId);
+    if (!item) return;
+    if (!canEditItems()) return alertUser('Keine Berechtigung zum Verschieben.', 'error');
+    const targetListId = String(document.getElementById('el-d-move-list')?.value || '').trim();
+    if (!targetListId) return alertUser('Bitte zuerst eine Zielliste auswählen.', 'info');
+    if (targetListId === state.listId) return alertUser('Bitte eine andere Liste auswählen.', 'info');
+    const targetList = state.lists.find((x) => x.id === targetListId);
+    if (!targetList) return alertUser('Zielliste wurde nicht gefunden.', 'error');
+    if (!(canAdd(targetList) || canShop(targetList))) return alertUser('Keine Berechtigung für die Zielliste.', 'error');
+    if (!(await acquireLock(item.id))) return;
+    const sourceList = activeList();
+    const { id: _itemId, ...payload } = item;
+    await addDoc(sub(targetListId, 'items'), {
+        ...payload,
+        movedFromListId: sourceList?.id || '',
+        movedFromListName: sourceList?.name || '',
+        movedAt: serverTimestamp(),
+        movedBy: uid(),
+        movedByName: uname()
+    });
+    await deleteDoc(doc(sub(state.listId, 'items'), item.id));
+    await Promise.all([
+        updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() }),
+        updateDoc(listDoc(targetListId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() })
+    ]);
+    await logActivity('Artikel verschoben', { itemId: item.id, title: item.title, targetListId, targetListName: targetList.name || '' });
+    state.detailId = null;
     render();
 }
 
