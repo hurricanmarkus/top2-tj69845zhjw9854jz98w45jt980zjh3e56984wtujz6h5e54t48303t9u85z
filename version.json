@@ -1,14 +1,24 @@
 {
-  "version": "1.7.1",
-  "buildId": "20260403-2",
+  "version": "1.7.2",
+  "buildId": "20260403-3",
   "releaseDate": "2026-04-03",
-  "releaseTime": "10:07",
+  "releaseTime": "10:16",
   "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Eingabezeile und Detailbereich im Eingabemodus weiter für schmale Displays und die neue +Details-Zeile verfeinert.",
-  "commitId": "dd8fb62",
+  "note": "Suchmodus optisch an den Eingabemodus angeglichen: Umschalter mittig und Kamera links im Suchfeld integriert.",
+  "commitId": "660aa62",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.7.2",
+      "buildId": "20260403-3",
+      "releaseDate": "2026-04-03",
+      "releaseTime": "10:16",
+      "bereich": "Einkaufsliste",
+      "note": "Suchmodus optisch an den Eingabemodus angeglichen: Umschalter mittig und Kamera links im Suchfeld integriert.",
+      "commitId": "660aa62",
+      "obligation": "false"
+    },
     {
       "version": "1.7.1",
       "buildId": "20260403-2",
