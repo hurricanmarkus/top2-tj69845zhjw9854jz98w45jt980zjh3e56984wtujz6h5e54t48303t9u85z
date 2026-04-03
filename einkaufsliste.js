@@ -243,6 +243,12 @@ function resetInputSelection(clearTitle = false) {
     if (clearTitle) state.title = '';
 }
 
+function inputSelectionLocked() {
+    if (state.selectedVariantId) return true;
+    const article = state.selectedArticleId ? state.articles.find((entry) => entry.id === state.selectedArticleId) : null;
+    return !!article && !isVariantArticle(article);
+}
+
 function prefillInputFromArticle(article) {
     if (!article) return;
     const note = articlePrefillNote(article);
@@ -252,7 +258,7 @@ function prefillInputFromArticle(article) {
     state.title = String(article.title || '');
     state.q = formatEditableQty(article.defaultQuantity || 1) || '1';
     state.unit = String(article.defaultUnit || 'Stück');
-    state.storeIds = [...(article.storeIds || [])];
+    state.storeIds = isVariantArticle(article) ? [] : articleStoreIds(article).slice(0, 1);
     state.note = note;
     state.inputDetailsOpen = !!(state.storeIds.length || note || state.variantPickerArticleId);
 }
@@ -1127,12 +1133,14 @@ function renderActionBar() {
     }
     const selectionArticle = state.selectedArticleId ? state.articles.find((article) => article.id === state.selectedArticleId) : null;
     const selectionVariant = selectionArticle ? findVariantById(selectionArticle, state.selectedVariantId) : null;
+    const locked = inputSelectionLocked();
     const selectionBadge = selectionVariant
         ? chip(`Variante: ${escapeHtml(buildVariantGeneratedTitle(selectionArticle, selectionVariant))}`, 'bg-indigo-100 text-indigo-700')
-        : selectionArticle && isVariantArticle(selectionArticle)
-            ? chip(`Variantenartikel: ${escapeHtml(selectionArticle.title || '')}`, 'bg-amber-100 text-amber-800')
+        : selectionArticle
+            ? chip(`${isVariantArticle(selectionArticle) ? 'Variantenartikel' : 'Artikel'}: ${escapeHtml(selectionArticle.title || '')}`, isVariantArticle(selectionArticle) ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-700')
             : '';
-    return `<div class="elc !p-3 space-y-3"><div class="flex justify-center">${renderModeToggle()}</div><div class="elinputstack"><div class="elinputgrid"><select id="el-unit" class="els">${UNITS.map((u) => `<option value="${u}" ${state.unit === u ? 'selected' : ''}>${u}</option>`).join('')}</select><input id="el-q" class="eli text-center" value="${escapeHtml(state.q)}" placeholder="Menge"><div class="eltitlewrap"><input id="el-title" class="eli eltitleinput" placeholder="Artikel eingeben..." value="${escapeHtml(state.title)}"><button id="el-title-scan" class="eltitlecam ${state.scanOpen ? 'a ' : ''}${String(state.title || '').trim() ? 'h' : ''}" data-a="open-scan" title="Scanner ${state.scanOpen ? 'deaktivieren' : 'aktivieren'}">📷</button></div><button class="elb a !px-0" data-a="add-item" ${!canAdd() ? 'disabled' : ''}>+</button></div><div id="el-title-suggestions">${renderArticleSuggestionList('title')}</div>${selectionBadge ? `<div class="flex flex-wrap gap-2">${selectionBadge}</div>` : ''}${renderVariantPicker()}<div class="eldetailhead">${renderPresenceInline()}<button class="eldetailtoggle ${state.inputDetailsOpen ? 'o' : ''}" data-a="toggle-input-details">+ Details</button></div>${state.inputDetailsOpen ? `<div class="eldetailpanel"><div class="eldetailrow"><select id="el-store-add" class="els"><option value="">Geschäft zuordnen...</option>${state.stores.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}</select><input id="el-note" class="eli" placeholder="Anmerkung optional" value="${escapeHtml(state.note)}"></div>${state.storeIds.length ? `<div class="elm">${state.storeIds.map((id) => chip(`${escapeHtml(state.stores.find((s) => s.id === id)?.name || id)} <button data-a="del-store" data-id="${id}">×</button>`, 'bg-orange-100 text-orange-700')).join(' ')}</div>` : ''}</div>` : ''}${state.scanOpen && !String(state.scanMode || '').startsWith('article') ? renderScannerPanelActive(true) : ''}</div></div>`;
+    const titlePadRight = locked ? '5.75rem' : '3rem';
+    return `<div class="elc !p-3 space-y-3"><div class="flex justify-center">${renderModeToggle()}</div><div class="elinputstack"><div class="elinputgrid"><select id="el-unit" class="els">${UNITS.map((u) => `<option value="${u}" ${state.unit === u ? 'selected' : ''}>${u}</option>`).join('')}</select><input id="el-q" class="eli text-center" value="${escapeHtml(state.q)}" placeholder="Menge"><div class="eltitlewrap"><input id="el-title" class="eli eltitleinput ${locked ? 'bg-slate-100 cursor-not-allowed' : ''}" style="padding-right:${titlePadRight};" ${locked ? 'readonly aria-readonly="true"' : ''} placeholder="Artikel eingeben..." value="${escapeHtml(state.title)}"><button id="el-title-scan" class="eltitlecam ${state.scanOpen ? 'a ' : ''}${String(state.title || '').trim() ? 'h' : ''}" data-a="open-scan" title="Scanner ${state.scanOpen ? 'deaktivieren' : 'aktivieren'}">📷</button>${locked ? `<button id="el-title-clear" type="button" class="absolute right-[.45rem] top-1/2 -translate-y-1/2 rounded-full border border-slate-300 bg-slate-100 px-2 py-1 text-[11px] font-black text-slate-600" data-a="clear-input-selection">entfernen</button>` : ''}</div><button class="elb a !px-0" data-a="add-item" ${!canAdd() ? 'disabled' : ''}>+</button></div><div id="el-title-suggestions">${renderArticleSuggestionList('title')}</div>${selectionBadge ? `<div class="flex flex-wrap gap-2">${selectionBadge}</div>` : ''}<div class="eldetailhead">${renderPresenceInline()}<button class="eldetailtoggle ${state.inputDetailsOpen ? 'o' : ''}" data-a="toggle-input-details">+ Details</button></div>${state.inputDetailsOpen ? `<div class="eldetailpanel"><div class="eldetailrow"><select id="el-store-add" class="els"><option value="">Ohne Geschäft</option>${state.stores.map((s) => `<option value="${s.id}" ${state.storeIds[0] === s.id ? 'selected' : ''}>${escapeHtml(s.name)}</option>`).join('')}</select><input id="el-note" class="eli" placeholder="Anmerkung optional" value="${escapeHtml(state.note)}"></div></div>` : ''}${state.scanOpen && !String(state.scanMode || '').startsWith('article') ? renderScannerPanelActive(true) : ''}</div></div>`;
 }
 
 function renderNotificationCenterLegacy() {
@@ -1288,15 +1296,19 @@ function articleSuggestions(term, field = 'title') {
     source.forEach((article) => {
         const articleScores = [article.title, ...(article.aliases || [])].map((text) => suggestionScore(query, text)).filter(Boolean);
         const articleScore = articleScores.sort((a, b) => a.startsWith - b.startsWith || a.position - b.position || a.lengthDelta - b.lengthDelta)[0] || null;
-        if (articleScore) suggestions.push({ kind: isVariantArticle(article) ? 'article-variant' : 'article', article, variant: null, score: articleScore });
+        const variantMatches = [];
         (article.variants || []).forEach((variant) => {
             const variantScores = buildVariantSearchTerms(article, variant).map((text) => suggestionScore(query, text)).filter(Boolean);
             const variantScore = variantScores.sort((a, b) => a.startsWith - b.startsWith || a.position - b.position || a.lengthDelta - b.lengthDelta)[0] || null;
-            if (variantScore) suggestions.push({ kind: 'variant', article, variant, score: variantScore });
+            if (variantScore) variantMatches.push({ kind: 'variant', article, variant, score: variantScore });
         });
+        if (articleScore || variantMatches.length) {
+            suggestions.push({ kind: isVariantArticle(article) ? 'article-variant' : 'article', article, variant: null, score: articleScore || variantMatches[0].score });
+        }
+        suggestions.push(...variantMatches);
     });
     return suggestions
-        .sort((a, b) => a.score.startsWith - b.score.startsWith || a.score.position - b.score.position || a.score.lengthDelta - b.score.lengthDelta || (a.kind === 'variant' ? 0 : 1) - (b.kind === 'variant' ? 0 : 1) || buildVariantGeneratedTitle(a.article, a.variant).localeCompare(buildVariantGeneratedTitle(b.article, b.variant), 'de'))
+        .sort((a, b) => a.score.startsWith - b.score.startsWith || a.score.position - b.score.position || a.score.lengthDelta - b.score.lengthDelta || (a.kind === 'variant' ? 1 : 0) - (b.kind === 'variant' ? 1 : 0) || buildVariantGeneratedTitle(a.article, a.variant).localeCompare(buildVariantGeneratedTitle(b.article, b.variant), 'de'))
         .slice(0, 8);
 }
 
@@ -1305,20 +1317,36 @@ function renderArticleSuggestionList(field) {
     const suggestions = articleSuggestions(term, field);
     if (!suggestions.length) return '';
     const action = field === 'search' ? 'pick-search-suggestion' : 'pick-title-suggestion';
-    return `<div class="elsuggest">${suggestions.map((entry) => {
-        const article = entry.article;
-        const variant = entry.variant;
-        const isVariant = entry.kind === 'variant';
-        const title = isVariant ? buildVariantGeneratedTitle(article, variant) : String(article.title || '');
-        const metaLine = isVariant
-            ? `${fmtQty(variant?.quantity || 1)} ${escapeHtml(variant?.unit || 'Stück')} · ${escapeHtml(state.stores.find((store) => store.id === variant?.storeId)?.name || 'Ohne Geschäft')}`
+    const groups = [];
+    const groupMap = new Map();
+    suggestions.forEach((entry) => {
+        const articleId = String(entry.article?.id || '');
+        if (!groupMap.has(articleId)) {
+            const bucket = { article: entry.article, articleEntry: null, variantEntries: [] };
+            groupMap.set(articleId, bucket);
+            groups.push(bucket);
+        }
+        const bucket = groupMap.get(articleId);
+        if (entry.kind === 'variant') bucket.variantEntries.push(entry);
+        else bucket.articleEntry = entry;
+    });
+    return `<div class="elsuggest space-y-2">${groups.map((group) => {
+        const article = group.article;
+        const expanded = state.variantPickerArticleId === article.id;
+        const articleBadge = isVariantArticle(article) ? chip('Variantenartikel', 'bg-amber-100 text-amber-800') : '';
+        const articleMeta = isVariantArticle(article)
+            ? `${article.variants?.length || 0} Variante(n)`
             : `${fmtQty(article.defaultQuantity || 1)} ${escapeHtml(article.defaultUnit || 'Stück')}${article.categoryId ? ` · ${escapeHtml(state.categories.find((c) => c.id === article.categoryId)?.name || 'Ohne Kategorie')}` : ''}`;
-        const badge = isVariant
-            ? chip('Variante', 'bg-indigo-100 text-indigo-700')
-            : entry.kind === 'article-variant'
-                ? chip('Variantenartikel', 'bg-amber-100 text-amber-800')
-                : '';
-        return `<button type="button" class="elsuggest-btn" data-a="${action}" data-id="${article.id}" ${variant ? `data-variant="${variant.id}"` : ''}><span class="min-w-0 flex-1"><span class="flex flex-wrap items-center gap-2"><span class="block truncate text-sm font-bold text-slate-800">${escapeHtml(title)}</span>${badge}</span><span class="block truncate text-[11px] text-slate-500">${metaLine}</span>${isVariant ? `<span class="block truncate text-[11px] text-slate-400">Überbegriff: ${escapeHtml(article.title || '')}</span>` : (article.aliases || []).length ? `<span class="block truncate text-[11px] text-slate-400">Alias: ${escapeHtml(article.aliases.join(', '))}</span>` : ''}</span>${renderArticleMetaIcons(article)}</button>`;
+        const childEntries = expanded
+            ? (article.variants || []).map((variant) => ({ article, variant, kind: 'variant' }))
+            : group.variantEntries;
+        return `<div class="space-y-1"><button type="button" class="elsuggest-btn" data-a="${action}" data-id="${article.id}"><span class="min-w-0 flex-1"><span class="flex flex-wrap items-center gap-2"><span class="block truncate text-sm font-bold text-slate-800">${escapeHtml(String(article.title || ''))}</span>${articleBadge}</span><span class="block truncate text-[11px] text-slate-500">${articleMeta}</span>${!isVariantArticle(article) && (article.aliases || []).length ? `<span class="block truncate text-[11px] text-slate-400">Alias: ${escapeHtml(article.aliases.join(', '))}</span>` : isVariantArticle(article) ? `<span class="block truncate text-[11px] text-slate-400">Klicken zeigt alle Varianten.</span>` : ''}</span>${renderArticleMetaIcons(article)}</button>${childEntries.length ? `<div class="ml-4 space-y-1 border-l border-blue-200 pl-2">${childEntries.map((entry) => {
+            const variant = entry.variant;
+            const title = buildVariantGeneratedTitle(article, variant);
+            const metaLine = `${fmtQty(variant?.quantity || 1)} ${escapeHtml(variant?.unit || 'Stück')} · ${escapeHtml(state.stores.find((store) => store.id === variant?.storeId)?.name || 'Ohne Geschäft')}`;
+            const selected = state.selectedVariantId === variant?.id ? chip('Ausgewählt', 'bg-emerald-100 text-emerald-700') : '';
+            return `<button type="button" class="elsuggest-btn" data-a="pick-variant-choice" data-id="${article.id}" data-variant="${variant.id}"><span class="min-w-0 flex-1"><span class="flex flex-wrap items-center gap-2"><span class="block text-[11px] font-black text-blue-600">→</span><span class="block truncate text-sm font-bold text-slate-800">${escapeHtml(title)}</span>${selected}</span><span class="block truncate text-[11px] text-slate-500">${metaLine}</span></span></button>`;
+        }).join('')}</div>` : ''}</div>`;
     }).join('')}</div>`;
 }
 
@@ -1350,6 +1378,15 @@ function updateInputTitleUi() {
     if (state.listMode !== 'input') return;
     const suggestionHost = root?.querySelector('#el-title-suggestions');
     if (suggestionHost) suggestionHost.innerHTML = renderArticleSuggestionList('title');
+    const titleInput = root?.querySelector('#el-title');
+    const locked = inputSelectionLocked();
+    if (titleInput) {
+        titleInput.readOnly = locked;
+        titleInput.classList.toggle('bg-slate-100', locked);
+        titleInput.classList.toggle('cursor-not-allowed', locked);
+    }
+    const clearButton = root?.querySelector('#el-title-clear');
+    if (clearButton) clearButton.style.display = locked ? '' : 'none';
     const scanButton = root?.querySelector('#el-title-scan');
     if (scanButton) scanButton.classList.toggle('h', !!String(state.title || '').trim());
 }
@@ -2397,7 +2434,7 @@ function renderArticle() {
     if (!a) { el.innerHTML = ''; return; }
     const mode = String(a.articleMode || 'single') === 'variant' ? 'variant' : 'single';
     const variants = a.variants || [];
-    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="text-xl font-black text-gray-900">${a.id ? 'Artikel bearbeiten' : 'Artikel anlegen'}</div><div class="text-sm text-gray-500">Pflege Einzelartikel oder Variantenartikel direkt in diesem Dialog.</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-article">Schließen</button></div><div class="grid gap-2 sm:grid-cols-2"><button class="elb ${mode === 'single' ? 'a' : 'bg-gray-100 text-gray-700'}" data-a="article-mode" data-v="single">Ein Artikel</button><button class="elb ${mode === 'variant' ? 'a' : 'bg-gray-100 text-gray-700'}" data-a="article-mode" data-v="variant">Artikelvarianten</button></div><div class="space-y-2"><div class="text-xs font-black uppercase text-gray-500">Produkt / Überbegriff</div><input id="ela-title" class="eli" placeholder="Produkt" value="${escapeHtml(a.title || '')}"></div><div class="grid gap-3 sm:grid-cols-2"><select id="ela-cat" class="els"><option value="">Kategorie wählen...</option>${state.categories.map((c) => `<option value="${c.id}" ${a.categoryId === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}</select>${mode === 'single' ? `<div class="grid gap-3 grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"><input id="ela-q" class="eli text-center" placeholder="Standardmenge" value="${escapeHtml(formatEditableQty(a.defaultQuantity || 1))}"><select id="ela-unit" class="els">${UNITS.map((u) => `<option value="${u}" ${a.defaultUnit === u ? 'selected' : ''}>${u}</option>`).join('')}</select></div>` : `<textarea id="ela-aliases" class="elt" placeholder="Alternative Begriffe, eine Zeile pro Alias">${escapeHtml((a.aliases || []).join('\n'))}</textarea>`}</div>${mode === 'single' ? `<div class="space-y-2"><textarea id="ela-ean" class="elt" placeholder="EAN-Codes, eine Zeile pro Code">${escapeHtml((a.eanCodes || []).join('\n'))}</textarea>${a.id ? `<div class="flex justify-end"><button class="elb bg-red-100 text-red-700" data-a="capture-ean" data-id="${a.id}">EAN scannen</button></div>` : ''}<div class="elm">${state.stores.map((s) => `<label class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold ${(a.storeIds || []).includes(s.id) ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}"><input type="checkbox" data-a="art-store" data-id="${s.id}" ${(a.storeIds || []).includes(s.id) ? 'checked' : ''}> ${escapeHtml(s.name)}</label>`).join(' ')}</div></div>` : `<div class="space-y-3"><div class="flex flex-wrap items-center justify-between gap-2"><div><div class="text-xs font-black uppercase text-gray-500">Variantenfunktion</div><div class="text-sm text-gray-500">Jede Variante hat genau ein Geschäft und eigene EAN-Codes.</div></div><button class="elb a" data-a="add-article-variant">+ Variante</button></div>${variants.length ? variants.map((variant, index) => `<div class="rounded-2xl border border-indigo-100 bg-indigo-50 p-3 space-y-3" data-variant-row data-variant-id="${variant.id}"><div class="flex flex-wrap items-center justify-between gap-2"><div class="text-sm font-black text-indigo-900">Variante ${index + 1}</div><div class="flex flex-wrap gap-2"><button class="elb bg-white text-indigo-700" data-a="capture-variant-ean" data-id="${a.id || ''}" data-variant="${variant.id}" ${!a.id ? 'disabled' : ''}>EAN scannen</button><button class="elb bg-red-100 text-red-700" data-a="remove-article-variant" data-variant="${variant.id}">Entfernen</button></div></div><div class="grid gap-3 md:grid-cols-2"><input class="eli" data-variant-field="brand" placeholder="Marke" value="${escapeHtml(variant.brand || '')}"><input class="eli" data-variant-field="label" placeholder="Bezeichnung" value="${escapeHtml(variant.label || '')}"></div><div class="grid gap-3 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:grid-cols-[120px_160px_minmax(0,1fr)]"><input class="eli text-center" data-variant-field="quantity" placeholder="Menge" value="${escapeHtml(formatEditableQty(variant.quantity || 1))}"><select class="els" data-variant-field="unit">${UNITS.map((unit) => `<option value="${unit}" ${variant.unit === unit ? 'selected' : ''}>${unit}</option>`).join('')}</select><select class="els" data-variant-field="store"><option value="">Geschäft wählen...</option>${state.stores.map((store) => `<option value="${store.id}" ${variant.storeId === store.id ? 'selected' : ''}>${escapeHtml(store.name)}</option>`).join('')}</select></div><textarea class="elt" data-variant-field="ean" placeholder="EAN-Codes, eine Zeile pro Code">${escapeHtml((variant.eanCodes || []).join('\n'))}</textarea></div>`).join('') : '<div class="rounded-2xl border border-dashed border-slate-300 px-3 py-4 text-sm text-slate-400">Noch keine Varianten angelegt.</div>'}</div>`}<div class="space-y-2"><div class="text-xs font-black uppercase text-gray-500">Permanente Anmerkungen</div><textarea id="ela-note" class="elt" placeholder="Permanente Anmerkungen, je Zeile">${escapeHtml((a.persistentNotes || []).join('\n'))}</textarea></div><div class="flex flex-wrap justify-end gap-2">${a.id ? `<button class="elb bg-red-600 text-white" data-a="delete-article" data-id="${a.id}">Löschen</button>` : ''}<button class="elb bg-emerald-600 text-white" data-a="save-article">Speichern</button></div></div>`;
+    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="text-xl font-black text-gray-900">${a.id ? 'Artikel bearbeiten' : 'Artikel anlegen'}</div><div class="text-sm text-gray-500">Pflege Einzelartikel oder Variantenartikel direkt in diesem Dialog.</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-article">Schließen</button></div><div class="grid gap-2 sm:grid-cols-2"><button class="elb ${mode === 'single' ? 'a' : 'bg-gray-100 text-gray-700'}" data-a="article-mode" data-v="single">Ein Artikel</button><button class="elb ${mode === 'variant' ? 'a' : 'bg-gray-100 text-gray-700'}" data-a="article-mode" data-v="variant">Artikelvarianten</button></div><div class="space-y-2"><div class="text-xs font-black uppercase text-gray-500">Produkt / Überbegriff</div><input id="ela-title" class="eli" placeholder="Produkt" value="${escapeHtml(a.title || '')}"></div><div class="grid gap-3 sm:grid-cols-2"><select id="ela-cat" class="els"><option value="">Kategorie wählen...</option>${state.categories.map((c) => `<option value="${c.id}" ${a.categoryId === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}</select>${mode === 'single' ? `<div class="grid gap-3 grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"><input id="ela-q" class="eli text-center" placeholder="Standardmenge" value="${escapeHtml(formatEditableQty(a.defaultQuantity || 1))}"><select id="ela-unit" class="els">${UNITS.map((u) => `<option value="${u}" ${a.defaultUnit === u ? 'selected' : ''}>${u}</option>`).join('')}</select></div>` : `<textarea id="ela-aliases" class="elt" placeholder="Alternative Begriffe, eine Zeile pro Alias">${escapeHtml((a.aliases || []).join('\n'))}</textarea>`}</div>${mode === 'single' ? `<div class="space-y-2"><textarea id="ela-ean" class="elt" placeholder="EAN-Codes, eine Zeile pro Code">${escapeHtml((a.eanCodes || []).join('\n'))}</textarea>${a.id ? `<div class="flex justify-end"><button class="elb bg-red-100 text-red-700" data-a="capture-ean" data-id="${a.id}">EAN scannen</button></div>` : ''}<div class="elm">${state.stores.map((s) => `<label class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold ${(a.storeIds || []).includes(s.id) ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}"><input type="checkbox" data-a="art-store" data-id="${s.id}" ${(a.storeIds || []).includes(s.id) ? 'checked' : ''}> ${escapeHtml(s.name)}</label>`).join(' ')}</div></div>` : `<div class="space-y-3"><div class="flex flex-wrap items-center justify-between gap-2"><div><div class="text-xs font-black uppercase text-gray-500">Variantenfunktion</div><div class="text-sm text-gray-500">Jede Variante kann auch ohne Geschäft angelegt werden.</div></div><button class="elb a" data-a="add-article-variant">+ Variante</button></div>${variants.length ? variants.map((variant, index) => `<div class="rounded-2xl border border-indigo-100 bg-indigo-50 p-3 space-y-3" data-variant-row data-variant-id="${variant.id}"><div class="flex flex-wrap items-center justify-between gap-2"><div class="text-sm font-black text-indigo-900">Variante ${index + 1}</div><div class="flex flex-wrap gap-2"><button class="elb bg-white text-indigo-700" data-a="capture-variant-ean" data-id="${a.id || ''}" data-variant="${variant.id}" ${!a.id ? 'disabled' : ''}>EAN scannen</button><button class="elb bg-red-100 text-red-700" data-a="remove-article-variant" data-variant="${variant.id}">Entfernen</button></div></div><div class="grid gap-3 md:grid-cols-2"><input class="eli" data-variant-field="brand" placeholder="Marke" value="${escapeHtml(variant.brand || '')}"><input class="eli" data-variant-field="label" placeholder="Bezeichnung" value="${escapeHtml(variant.label || '')}"></div><div class="grid gap-3 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:grid-cols-[120px_160px_minmax(0,1fr)]"><input class="eli text-center" data-variant-field="quantity" placeholder="Menge" value="${escapeHtml(formatEditableQty(variant.quantity || 1))}"><select class="els" data-variant-field="unit">${UNITS.map((unit) => `<option value="${unit}" ${variant.unit === unit ? 'selected' : ''}>${unit}</option>`).join('')}</select><select class="els" data-variant-field="store"><option value="">Ohne Geschäft</option>${state.stores.map((store) => `<option value="${store.id}" ${variant.storeId === store.id ? 'selected' : ''}>${escapeHtml(store.name)}</option>`).join('')}</select></div><textarea class="elt" data-variant-field="ean" placeholder="EAN-Codes, eine Zeile pro Code">${escapeHtml((variant.eanCodes || []).join('\n'))}</textarea></div>`).join('') : '<div class="rounded-2xl border border-dashed border-slate-300 px-3 py-4 text-sm text-slate-400">Noch keine Varianten angelegt.</div>'}</div>`}<div class="space-y-2"><div class="text-xs font-black uppercase text-gray-500">Permanente Anmerkungen</div><textarea id="ela-note" class="elt" placeholder="Permanente Anmerkungen, je Zeile">${escapeHtml((a.persistentNotes || []).join('\n'))}</textarea></div><div class="flex flex-wrap justify-end gap-2">${a.id ? `<button class="elb bg-red-600 text-white" data-a="delete-article" data-id="${a.id}">Löschen</button>` : ''}<button class="elb bg-emerald-600 text-white" data-a="save-article">Speichern</button></div></div>`;
 }
 
 function openScanner(mode = 'shopping', articleId = '', variantId = '') {
@@ -2694,7 +2731,6 @@ async function saveArticle() {
         const variants = (draft.variants || []).filter((variant) => variant.label || variant.brand || variant.storeId || (variant.eanCodes || []).length).map((variant) => ({ id: variant.id || makeLocalId('variant'), brand: String(variant.brand || '').trim(), label: String(variant.label || '').trim(), quantity: parseQty(variant.quantity || '1') || 1, unit: normalizeVariantUnit(variant.unit || 'Stück'), eanCodes: Array.from(new Set((variant.eanCodes || []).map((entry) => String(entry || '').trim()).filter(Boolean))), storeId: String(variant.storeId || '').trim() }));
         if (!variants.length) return alertUser('Bitte mindestens eine Variante anlegen.', 'error');
         if (variants.some((variant) => !variant.label)) return alertUser('Jede Variante braucht eine Bezeichnung.', 'error');
-        if (variants.some((variant) => !variant.storeId)) return alertUser('Jede Variante braucht genau ein Geschäft.', 'error');
         payload = { ...basePayload, defaultQuantity: 1, defaultUnit: 'Stück', eanCodes: [], variants, storeIds: [] };
     } else {
         payload = { ...basePayload, defaultQuantity: parseQty(draft.defaultQuantity || '1') || 1, defaultUnit: normalizeVariantUnit(draft.defaultUnit || 'Stück'), eanCodes: draft.eanCodes || [], variants: [], storeIds: draft.storeIds || [] };
@@ -2742,10 +2778,8 @@ function onChange(e) {
     if (t.id === 'el-d-cat' && state.detailDraft) { state.detailDraft.categoryId = t.value; return; }
     if (t.id === 'el-d-store' && state.detailDraft) { state.detailDraft.storeId = t.value; return; }
     if (t.id === 'el-list-select' && t.value) { selectList(t.value); return; }
-    if (t.id === 'el-store-add' && t.value) {
-        if (state.selectedVariantId) state.storeIds = [t.value];
-        else if (!state.storeIds.includes(t.value)) state.storeIds.push(t.value);
-        t.value = '';
+    if (t.id === 'el-store-add') {
+        state.storeIds = t.value ? [t.value] : [];
         render();
         return;
     }
@@ -2781,7 +2815,9 @@ async function onClick(e) {
         const article = state.articles.find((x) => x.id === btn.dataset.id);
         const variant = article ? findVariantById(article, btn.dataset.variant) : null;
         if (article) {
-            if (variant) prefillInputFromVariant(article, variant); else prefillInputFromArticle(article);
+            if (variant) prefillInputFromVariant(article, variant);
+            else if (isVariantArticle(article)) { prefillInputFromArticle(article); state.variantPickerArticleId = article.id; }
+            else prefillInputFromArticle(article);
             requestFocusAfterRender('el-title');
             render();
         }
@@ -2791,7 +2827,9 @@ async function onClick(e) {
         const article = state.articles.find((x) => x.id === btn.dataset.id);
         const variant = article ? findVariantById(article, btn.dataset.variant) : null;
         if (article) {
-            state.search = variant ? buildVariantGeneratedTitle(article, variant) : article.title || '';
+            if (variant) state.search = buildVariantGeneratedTitle(article, variant);
+            else if (isVariantArticle(article)) { state.search = article.title || ''; state.variantPickerArticleId = article.id; }
+            else state.search = article.title || '';
             requestFocusAfterRender('el-search');
             render();
         }
@@ -2845,6 +2883,7 @@ async function onClick(e) {
     }
     if (a === 'save-article') { await saveArticle(); return; }
     if (a === 'save-unknown') { await saveUnknownCode(); return; }
+    if (a === 'clear-input-selection') { resetInputSelection(true); render(); return; }
     return await onClickActive(e);
 }
 

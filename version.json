@@ -1,14 +1,24 @@
 {
-  "version": "1.8.2",
-  "buildId": "20260403-8",
+  "version": "1.8.3",
+  "buildId": "20260403-9",
   "releaseDate": "2026-04-03",
-  "releaseTime": "14:22",
+  "releaseTime": "14:51",
   "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Artikelwartung reagiert wieder auf Buttons, weil der Root-Click-Listener jetzt den aktiven Handler in einkaufsliste.js verwendet.",
-  "commitId": "9d095e8",
+  "note": "Variantenartikel lassen sich jetzt hierarchisch in den Vorschlägen aufklappen, Varianten können ohne Geschäft gespeichert werden und die Auswahl sperrt das Titelfeld bis zum Entfernen.",
+  "commitId": "a9520ff",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.8.3",
+      "buildId": "20260403-9",
+      "releaseDate": "2026-04-03",
+      "releaseTime": "14:51",
+      "bereich": "Einkaufsliste",
+      "note": "Variantenartikel lassen sich jetzt hierarchisch in den Vorschlägen aufklappen, Varianten können ohne Geschäft gespeichert werden und die Auswahl sperrt das Titelfeld bis zum Entfernen.",
+      "commitId": "a9520ff",
+      "obligation": "false"
+    },
     {
       "version": "1.8.2",
       "buildId": "20260403-8",
