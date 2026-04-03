@@ -138,6 +138,29 @@ function getOptionTextForHistory(voteData, optionIndex) {
         : `${option.date} ${option.timeStart}`;
 }
 
+function parseVoteDateTime(dateValue, timeValue = '00:00') {
+    const dateText = String(dateValue || '').trim();
+    const timeText = String(timeValue || '00:00').trim() || '00:00';
+    if (!dateText) return null;
+    const parsed = new Date(`${dateText}T${timeText}`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function resolveFixedVoteDateTime(voteData) {
+    if (!voteData) return null;
+    const optionIndex = Number(voteData.fixedOptionIndex);
+    if (Number.isInteger(optionIndex) && optionIndex >= 0) {
+        const option = voteData.options?.[optionIndex];
+        const optionDateTime = parseVoteDateTime(option?.date, option?.timeStart || '00:00');
+        if (optionDateTime) return optionDateTime;
+    }
+    if (voteData.finalDate) {
+        const finalDate = typeof voteData.finalDate.toDate === 'function' ? voteData.finalDate.toDate() : new Date(voteData.finalDate);
+        if (!Number.isNaN(finalDate.getTime())) return finalDate;
+    }
+    return null;
+}
+
 function resolveHistoryChangeOptionIndex(change, voteData = currentVoteData) {
     if (!change || !voteData?.options) {
         return null;
@@ -4783,18 +4806,10 @@ function sortAndRenderAllVotes(allPolls) {
 
         // --- 2. Logik für "Vergangene Umfragen" (Punkt 3) ---
         if (isFixed) {
-            try {
-                const fixedOption = poll.options[poll.fixedOptionIndex];
-                // Kombiniere Datum (YYYY-MM-DD) und Startzeit (HH:MM)
-                const eventDateTime = new Date(`${fixedOption.date}T${fixedOption.timeStart}`);
-
-                // "Vergangen" ist, wenn das Event-Datum VOR dem Start von HEUTE liegt (d.h. gestern oder früher)
-                if (eventDateTime < today) {
-                    pastPolls.push(poll);
-                    continue; // Diese Umfrage ist "vergangen", sie erscheint nirgendwo anders.
-                }
-            } catch (e) {
-                console.error(`Fehler bei der Datumsprüfung für 'Vergangen': ${poll.id}`, e);
+            const eventDateTime = resolveFixedVoteDateTime(poll);
+            if (eventDateTime && eventDateTime < today) {
+                pastPolls.push(poll);
+                continue;
             }
         }
 

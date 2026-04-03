@@ -1,14 +1,24 @@
 {
-  "version": "1.8.5",
-  "buildId": "20260403-11",
+  "version": "1.8.6",
+  "buildId": "20260403-12",
   "releaseDate": "2026-04-03",
-  "releaseTime": "18:27",
+  "releaseTime": "20:20",
   "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Ladeblocker in der Einkaufsliste wurden behoben, Verwaltungsansichten stabilisiert und der PWA-Cache auf einen frischen Fix-Build angehoben.",
-  "commitId": "02d83bc",
+  "note": "EAN-Status und Listenlayout der Einkaufsliste wurden verfeinert und der Terminplaner gegen ungültige Vergangen-Datensätze abgesichert.",
+  "commitId": "34a7b1a",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.8.6",
+      "buildId": "20260403-12",
+      "releaseDate": "2026-04-03",
+      "releaseTime": "20:20",
+      "bereich": "Einkaufsliste",
+      "note": "EAN-Status und Listenlayout der Einkaufsliste wurden verfeinert und der Terminplaner gegen ungültige Vergangen-Datensätze abgesichert.",
+      "commitId": "34a7b1a",
+      "obligation": "false"
+    },
     {
       "version": "1.8.5",
       "buildId": "20260403-11",
