@@ -476,12 +476,15 @@ const APP_BUILD_META = document.querySelector('meta[name="top2-build-id"]');
 const CURRENT_APP_VERSION = String(APP_VERSION_META?.content || '0.0.0').trim();
 const CURRENT_BUILD_ID = String(APP_BUILD_META?.content || 'local').trim();
 const VERSION_INFO_URL = '/version.json';
-const VERSION_CHECK_INTERVAL_MS = 2 * 60 * 1000;
+const VERSION_CHECK_INTERVAL_MS = 30 * 1000;
+const VERSION_EARLY_RECHECK_DELAYS_MS = [4000, 12000];
 const UPDATE_DEFERRED_STORAGE_KEY = 'top2_update_deferred_version';
 
 let appUpdateCheckTimer = null;
-let appUpdateVisibilityListenerBound = false;
+let appUpdateLifecycleListenersBound = false;
+let appUpdateEarlyRechecksScheduled = false;
 let versionInstallProgressTimer = null;
+let versionCheckPromise = null;
 let appVersionState = {
     latestInfo: null,
     updateAvailable: false,
@@ -1128,7 +1131,7 @@ function updateFooterVersionUI(versionInfo, hasUpdate) {
         indicator.setAttribute('aria-label', 'Pflicht-Update verfuegbar');
     } else if (hasUpdate) {
         indicator.textContent = 'Update';
-        indicator.className = 'text-[11px] leading-none px-2 py-0.5 rounded bg-orange-500 text-white animate-pulse hover:bg-orange-400 transition';
+        indicator.className = 'text-[11px] leading-none px-2 py-0.5 rounded bg-yellow-400 text-gray-900 animate-pulse hover:bg-yellow-300 transition';
         indicator.style.fontFamily = 'inherit';
         indicator.setAttribute('aria-label', 'Update verfuegbar');
     } else {
@@ -1333,60 +1336,72 @@ async function installPendingAppUpdate(registration) {
 }
 
 async function checkAndPromptForAppUpdate(registration) {
-    if (registration) {
-        try {
-            await registration.update();
-        } catch (error) {
-            console.warn('Service Worker Update-Check fehlgeschlagen:', error);
-        }
+    if (versionCheckPromise) {
+        return versionCheckPromise;
     }
 
-    try {
-        const latestInfo = await fetchLatestVersionInfo();
-        appVersionState.latestInfo = latestInfo;
+    versionCheckPromise = (async () => {
+        if (registration) {
+            try {
+                await registration.update();
+            } catch (error) {
+                console.warn('Service Worker Update-Check fehlgeschlagen:', error);
+            }
+        }
 
-        const hasUpdate = isUpdateAvailable(latestInfo);
-        const isMandatoryUpdate = hasUpdate && parseBooleanFlag(latestInfo?.obligation);
-        const deferredSignature = getDeferredUpdateVersion();
-        const latestSignature = `${latestInfo.version || ''}|${latestInfo.buildId || ''}|${latestInfo.obligation ? '1' : '0'}`;
+        try {
+            const latestInfo = await fetchLatestVersionInfo();
+            appVersionState.latestInfo = latestInfo;
 
-        appVersionState.updateAvailable = hasUpdate;
-        appVersionState.mandatoryUpdate = isMandatoryUpdate;
-        updateFooterVersionUI(latestInfo, hasUpdate);
+            const hasUpdate = isUpdateAvailable(latestInfo);
+            const isMandatoryUpdate = hasUpdate && parseBooleanFlag(latestInfo?.obligation);
+            const deferredSignature = getDeferredUpdateVersion();
+            const latestSignature = `${latestInfo.version || ''}|${latestInfo.buildId || ''}|${latestInfo.obligation ? '1' : '0'}`;
 
-        if (!hasUpdate) {
-            setDeferredUpdateVersion('');
+            appVersionState.updateAvailable = hasUpdate;
+            appVersionState.mandatoryUpdate = isMandatoryUpdate;
+            updateFooterVersionUI(latestInfo, hasUpdate);
+
+            if (!hasUpdate) {
+                setDeferredUpdateVersion('');
+                setMandatoryContentLock(false);
+                closeVersionInfoModal();
+                startMainAppInitializationIfAllowed();
+                return;
+            }
+
+            if (isMandatoryUpdate) {
+                setDeferredUpdateVersion('');
+                setMandatoryContentLock(true);
+                openVersionInfoModal(latestInfo, { forceOpen: true });
+                return;
+            }
+
             setMandatoryContentLock(false);
-            closeVersionInfoModal();
+
+            if (deferredSignature && deferredSignature === latestSignature) {
+                return;
+            }
+
+            // Update ist verfuegbar: Badge ist sichtbar und blinkt, Modal oeffnet auf Klick.
+        } catch (error) {
+            console.warn('Version-Check fehlgeschlagen:', error);
+            appVersionState.updateAvailable = false;
+            appVersionState.mandatoryUpdate = false;
+            setMandatoryContentLock(false);
+            updateFooterVersionUI(appVersionState.latestInfo, appVersionState.updateAvailable);
+        } finally {
+            if (!appVersionState.initialCheckFinished) {
+                appVersionState.initialCheckFinished = true;
+            }
             startMainAppInitializationIfAllowed();
-            return;
         }
+    })();
 
-        if (isMandatoryUpdate) {
-            setDeferredUpdateVersion('');
-            setMandatoryContentLock(true);
-            openVersionInfoModal(latestInfo, { forceOpen: true });
-            return;
-        }
-
-        setMandatoryContentLock(false);
-
-        if (deferredSignature && deferredSignature === latestSignature) {
-            return;
-        }
-
-        // Update ist verfuegbar: Badge ist sichtbar und blinkt, Modal oeffnet auf Klick.
-    } catch (error) {
-        console.warn('Version-Check fehlgeschlagen:', error);
-        appVersionState.updateAvailable = false;
-        appVersionState.mandatoryUpdate = false;
-        setMandatoryContentLock(false);
-        updateFooterVersionUI(appVersionState.latestInfo, appVersionState.updateAvailable);
+    try {
+        return await versionCheckPromise;
     } finally {
-        if (!appVersionState.initialCheckFinished) {
-            appVersionState.initialCheckFinished = true;
-        }
-        startMainAppInitializationIfAllowed();
+        versionCheckPromise = null;
     }
 }
 
@@ -1404,13 +1419,26 @@ function registerAppServiceWorker() {
             }, VERSION_CHECK_INTERVAL_MS);
         }
 
-        if (!appUpdateVisibilityListenerBound) {
+        if (!appUpdateEarlyRechecksScheduled) {
+            VERSION_EARLY_RECHECK_DELAYS_MS.forEach((delay) => {
+                window.setTimeout(() => {
+                    checkAndPromptForAppUpdate(appVersionState.registration);
+                }, delay);
+            });
+            appUpdateEarlyRechecksScheduled = true;
+        }
+
+        if (!appUpdateLifecycleListenersBound) {
+            const triggerVersionCheck = () => checkAndPromptForAppUpdate(appVersionState.registration);
             document.addEventListener('visibilitychange', () => {
                 if (document.visibilityState === 'visible') {
-                    checkAndPromptForAppUpdate(registration);
+                    triggerVersionCheck();
                 }
             });
-            appUpdateVisibilityListenerBound = true;
+            window.addEventListener('focus', triggerVersionCheck);
+            window.addEventListener('pageshow', triggerVersionCheck);
+            window.addEventListener('online', triggerVersionCheck);
+            appUpdateLifecycleListenersBound = true;
         }
     };
 

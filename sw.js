@@ -1,5 +1,5 @@
 // // @ts-check
-const SW_VERSION = 'top2-v20260403-13';
+const SW_VERSION = 'top2-v20260403-14';
 
 const APP_CACHE = `${SW_VERSION}-app`;
 const ASSET_CACHE = `${SW_VERSION}-assets`;
@@ -9,7 +9,7 @@ const APP_SHELL_URLS = [
   '/index.html',
   '/index.html?source=pwa',
   '/manifest.json',
-  '/manifest.json?v=20260403-13',
+  '/manifest.json?v=20260403-14',
   '/style.css'
 ];
 
@@ -35,7 +35,6 @@ self.addEventListener('install', (event) => {
     const cache = await caches.open(APP_CACHE);
     await cache.addAll(APP_SHELL_URLS);
   })());
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {

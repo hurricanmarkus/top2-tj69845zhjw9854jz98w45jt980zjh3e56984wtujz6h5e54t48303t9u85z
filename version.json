@@ -1,14 +1,24 @@
 {
-  "version": "1.8.7",
-  "buildId": "20260403-13",
+  "version": "1.8.8",
+  "buildId": "20260403-14",
   "releaseDate": "2026-04-03",
-  "releaseTime": "20:37",
-  "bereich": "Einkaufsliste",
+  "releaseTime": "20:54",
+  "bereich": "Versionssystem",
   "timezone": "Europe/Vienna",
-  "note": "Artikelwartung blendet Variantenlisten im Stamm aus und zeigt den Varianten-EAN-Status direkt neben Bearbeiten.",
-  "commitId": "5dcb12d",
+  "note": "Optionale Updates zeigen jetzt nur noch einen gelb blinkenden Hinweis, Pflichtupdates bleiben erzwungen und die Prüfung reagiert deutlich schneller.",
+  "commitId": "c9cbb97",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.8.8",
+      "buildId": "20260403-14",
+      "releaseDate": "2026-04-03",
+      "releaseTime": "20:54",
+      "bereich": "Versionssystem",
+      "note": "Optionale Updates zeigen jetzt nur noch einen gelb blinkenden Hinweis, Pflichtupdates bleiben erzwungen und die Prüfung reagiert deutlich schneller.",
+      "commitId": "c9cbb97",
+      "obligation": "false"
+    },
     {
       "version": "1.8.7",
       "buildId": "20260403-13",
