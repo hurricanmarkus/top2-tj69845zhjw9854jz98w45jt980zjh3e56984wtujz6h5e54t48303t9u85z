@@ -9,7 +9,7 @@ const NOTIFY_ACTIONS = [
     { id: 'added', label: 'Hinzugefügt', description: 'Neue Artikel auf der Liste' },
     { id: 'checked', label: 'Abgehakt', description: 'Artikel wurden erledigt/gekauft' },
     { id: 'changed', label: 'Geändert', description: 'Einträge wurden bearbeitet' },
-    { id: 'invited', label: 'Zur Liste eingeladen', description: 'Du wurdest zu einer Liste hinzugefügt' }
+    { id: 'invited', label: 'Zur Liste eingeladen', description: 'Du wurdest zu einer Liste hinzugefügt' },
 ];
 const DEFAULTS = {
     categories: ['Obst', 'Gemüse', 'Tiefkühl', 'Süßigkeiten', 'Saison', 'Hygiene', 'Haushalt', 'Getränke'],
