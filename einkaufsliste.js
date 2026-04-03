@@ -90,18 +90,23 @@ const state = {
     scanOpen: false,
     scanMode: 'shopping',
     scanArticleId: '',
+    scanVariantId: '',
     scanCodes: [],
     scanStatus: '',
     scanLastCode: '',
     scanLastAt: 0,
     unknownCode: '',
     unknownArticleId: '',
+    unknownVariantId: '',
     dragStoreCategory: null,
     collab: { userId: '', accessFrom: '', accessUntil: '', canRead: true, canAdd: false, canShop: false, canManage: false, canManageWrite: false },
     lastTap: new Map(),
     missingEanOnly: false,
     storeNumbers: false,
     articleSearch: '',
+    selectedArticleId: '',
+    selectedVariantId: '',
+    variantPickerArticleId: '',
     checkedMenuOpen: false,
     checkedOpen: false,
     drafts: { category: '', store: '', remark: '', note: '' },
@@ -113,6 +118,201 @@ const state = {
     notificationBusy: false,
     notificationError: ''
 };
+
+function makeLocalId(prefix = 'id') {
+    return `${prefix}-${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+}
+
+function splitLinesUnique(value = '') {
+    return Array.from(new Set(String(value || '').split('\n').map((entry) => String(entry || '').trim()).filter(Boolean)));
+}
+
+function normalizeVariantUnit(unit) {
+    const value = String(unit || '').trim();
+    return UNITS.includes(value) ? value : 'Stück';
+}
+
+function createEmptyVariant(seed = {}) {
+    return {
+        id: String(seed.id || makeLocalId('variant')),
+        brand: String(seed.brand || '').trim(),
+        label: String(seed.label || seed.name || '').trim(),
+        quantity: formatEditableQty(seed.quantity || 1) || '1',
+        unit: normalizeVariantUnit(seed.unit || 'Stück'),
+        eanCodes: Array.from(new Set((seed.eanCodes || []).map((entry) => String(entry || '').trim()).filter(Boolean))),
+        storeId: String(seed.storeId || '').trim()
+    };
+}
+
+function isVariantArticle(article) {
+    return String(article?.articleMode || article?.mode || '').trim() === 'variant';
+}
+
+function articleStoreIds(article) {
+    if (!article) return [];
+    if (!isVariantArticle(article)) return [...(article.storeIds || [])];
+    return Array.from(new Set((article.variants || []).map((variant) => String(variant?.storeId || '').trim()).filter(Boolean)));
+}
+
+function normalizeArticle(article = {}) {
+    const rawVariants = Array.isArray(article.variants) ? article.variants : [];
+    const normalized = {
+        ...article,
+        articleMode: isVariantArticle(article) || rawVariants.some((variant) => String(variant?.brand || variant?.storeId || '').trim()) || (article.aliases || []).length ? 'variant' : 'single',
+        title: String(article.title || '').trim(),
+        aliases: Array.from(new Set((article.aliases || []).map((entry) => String(entry || '').trim()).filter(Boolean))),
+        defaultQuantity: Number(article.defaultQuantity || 1) || 1,
+        defaultUnit: normalizeVariantUnit(article.defaultUnit || 'Stück'),
+        categoryId: String(article.categoryId || '').trim(),
+        eanCodes: Array.from(new Set((article.eanCodes || []).map((entry) => String(entry || '').trim()).filter(Boolean))),
+        persistentNotes: Array.from(new Set((article.persistentNotes || []).map((entry) => String(entry || '').trim()).filter(Boolean))),
+        storeIds: Array.from(new Set((article.storeIds || []).map((entry) => String(entry || '').trim()).filter(Boolean))),
+        variants: rawVariants.map((variant, index) => createEmptyVariant({ ...variant, id: variant?.id || `${article.id || 'article'}-${index}` }))
+    };
+    if (normalized.articleMode === 'single') normalized.aliases = [];
+    return normalized;
+}
+
+function createEmptyArticleEditor(mode = 'single') {
+    return normalizeArticle({
+        articleMode: mode === 'variant' ? 'variant' : 'single',
+        title: '',
+        aliases: [],
+        defaultQuantity: 1,
+        defaultUnit: 'Stück',
+        categoryId: '',
+        eanCodes: [],
+        variants: mode === 'variant' ? [createEmptyVariant()] : [],
+        persistentNotes: [],
+        storeIds: []
+    });
+}
+
+function cloneArticleEditor(article) {
+    return normalizeArticle(JSON.parse(JSON.stringify(article || createEmptyArticleEditor())));
+}
+
+function findVariantById(article, variantId = '') {
+    if (!article || !variantId) return null;
+    return (article.variants || []).find((variant) => String(variant.id || '') === String(variantId || '')) || null;
+}
+
+function buildVariantGeneratedTitle(article, variant) {
+    if (!variant) return String(article?.title || '').trim();
+    const articleTitle = String(article?.title || '').trim();
+    const brand = String(variant.brand || '').trim();
+    const label = String(variant.label || '').trim();
+    if (brand && label) {
+        const normalizedBrand = brand.toLowerCase();
+        const normalizedLabel = label.toLowerCase();
+        return normalizedLabel.startsWith(`${normalizedBrand} `) ? label : `${brand} ${label}`.trim();
+    }
+    return label || articleTitle;
+}
+
+function buildVariantSearchTerms(article, variant) {
+    const articleTitle = String(article?.title || '').trim();
+    const aliases = article?.aliases || [];
+    const label = String(variant?.label || '').trim();
+    const brand = String(variant?.brand || '').trim();
+    const quantity = formatEditableQty(variant?.quantity || '').replace(',', '.');
+    const compactQuantity = quantity.replace('.', ',');
+    const unit = String(variant?.unit || '').trim();
+    const unitShort = unit === 'Gramm' ? 'g' : unit === 'Milliliter' ? 'ml' : unit === 'Liter' ? 'l' : unit === 'Kg' ? 'kg' : '';
+    return Array.from(new Set([
+        articleTitle,
+        ...aliases,
+        label,
+        brand,
+        buildVariantGeneratedTitle(article, variant),
+        [brand, label, quantity, unit].filter(Boolean).join(' '),
+        [label, quantity, unit].filter(Boolean).join(' '),
+        unitShort && quantity ? `${quantity}${unitShort}` : '',
+        unitShort && compactQuantity ? `${compactQuantity}${unitShort}` : ''
+    ].map((entry) => String(entry || '').trim()).filter(Boolean)));
+}
+
+function articlePrefillNote(article) {
+    return String((article?.persistentNotes || []).map((entry) => String(entry || '').trim()).filter(Boolean).join(' · ')).trim();
+}
+
+function resetInputSelection(clearTitle = false) {
+    state.selectedArticleId = '';
+    state.selectedVariantId = '';
+    state.variantPickerArticleId = '';
+    if (clearTitle) state.title = '';
+}
+
+function prefillInputFromArticle(article) {
+    if (!article) return;
+    const note = articlePrefillNote(article);
+    state.selectedArticleId = String(article.id || '');
+    state.selectedVariantId = '';
+    state.variantPickerArticleId = isVariantArticle(article) ? String(article.id || '') : '';
+    state.title = String(article.title || '');
+    state.q = formatEditableQty(article.defaultQuantity || 1) || '1';
+    state.unit = String(article.defaultUnit || 'Stück');
+    state.storeIds = [...(article.storeIds || [])];
+    state.note = note;
+    state.inputDetailsOpen = !!(state.storeIds.length || note || state.variantPickerArticleId);
+}
+
+function prefillInputFromVariant(article, variant) {
+    if (!article || !variant) return;
+    const note = articlePrefillNote(article);
+    state.selectedArticleId = String(article.id || '');
+    state.selectedVariantId = String(variant.id || '');
+    state.variantPickerArticleId = '';
+    state.title = buildVariantGeneratedTitle(article, variant);
+    state.q = formatEditableQty(variant.quantity || 1) || '1';
+    state.unit = String(variant.unit || 'Stück');
+    state.storeIds = variant.storeId ? [variant.storeId] : [];
+    state.note = note;
+    state.inputDetailsOpen = !!(state.storeIds.length || note);
+}
+
+function findExactArticleSelection(term) {
+    const query = String(term || '').trim().toLowerCase();
+    if (!query) return { article: null, variant: null };
+    for (const article of state.articles) {
+        const articleTerms = [article.title, ...(article.aliases || [])].map((entry) => String(entry || '').trim().toLowerCase()).filter(Boolean);
+        if (articleTerms.includes(query)) return { article, variant: null };
+        for (const variant of article.variants || []) {
+            const terms = buildVariantSearchTerms(article, variant).map((entry) => String(entry || '').trim().toLowerCase());
+            if (terms.includes(query)) return { article, variant };
+        }
+    }
+    return { article: null, variant: null };
+}
+
+function findArticleByCode(code = '') {
+    const query = String(code || '').trim();
+    if (!query) return { article: null, variant: null };
+    for (const article of state.articles) {
+        if ((article.eanCodes || []).includes(query)) return { article, variant: null };
+        for (const variant of article.variants || []) {
+            if ((variant.eanCodes || []).includes(query)) return { article, variant };
+        }
+    }
+    return { article: null, variant: null };
+}
+
+function suggestionScore(query, text) {
+    const value = String(text || '').trim().toLowerCase();
+    if (!value || !value.includes(query)) return null;
+    return {
+        startsWith: value.startsWith(query) ? 0 : 1,
+        position: value.indexOf(query),
+        lengthDelta: Math.abs(value.length - query.length)
+    };
+}
+
+function renderVariantPicker() {
+    if (!state.variantPickerArticleId || state.listMode !== 'input') return '';
+    const article = state.articles.find((entry) => entry.id === state.variantPickerArticleId);
+    if (!article || !isVariantArticle(article) || !(article.variants || []).length) return '';
+    return `<div class="elc border border-amber-200 bg-amber-50 space-y-2"><div class="flex flex-wrap items-center justify-between gap-2"><div><div class="text-sm font-black text-amber-900">Varianten auswählen</div><div class="text-xs text-amber-800">${escapeHtml(article.title || 'Variantenartikel')} hat ${article.variants.length} Variante(n).</div></div><button class="elb bg-white text-amber-800" data-a="close-variant-picker">Schließen</button></div><div class="space-y-2">${article.variants.map((variant) => `<button type="button" class="w-full rounded-2xl border border-amber-200 bg-white px-3 py-2 text-left" data-a="pick-variant-choice" data-id="${article.id}" data-variant="${variant.id}"><div class="flex flex-wrap items-center gap-2"><div class="min-w-0 flex-1"><div class="truncate text-sm font-black text-slate-900">${escapeHtml(buildVariantGeneratedTitle(article, variant))}</div><div class="truncate text-[11px] text-slate-500">${escapeHtml(state.stores.find((store) => store.id === variant.storeId)?.name || 'Ohne Geschäft')} · ${fmtQty(variant.quantity || 1)} ${escapeHtml(variant.unit || 'Stück')}</div></div>${state.selectedVariantId === variant.id ? chip('Ausgewählt', 'bg-emerald-100 text-emerald-700') : ''}</div></button>`).join('')}</div></div>`;
+}
 
 async function deleteListItem(itemId, activityLabel = 'Artikel gelöscht') {
     const item = state.items.find((x) => x.id === itemId);
@@ -504,17 +704,45 @@ async function saveNotificationSettings() {
 }
 
 async function saveNotificationTemplate() {
-    const payload = notificationTemplatePayload();
-    await saveUserSetting(EL_NOTIFY_TEMPLATE_KEY, payload);
-    state.notificationTemplate = payload;
-    alertUser('Vorlage für Benachrichtigungen gespeichert.', 'success');
-    render();
+    const cfg = state.notificationSettings;
+    if (!cfg) return alertUser('Keine Benachrichtigungseinstellungen verfügbar.', 'error');
+    saveUserSetting(EL_NOTIFY_TEMPLATE_KEY, cfg);
+    state.notificationTemplate = JSON.parse(JSON.stringify(cfg));
+    alertUser('Vorlage gespeichert.', 'success');
 }
 
-function applyNotificationTemplate() {
-    if (!state.notificationTemplate) return alertUser('Es ist noch keine gespeicherte Vorlage vorhanden.', 'info');
-    state.notificationSettings = normalizeNotificationSettings(state.notificationTemplate, state.listId);
-    render();
+function syncArticleEditorFromDom() {
+    const editor = state.articleEditor;
+    if (!editor) return null;
+    const titleInput = document.getElementById('ela-title');
+    if (!titleInput) return editor;
+    editor.title = String(titleInput.value || '');
+    editor.categoryId = String(document.getElementById('ela-cat')?.value || '');
+    editor.persistentNotes = splitLinesUnique(document.getElementById('ela-note')?.value || '');
+    if (String(editor.articleMode || 'single') === 'variant') {
+        editor.aliases = splitLinesUnique(document.getElementById('ela-aliases')?.value || '');
+        editor.eanCodes = [];
+        editor.storeIds = [];
+        editor.defaultQuantity = 1;
+        editor.defaultUnit = 'Stück';
+        editor.variants = Array.from(document.querySelectorAll('[data-variant-row]')).map((row) => createEmptyVariant({
+            id: row.dataset.variantId,
+            brand: row.querySelector('[data-variant-field="brand"]')?.value || '',
+            label: row.querySelector('[data-variant-field="label"]')?.value || '',
+            quantity: parseQty(row.querySelector('[data-variant-field="quantity"]')?.value || '1') || 1,
+            unit: row.querySelector('[data-variant-field="unit"]')?.value || 'Stück',
+            storeId: row.querySelector('[data-variant-field="store"]')?.value || '',
+            eanCodes: splitLinesUnique(row.querySelector('[data-variant-field="ean"]')?.value || '')
+        }));
+    } else {
+        editor.aliases = [];
+        editor.defaultQuantity = parseQty(document.getElementById('ela-q')?.value || '1') || 1;
+        editor.defaultUnit = normalizeVariantUnit(document.getElementById('ela-unit')?.value || 'Stück');
+        editor.eanCodes = splitLinesUnique(document.getElementById('ela-ean')?.value || '');
+        editor.variants = [];
+        editor.storeIds = Array.from(document.querySelectorAll('[data-a="art-store"]:checked')).map((entry) => String(entry.dataset.id || '').trim()).filter(Boolean);
+    }
+    return editor;
 }
 
 function toggleNotificationCopyTarget(listId) {
@@ -773,7 +1001,7 @@ function listenMasters() {
     root.dataset.masters = 'true';
     masterUnsubs.push(onSnapshot(query(master('categories'), where('createdBy', '==', uid())), (s) => { state.categories = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'de')); render(); }, (error) => reportListenerError('listenMasters:categories', error)));
     masterUnsubs.push(onSnapshot(query(master('stores'), where('createdBy', '==', uid())), (s) => { state.stores = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'de')); render(); }, (error) => reportListenerError('listenMasters:stores', error)));
-    masterUnsubs.push(onSnapshot(query(master('articles'), where('createdBy', '==', uid())), (s) => { state.articles = s.docs.map((d) => ({ id: d.id, ...d.data(), eanCodes: d.data().eanCodes || [], variants: d.data().variants || [], persistentNotes: d.data().persistentNotes || [], storeIds: d.data().storeIds || [] })).sort((a, b) => String(a.title).localeCompare(String(b.title), 'de')); render(); }, (error) => reportListenerError('listenMasters:articles', error)));
+    masterUnsubs.push(onSnapshot(query(master('articles'), where('createdBy', '==', uid())), (s) => { state.articles = s.docs.map((d) => normalizeArticle({ id: d.id, ...d.data() })).sort((a, b) => String(a.title).localeCompare(String(b.title), 'de')); render(); }, (error) => reportListenerError('listenMasters:articles', error)));
     masterUnsubs.push(onSnapshot(query(master('notes'), where('createdBy', '==', uid())), (s) => { state.remarks = s.docs.map((d) => ({ id: d.id, ...d.data() })); render(); }, (error) => reportListenerError('listenMasters:notes', error)));
     masterUnsubs.push(onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_master_notizen'), where('createdBy', '==', uid())), (s) => { state.notes = s.docs.map((d) => ({ id: d.id, ...d.data() })); render(); }, (error) => reportListenerError('listenMasters:notizen', error)));
 }
@@ -805,7 +1033,7 @@ function listenActiveList() {
             render();
         }, (error) => reportListenerError('listenActiveList:permissions:self', error)));
     }
-    activeUnsubs.push(onSnapshot(query(sub(list.id, 'items'), orderBy('createdAt', 'desc')), (s) => { state.items = s.docs.map((d) => ({ ...d.data(), id: d.id, storeIds: d.data().storeIds || [], eanCodes: d.data().eanCodes || [] })); render(); }, (error) => reportListenerError('listenActiveList:items', error)));
+    activeUnsubs.push(onSnapshot(query(sub(list.id, 'items'), orderBy('createdAt', 'desc')), (s) => { state.items = s.docs.map((d) => ({ ...d.data(), id: d.id, storeIds: d.data().storeIds || [], eanCodes: d.data().eanCodes || [], variantId: String(d.data().variantId || ''), variantBrand: String(d.data().variantBrand || ''), variantLabel: String(d.data().variantLabel || ''), variantStoreId: String(d.data().variantStoreId || '') })); render(); }, (error) => reportListenerError('listenActiveList:items', error)));
     activeUnsubs.push(onSnapshot(query(sub(list.id, 'presence'), orderBy('lastSeen', 'desc')), (s) => { state.presence = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((x) => Date.now() - (toDate(x.lastSeen)?.getTime() || 0) <= PRESENCE_MS); render(); }, (error) => reportListenerError('listenActiveList:presence', error)));
     activeUnsubs.push(onSnapshot(query(sub(list.id, 'activity'), orderBy('createdAt', 'desc'), limit(1)), (s) => { state.activity = s.docs[0] ? { id: s.docs[0].id, ...s.docs[0].data() } : null; render(); }, (error) => reportListenerError('listenActiveList:activity', error)));
     activeUnsubs.push(onSnapshot(sub(list.id, 'locks'), (s) => { state.locks.clear(); s.docs.forEach((d) => state.locks.set(d.id, { id: d.id, ...d.data() })); render(); }, (error) => reportListenerError('listenActiveList:locks', error)));
@@ -878,22 +1106,31 @@ function renderModeToggle() {
 
 function renderScannerPanelActive(embedded = false) {
     const article = state.articles.find((a) => a.id === state.scanArticleId);
-    const isArticleMode = state.scanMode === 'article-ean';
-    const scannerTitle = isArticleMode ? `EAN zuordnen: ${escapeHtml(article?.title || 'Artikel')}` : state.scanMode === 'list-add' ? 'Scanner · Eingeben' : 'Scanner · Listenmodus';
-    const scannerText = isArticleMode ? 'Mehrere Codes können gesammelt und gemeinsam gespeichert werden.' : state.scanMode === 'list-add' ? 'Gefundene EANs übernehmen Titel, Einheit, Menge und Details in die Eingabefelder. Hinzugefügt wird erst mit +.' : 'Gefundene EANs öffnen die Mengenübernahme. Der Scan bleibt aktiv.';
+    const variant = findVariantById(article, state.scanVariantId);
+    const isArticleMode = String(state.scanMode || '').startsWith('article');
+    const nextTarget = nextMissingEanTarget(state.scanArticleId, state.scanVariantId);
+    const scannerTitle = isArticleMode ? `EAN zuordnen: ${escapeHtml(variant ? buildVariantGeneratedTitle(article, variant) : (article?.title || 'Artikel'))}` : state.scanMode === 'list-add' ? 'Scanner · Eingeben' : 'Scanner · Listenmodus';
+    const scannerText = isArticleMode ? `Mehrere Codes können gesammelt und gemeinsam gespeichert werden.${variant ? ' Die EANs werden der gewählten Variante zugeordnet.' : ''}` : state.scanMode === 'list-add' ? 'Gefundene EANs übernehmen Titel, Einheit, Menge und Details in die Eingabefelder. Hinzugefügt wird erst mit +.' : 'Gefundene EANs öffnen die Mengenübernahme. Der Scan bleibt aktiv.';
     const manualLabel = isArticleMode ? 'Code hinzufügen' : state.scanMode === 'list-add' ? 'Werte übernehmen' : 'Code übernehmen';
     const shellClass = embedded ? 'mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 space-y-3' : 'elpanel p-4 sm:p-5 space-y-4';
     const titleClass = embedded ? 'text-base font-black text-gray-900' : 'text-xl font-black text-gray-900';
     const videoWrapClass = embedded ? 'elcam mx-auto w-full max-w-[92vw] sm:max-w-[70%]' : 'elcam';
-    return `<div class="${shellClass}"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="${titleClass}">${scannerTitle}</div><div class="text-sm text-gray-500">${scannerText}</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-scan">Schließen</button></div><div class="${videoWrapClass}"><video id="el-video" autoplay playsinline muted></video></div><div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"><input id="el-scan-manual" class="eli" placeholder="${isArticleMode ? 'EAN/QR eingeben oder per Scanner senden' : 'EAN/QR manuell eingeben'}"><button class="elb a w-full sm:w-auto" data-a="manual-scan">${manualLabel}</button></div><div id="el-scan-status" class="text-sm text-gray-500">${escapeHtml(state.scanStatus || 'Kamera wird gestartet...')}</div>${isArticleMode ? `<div class="elc space-y-2"><div class="text-xs font-bold uppercase text-gray-500">Erfasste Codes</div><div id="el-scan-collected" class="elm">${state.scanCodes.length ? state.scanCodes.map((code) => chip(`${escapeHtml(code)} <button type="button" class="elchipbtn" data-a="remove-scanned-code" data-id="${escapeHtml(code)}">×</button>`, 'bg-indigo-100 text-indigo-700')).join(' ') : '<span class="text-sm text-gray-400">Noch keine Codes erfasst.</span>'}</div></div><div class="flex flex-col sm:flex-row justify-end gap-2"><button class="elb bg-emerald-600 text-white w-full sm:w-auto" data-a="save-scanned-codes" ${state.scanCodes.length ? '' : 'disabled'}>OK</button><button class="elb bg-indigo-600 text-white w-full sm:w-auto" data-a="save-scanned-codes-next" ${state.scanCodes.length && nextMissingEanArticle(state.scanArticleId) ? '' : 'disabled'}>Nächsten Artikel ohne EAN</button></div>` : ''}</div>`;
+    return `<div class="${shellClass}"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="${titleClass}">${scannerTitle}</div><div class="text-sm text-gray-500">${scannerText}</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-scan">Schließen</button></div><div class="${videoWrapClass}"><video id="el-video" autoplay playsinline muted></video></div><div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"><input id="el-scan-manual" class="eli" placeholder="${isArticleMode ? 'EAN/QR eingeben oder per Scanner senden' : 'EAN/QR manuell eingeben'}"><button class="elb a w-full sm:w-auto" data-a="manual-scan">${manualLabel}</button></div><div id="el-scan-status" class="text-sm text-gray-500">${escapeHtml(state.scanStatus || 'Kamera wird gestartet...')}</div>${isArticleMode ? `<div class="elc space-y-2"><div class="text-xs font-bold uppercase text-gray-500">Erfasste Codes</div><div id="el-scan-collected" class="elm">${state.scanCodes.length ? state.scanCodes.map((code) => chip(`${escapeHtml(code)} <button type="button" class="elchipbtn" data-a="remove-scanned-code" data-id="${escapeHtml(code)}">×</button>`, 'bg-indigo-100 text-indigo-700')).join(' ') : '<span class="text-sm text-gray-400">Noch keine Codes erfasst.</span>'}</div></div><div class="flex flex-col sm:flex-row justify-end gap-2"><button class="elb bg-emerald-600 text-white w-full sm:w-auto" data-a="save-scanned-codes" ${state.scanCodes.length ? '' : 'disabled'}>OK</button><button class="elb bg-indigo-600 text-white w-full sm:w-auto" data-a="save-scanned-codes-next" ${state.scanCodes.length && nextTarget ? '' : 'disabled'}>${nextTarget?.variant ? 'Nächste Variante ohne EAN' : 'Nächsten Artikel ohne EAN'}</button></div>` : ''}</div>`;
 }
 
 function renderActionBar() {
     if (state.mode === 'manage' || state.mode === 'notify') return '';
     if (state.listMode === 'search') {
-        return `<div class="elc !p-3 space-y-3"><div class="flex justify-center">${renderModeToggle()}</div><div class="eltitlewrap"><input id="el-search" class="eli eltitleinput" placeholder="Suchen oder scannen..." value="${escapeHtml(state.search)}"><button class="eltitlecam ${state.scanOpen ? 'a' : ''}" data-a="open-scan" title="Scanner ${state.scanOpen ? 'deaktivieren' : 'aktivieren'}">📷</button></div>${renderArticleSuggestionList('search')}${renderPresenceInline()}${state.scanOpen && state.scanMode !== 'article-ean' ? renderScannerPanelActive(true) : ''}</div>`;
+        return `<div class="elc !p-3 space-y-3"><div class="flex justify-center">${renderModeToggle()}</div><div class="eltitlewrap"><input id="el-search" class="eli eltitleinput" placeholder="Suchen oder scannen..." value="${escapeHtml(state.search)}"><button class="eltitlecam ${state.scanOpen ? 'a' : ''}" data-a="open-scan" title="Scanner ${state.scanOpen ? 'deaktivieren' : 'aktivieren'}">📷</button></div>${renderArticleSuggestionList('search')}${renderPresenceInline()}${state.scanOpen && !String(state.scanMode || '').startsWith('article') ? renderScannerPanelActive(true) : ''}</div>`;
     }
-    return `<div class="elc !p-3 space-y-3"><div class="flex justify-center">${renderModeToggle()}</div><div class="elinputstack"><div class="elinputgrid"><select id="el-unit" class="els">${UNITS.map((u) => `<option value="${u}" ${state.unit === u ? 'selected' : ''}>${u}</option>`).join('')}</select><input id="el-q" class="eli text-center" value="${escapeHtml(state.q)}" placeholder="Menge"><div class="eltitlewrap"><input id="el-title" class="eli eltitleinput" placeholder="Artikel eingeben..." value="${escapeHtml(state.title)}"><button id="el-title-scan" class="eltitlecam ${state.scanOpen ? 'a ' : ''}${String(state.title || '').trim() ? 'h' : ''}" data-a="open-scan" title="Scanner ${state.scanOpen ? 'deaktivieren' : 'aktivieren'}">📷</button></div><button class="elb a !px-0" data-a="add-item" ${!canAdd() ? 'disabled' : ''}>+</button></div><div id="el-title-suggestions">${renderArticleSuggestionList('title')}</div><div class="eldetailhead">${renderPresenceInline()}<button class="eldetailtoggle ${state.inputDetailsOpen ? 'o' : ''}" data-a="toggle-input-details">+ Details</button></div>${state.inputDetailsOpen ? `<div class="eldetailpanel"><div class="eldetailrow"><select id="el-store-add" class="els"><option value="">Geschäft zuordnen...</option>${state.stores.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}</select><input id="el-note" class="eli" placeholder="Anmerkung optional" value="${escapeHtml(state.note)}"></div>${state.storeIds.length ? `<div class="elm">${state.storeIds.map((id) => chip(`${escapeHtml(state.stores.find((s) => s.id === id)?.name || id)} <button data-a="del-store" data-id="${id}">×</button>`, 'bg-orange-100 text-orange-700')).join(' ')}</div>` : ''}</div>` : ''}${state.scanOpen && state.scanMode !== 'article-ean' ? renderScannerPanelActive(true) : ''}</div></div>`;
+    const selectionArticle = state.selectedArticleId ? state.articles.find((article) => article.id === state.selectedArticleId) : null;
+    const selectionVariant = selectionArticle ? findVariantById(selectionArticle, state.selectedVariantId) : null;
+    const selectionBadge = selectionVariant
+        ? chip(`Variante: ${escapeHtml(buildVariantGeneratedTitle(selectionArticle, selectionVariant))}`, 'bg-indigo-100 text-indigo-700')
+        : selectionArticle && isVariantArticle(selectionArticle)
+            ? chip(`Variantenartikel: ${escapeHtml(selectionArticle.title || '')}`, 'bg-amber-100 text-amber-800')
+            : '';
+    return `<div class="elc !p-3 space-y-3"><div class="flex justify-center">${renderModeToggle()}</div><div class="elinputstack"><div class="elinputgrid"><select id="el-unit" class="els">${UNITS.map((u) => `<option value="${u}" ${state.unit === u ? 'selected' : ''}>${u}</option>`).join('')}</select><input id="el-q" class="eli text-center" value="${escapeHtml(state.q)}" placeholder="Menge"><div class="eltitlewrap"><input id="el-title" class="eli eltitleinput" placeholder="Artikel eingeben..." value="${escapeHtml(state.title)}"><button id="el-title-scan" class="eltitlecam ${state.scanOpen ? 'a ' : ''}${String(state.title || '').trim() ? 'h' : ''}" data-a="open-scan" title="Scanner ${state.scanOpen ? 'deaktivieren' : 'aktivieren'}">📷</button></div><button class="elb a !px-0" data-a="add-item" ${!canAdd() ? 'disabled' : ''}>+</button></div><div id="el-title-suggestions">${renderArticleSuggestionList('title')}</div>${selectionBadge ? `<div class="flex flex-wrap gap-2">${selectionBadge}</div>` : ''}${renderVariantPicker()}<div class="eldetailhead">${renderPresenceInline()}<button class="eldetailtoggle ${state.inputDetailsOpen ? 'o' : ''}" data-a="toggle-input-details">+ Details</button></div>${state.inputDetailsOpen ? `<div class="eldetailpanel"><div class="eldetailrow"><select id="el-store-add" class="els"><option value="">Geschäft zuordnen...</option>${state.stores.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}</select><input id="el-note" class="eli" placeholder="Anmerkung optional" value="${escapeHtml(state.note)}"></div>${state.storeIds.length ? `<div class="elm">${state.storeIds.map((id) => chip(`${escapeHtml(state.stores.find((s) => s.id === id)?.name || id)} <button data-a="del-store" data-id="${id}">×</button>`, 'bg-orange-100 text-orange-700')).join(' ')}</div>` : ''}</div>` : ''}${state.scanOpen && !String(state.scanMode || '').startsWith('article') ? renderScannerPanelActive(true) : ''}</div></div>`;
 }
 
 function renderNotificationCenterLegacy() {
@@ -963,8 +1200,17 @@ function sortItemsForShopDisplay(items, forcedStoreId = '') {
 
 function filteredManageArticles() {
     return state.articles.filter((a) => {
-        const hasAnyEan = !!(a.eanCodes?.length || a.variants?.some((v) => v?.eanCodes?.length));
-        const matchesSearch = !state.articleSearch.trim() || [a.title, ...(a.eanCodes || [])].filter(Boolean).some((v) => String(v).toLowerCase().includes(state.articleSearch.toLowerCase()));
+        const query = state.articleSearch.trim().toLowerCase();
+        const hasAnyEan = isVariantArticle(a)
+            ? !!(a.eanCodes?.length || a.variants?.every((variant) => (variant.eanCodes || []).length))
+            : !!(a.eanCodes?.length);
+        const searchTexts = [
+            a.title,
+            ...(a.aliases || []),
+            ...(a.eanCodes || []),
+            ...(a.variants || []).flatMap((variant) => [...buildVariantSearchTerms(a, variant), ...(variant.eanCodes || [])])
+        ].filter(Boolean).map((entry) => String(entry).toLowerCase());
+        const matchesSearch = !query || searchTexts.some((text) => text.includes(query));
         return (!state.missingEanOnly || !hasAnyEan) && matchesSearch;
     });
 }
@@ -1024,24 +1270,32 @@ function listSuggestionArticles() {
         if (articleId) articleIds.add(articleId);
         if (title) titles.add(title);
     });
-    return state.articles.filter((article) => articleIds.has(String(article.id || '').trim()) || titles.has(String(article.title || '').trim().toLowerCase()));
+    return state.articles.filter((article) => {
+        if (articleIds.has(String(article.id || '').trim())) return true;
+        const articleTexts = [article.title, ...(article.aliases || [])].map((entry) => String(entry || '').trim().toLowerCase()).filter(Boolean);
+        if (articleTexts.some((text) => titles.has(text))) return true;
+        return (article.variants || []).some((variant) => buildVariantSearchTerms(article, variant).some((text) => titles.has(String(text || '').trim().toLowerCase())));
+    });
 }
 
 function articleSuggestions(term, field = 'title') {
     const query = String(term || '').trim().toLowerCase();
     if (!query) return [];
     const source = field === 'search' ? listSuggestionArticles() : state.articles;
-    return source
-        .map((article) => {
-            const title = String(article.title || '').toLowerCase();
-            if (!title.includes(query)) return null;
-            const startsWith = title.startsWith(query) ? 0 : 1;
-            return { article, startsWith, lengthDelta: Math.abs(title.length - query.length) };
-        })
-        .filter(Boolean)
-        .sort((a, b) => a.startsWith - b.startsWith || a.lengthDelta - b.lengthDelta || String(a.article.title || '').localeCompare(String(b.article.title || ''), 'de'))
-        .slice(0, 8)
-        .map((entry) => entry.article);
+    const suggestions = [];
+    source.forEach((article) => {
+        const articleScores = [article.title, ...(article.aliases || [])].map((text) => suggestionScore(query, text)).filter(Boolean);
+        const articleScore = articleScores.sort((a, b) => a.startsWith - b.startsWith || a.position - b.position || a.lengthDelta - b.lengthDelta)[0] || null;
+        if (articleScore) suggestions.push({ kind: isVariantArticle(article) ? 'article-variant' : 'article', article, variant: null, score: articleScore });
+        (article.variants || []).forEach((variant) => {
+            const variantScores = buildVariantSearchTerms(article, variant).map((text) => suggestionScore(query, text)).filter(Boolean);
+            const variantScore = variantScores.sort((a, b) => a.startsWith - b.startsWith || a.position - b.position || a.lengthDelta - b.lengthDelta)[0] || null;
+            if (variantScore) suggestions.push({ kind: 'variant', article, variant, score: variantScore });
+        });
+    });
+    return suggestions
+        .sort((a, b) => a.score.startsWith - b.score.startsWith || a.score.position - b.score.position || a.score.lengthDelta - b.score.lengthDelta || (a.kind === 'variant' ? 0 : 1) - (b.kind === 'variant' ? 0 : 1) || buildVariantGeneratedTitle(a.article, a.variant).localeCompare(buildVariantGeneratedTitle(b.article, b.variant), 'de'))
+        .slice(0, 8);
 }
 
 function renderArticleSuggestionList(field) {
@@ -1049,11 +1303,21 @@ function renderArticleSuggestionList(field) {
     const suggestions = articleSuggestions(term, field);
     if (!suggestions.length) return '';
     const action = field === 'search' ? 'pick-search-suggestion' : 'pick-title-suggestion';
-    return `<div class="elsuggest">${suggestions.map((article) => `<button type="button" class="elsuggest-btn" data-a="${action}" data-id="${article.id}"><span class="min-w-0 flex-1"><span class="block truncate text-sm font-bold text-slate-800">${escapeHtml(article.title || '')}</span><span class="block truncate text-[11px] text-slate-500">${fmtQty(article.defaultQuantity || 1)} ${escapeHtml(article.defaultUnit || 'Stück')}${article.categoryId ? ` · ${escapeHtml(state.categories.find((c) => c.id === article.categoryId)?.name || 'Ohne Kategorie')}` : ''}</span></span>${renderArticleMetaIcons(article)}</button>`).join('')}</div>`;
-}
-
-function articlePrefillNote(article) {
-    return String((article?.persistentNotes || []).map((entry) => String(entry || '').trim()).filter(Boolean).join(' · ')).trim();
+    return `<div class="elsuggest">${suggestions.map((entry) => {
+        const article = entry.article;
+        const variant = entry.variant;
+        const isVariant = entry.kind === 'variant';
+        const title = isVariant ? buildVariantGeneratedTitle(article, variant) : String(article.title || '');
+        const metaLine = isVariant
+            ? `${fmtQty(variant?.quantity || 1)} ${escapeHtml(variant?.unit || 'Stück')} · ${escapeHtml(state.stores.find((store) => store.id === variant?.storeId)?.name || 'Ohne Geschäft')}`
+            : `${fmtQty(article.defaultQuantity || 1)} ${escapeHtml(article.defaultUnit || 'Stück')}${article.categoryId ? ` · ${escapeHtml(state.categories.find((c) => c.id === article.categoryId)?.name || 'Ohne Kategorie')}` : ''}`;
+        const badge = isVariant
+            ? chip('Variante', 'bg-indigo-100 text-indigo-700')
+            : entry.kind === 'article-variant'
+                ? chip('Variantenartikel', 'bg-amber-100 text-amber-800')
+                : '';
+        return `<button type="button" class="elsuggest-btn" data-a="${action}" data-id="${article.id}" ${variant ? `data-variant="${variant.id}"` : ''}><span class="min-w-0 flex-1"><span class="flex flex-wrap items-center gap-2"><span class="block truncate text-sm font-bold text-slate-800">${escapeHtml(title)}</span>${badge}</span><span class="block truncate text-[11px] text-slate-500">${metaLine}</span>${isVariant ? `<span class="block truncate text-[11px] text-slate-400">Überbegriff: ${escapeHtml(article.title || '')}</span>` : (article.aliases || []).length ? `<span class="block truncate text-[11px] text-slate-400">Alias: ${escapeHtml(article.aliases.join(', '))}</span>` : ''}</span>${renderArticleMetaIcons(article)}</button>`;
+    }).join('')}</div>`;
 }
 
 function parseDetailPersistentNotes(value) {
@@ -1080,17 +1344,6 @@ function initDetailDraft(item, article = state.articles.find((entry) => entry.id
     };
 }
 
-function prefillInputFromArticle(article) {
-    if (!article) return;
-    const note = articlePrefillNote(article);
-    state.title = String(article.title || '');
-    state.q = formatEditableQty(article.defaultQuantity || 1) || '1';
-    state.unit = String(article.defaultUnit || 'Stück');
-    state.storeIds = [...(article.storeIds || [])];
-    state.note = note;
-    state.inputDetailsOpen = !!(state.storeIds.length || note);
-}
-
 function updateInputTitleUi() {
     if (state.listMode !== 'input') return;
     const suggestionHost = root?.querySelector('#el-title-suggestions');
@@ -1105,11 +1358,34 @@ function renderPresenceInline() {
 }
 
 function nextMissingEanArticle(currentId = '') {
-    const missing = filteredManageArticles().filter((a) => !(a.eanCodes?.length || a.variants?.some((v) => v?.eanCodes?.length)));
+    const missing = filteredManageArticles().filter((a) => (isVariantArticle(a)
+        ? !(a.variants || []).length || (a.variants || []).some((variant) => !(variant.eanCodes || []).length)
+        : !(a.eanCodes || []).length));
     if (!missing.length) return null;
     if (!currentId) return missing[0];
     const index = missing.findIndex((a) => a.id === currentId);
     return missing[index + 1] || null;
+}
+
+function nextMissingEanTarget(currentArticleId = '', currentVariantId = '') {
+    const targets = [];
+    filteredManageArticles().forEach((article) => {
+        if (isVariantArticle(article)) {
+            if (!(article.variants || []).length) {
+                targets.push({ article, variant: null, articleId: article.id, variantId: '', label: article.title || 'Artikel' });
+                return;
+            }
+            (article.variants || []).forEach((variant) => {
+                if (!(variant.eanCodes || []).length) targets.push({ article, variant, articleId: article.id, variantId: variant.id, label: buildVariantGeneratedTitle(article, variant) });
+            });
+            return;
+        }
+        if (!(article.eanCodes || []).length) targets.push({ article, variant: null, articleId: article.id, variantId: '', label: article.title || 'Artikel' });
+    });
+    if (!targets.length) return null;
+    if (!currentArticleId && !currentVariantId) return targets[0];
+    const index = targets.findIndex((target) => target.articleId === currentArticleId && target.variantId === currentVariantId);
+    return targets[index + 1] || null;
 }
 
 function canConfirmPurchase(p = state.purchase) {
@@ -1257,7 +1533,7 @@ function renderBody() {
     if (!canManage()) return '<div class="elc text-sm text-red-700">Keine Verwaltungsberechtigung für diese Liste.</div>';
     if (state.section === 'general') return `<div class="space-y-3"><div class="elc"><div class="elstat"><div><div class="text-[11px] font-bold uppercase text-gray-500">Aktive Listen</div><div class="text-xl font-black text-indigo-700">${state.lists.filter((l) => l.active !== false).length}</div></div><div><div class="text-[11px] font-bold uppercase text-gray-500">Offene Artikel</div><div class="text-xl font-black text-orange-700">${state.items.filter((x) => x.status !== 'checked').length}</div></div><div><div class="text-[11px] font-bold uppercase text-gray-500">Letztes Update</div><div class="text-sm font-black text-slate-700">${dt(activeList()?.updatedAt)}</div></div></div></div>${state.lists.map((l) => `<div class="elc"><div class="flex justify-between gap-2"><div><div class="font-bold text-sm">${escapeHtml(l.name)}</div><div class="text-xs text-gray-500">${dt(l.updatedAt)} · ${escapeHtml(l.updatedByName || l.ownerName || '—')}</div></div><div class="text-xs font-bold text-gray-600">${l.id === state.listId ? state.items.filter((x) => x.status !== 'checked').length : 0} offen</div></div></div>`).join('')}</div>`;
     if (state.section === 'stores') return `<div class="space-y-3"><div class="elc flex flex-wrap gap-2"><input id="el-draft-store" class="eli" placeholder="Neues Geschäft" value="${escapeHtml(state.drafts.store)}"><button class="elb a" data-a="add-store" ${!canManageWrite() ? 'disabled' : ''}>+ Geschäft</button></div>${effectiveStoreOrder(activeList()).map((id, i, arr) => { const s = state.stores.find((x) => x.id === id); if (!s) return ''; const categoryNames = (s.categoryOrder || []).map((catId) => state.categories.find((c) => c.id === catId)?.name).filter(Boolean); return `<div class="elc space-y-2"><div class="flex flex-wrap justify-between gap-2 items-start"><div><div class="font-bold text-sm">${escapeHtml(s.name)}</div><div class="text-xs text-gray-500">${categoryNames.length ? `${categoryNames.length} Kategorie(n) für Sortierung gewählt` : 'Noch keine Kategorien ausgewählt'}</div></div><div class="flex flex-wrap gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="store-up" data-id="${s.id}" ${i === 0 || !canManageWrite() ? 'disabled' : ''}>↑</button><button class="elb bg-gray-100 text-gray-700" data-a="store-down" data-id="${s.id}" ${i === arr.length - 1 || !canManageWrite() ? 'disabled' : ''}>↓</button><button class="elb bg-indigo-100 text-indigo-700" data-a="open-store-categories" data-id="${s.id}" ${!canManageWrite() ? 'disabled' : ''}>Kategorienwartung</button><button class="elb bg-red-600 text-white" data-a="del-store-master" data-id="${s.id}" ${!canManageWrite() ? 'disabled' : ''}>Löschen</button></div></div><div class="elm">${categoryNames.length ? categoryNames.map((name) => chip(escapeHtml(name), 'bg-indigo-100 text-indigo-700')).join(' ') : '<span class="text-xs text-gray-400">Keine Kategorien sortiert.</span>'}</div></div>`; }).join('')}</div>`;
-    if (state.section === 'articles') return `<div class="space-y-3"><div class="elc flex flex-wrap gap-2"><input id="el-article-search" class="eli" placeholder="Artikel suchen..." value="${escapeHtml(state.articleSearch)}"><label class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold bg-slate-100 text-slate-700"><input type="checkbox" id="el-missing-ean" ${state.missingEanOnly ? 'checked' : ''}> Ohne EAN</label><button class="elb a" data-a="open-article" ${!canManageWrite() ? 'disabled' : ''}>+ Artikel</button></div>${filteredManageArticles().map((a) => { const hasAnyEan = articleHasBarcode(a); return `<div class="elc space-y-2"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="flex flex-wrap items-center gap-2"><div class="font-bold text-sm">${escapeHtml(a.title)}</div>${renderArticleMetaIcons(a)}</div><div class="text-xs text-gray-500">${fmtQty(a.defaultQuantity || 1)} ${escapeHtml(a.defaultUnit || 'Stück')} · ${escapeHtml(state.categories.find((c) => c.id === a.categoryId)?.name || 'Ohne Kategorie')}</div></div><div class="flex flex-wrap gap-2">${hasAnyEan ? chip('EAN OK', 'bg-emerald-100 text-emerald-700') : `<button class="elb bg-red-100 text-red-700" data-a="capture-ean" data-id="${a.id}" ${!canManageWrite() ? 'disabled' : ''}>ohne EAN</button>`}<button class="elb bg-gray-100 text-gray-700" data-a="edit-article" data-id="${a.id}" ${!canManageWrite() ? 'disabled' : ''}>Bearbeiten</button></div></div><div class="text-xs text-gray-600">${escapeHtml((a.persistentNotes || []).join(' · ')) || '<span class="text-gray-400">Keine permanente Anmerkung.</span>'}</div><div class="elm">${(a.eanCodes || []).length ? (a.eanCodes || []).map((code) => chip(escapeHtml(code))).join(' ') : '<span class="text-xs text-gray-400">Keine Haupt-EAN</span>'}</div></div>`; }).join('') || '<div class="elc text-sm text-gray-400">Keine Artikel gefunden.</div>'}</div>`;
+    if (state.section === 'articles') return `<div class="space-y-3"><div class="elc flex flex-wrap gap-2"><input id="el-article-search" class="eli" placeholder="Artikel suchen..." value="${escapeHtml(state.articleSearch)}"><label class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold bg-slate-100 text-slate-700"><input type="checkbox" id="el-missing-ean" ${state.missingEanOnly ? 'checked' : ''}> Ohne EAN</label><button class="elb a" data-a="open-article" ${!canManageWrite() ? 'disabled' : ''}>+ Artikel</button></div>${filteredManageArticles().map((a) => { const missingEan = isVariantArticle(a) ? !(a.variants || []).length || (a.variants || []).some((variant) => !(variant.eanCodes || []).length) : !(a.eanCodes || []).length; const summary = isVariantArticle(a) ? `${a.variants.length} Variante(n)${a.aliases?.length ? ` · ${a.aliases.length} Alias` : ''}` : `${fmtQty(a.defaultQuantity || 1)} ${escapeHtml(a.defaultUnit || 'Stück')}`; return `<div class="elc space-y-2"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="flex flex-wrap items-center gap-2"><div class="font-bold text-sm">${escapeHtml(a.title)}</div>${isVariantArticle(a) ? chip('Variantenartikel', 'bg-amber-100 text-amber-800') : chip('Ein Artikel', 'bg-slate-100 text-slate-700')}${renderArticleMetaIcons(a)}</div><div class="text-xs text-gray-500">${summary}${a.categoryId ? ` · ${escapeHtml(state.categories.find((c) => c.id === a.categoryId)?.name || 'Ohne Kategorie')}` : ''}</div></div><div class="flex flex-wrap gap-2">${missingEan ? `<button class="elb bg-red-100 text-red-700" data-a="capture-ean" data-id="${a.id}" ${!canManageWrite() ? 'disabled' : ''}>EAN scannen</button>` : chip('EAN OK', 'bg-emerald-100 text-emerald-700')}<button class="elb bg-gray-100 text-gray-700" data-a="edit-article" data-id="${a.id}" ${!canManageWrite() ? 'disabled' : ''}>Bearbeiten</button></div></div>${a.aliases?.length ? `<div class="text-xs text-slate-500">Alias: ${escapeHtml(a.aliases.join(', '))}</div>` : ''}<div class="text-xs text-gray-600">${escapeHtml((a.persistentNotes || []).join(' · ')) || '<span class="text-gray-400">Keine permanente Anmerkung.</span>'}</div><div class="elm">${isVariantArticle(a) ? (a.variants || []).map((variant) => chip(`${escapeHtml(buildVariantGeneratedTitle(a, variant))} · ${escapeHtml(state.stores.find((store) => store.id === variant.storeId)?.name || 'Ohne Geschäft')} · ${(variant.eanCodes || []).length} EAN`, 'bg-indigo-50 text-indigo-700')).join(' ') || '<span class="text-xs text-gray-400">Keine Varianten angelegt.</span>' : ((a.eanCodes || []).length ? (a.eanCodes || []).map((code) => chip(escapeHtml(code))).join(' ') : '<span class="text-xs text-gray-400">Keine Haupt-EAN</span>')}</div></div>`; }).join('') || '<div class="elc text-sm text-gray-400">Keine Artikel gefunden.</div>'}</div>`;
     if (state.section === 'categories') return `<div class="space-y-3"><div class="elc flex flex-wrap gap-2"><input id="el-draft-category" class="eli" placeholder="Neue Kategorie" value="${escapeHtml(state.drafts.category)}"><button class="elb a" data-a="add-category" ${!canManageWrite() ? 'disabled' : ''}>+ Kategorie</button></div>${state.categories.map((c) => `<div class="elc flex flex-wrap justify-between gap-2"><div class="font-bold text-sm">${escapeHtml(c.name)}</div><button class="elb bg-red-600 text-white" data-a="del-category" data-id="${c.id}" ${!canManageWrite() ? 'disabled' : ''}>Löschen</button></div>`).join('')}</div>`;
     if (state.section === 'remarks') return `<div class="space-y-3"><div class="elc flex flex-wrap gap-2"><input id="el-draft-remark" class="eli" placeholder="Häufige Anmerkung" value="${escapeHtml(state.drafts.remark)}"><button class="elb a" data-a="add-remark" ${!canManageWrite() ? 'disabled' : ''}>+ Anmerkung</button></div>${state.remarks.map((n) => `<div class="elc flex flex-wrap justify-between gap-2"><div class="font-bold text-sm">${escapeHtml(n.text || n.name || '')}</div><button class="elb bg-red-600 text-white" data-a="del-remark" data-id="${n.id}" ${!canManageWrite() ? 'disabled' : ''}>Löschen</button></div>`).join('') || '<div class="elc text-sm text-gray-400">Keine Anmerkungen.</div>'}</div>`;
     return `<div class="space-y-3"><div class="elc flex flex-wrap gap-2"><input id="el-draft-note" class="eli" placeholder="Meta-Notiz" value="${escapeHtml(state.drafts.note)}"><button class="elb a" data-a="add-note" ${!canManageWrite() ? 'disabled' : ''}>+ Notiz</button></div>${state.notes.map((n) => `<div class="elc flex flex-wrap justify-between gap-2"><div class="font-bold text-sm">${escapeHtml(n.text || n.name || '')}</div><button class="elb bg-red-600 text-white" data-a="del-note" data-id="${n.id}" ${!canManageWrite() ? 'disabled' : ''}>Löschen</button></div>`).join('') || '<div class="elc text-sm text-gray-400">Keine Notizen.</div>'}</div>`;
@@ -1287,7 +1563,8 @@ function renderItem(item) {
     const controls = itemActionsVisible
         ? `<button class="elaction elaction-trash" data-a="delete-item-direct" data-id="${item.id}" title="Eintrag ohne Rückfrage löschen">🗑</button><button class="elaction elaction-gear" data-a="open-detail-item" data-id="${item.id}" title="Produkt bearbeiten">⚙</button>`
         : `<button class="elcheck" data-a="check" data-id="${item.id}" title="Abhaken">✓</button>`;
-    return `<div class="elitem border-t border-gray-100"><button type="button" class="text-left min-w-0 flex-1" data-a="edit-item" data-id="${item.id}" title="Doppelklick für Bearbeitungsaktionen"><div class="flex flex-wrap gap-2 items-center"><div class="font-bold text-sm text-gray-900 truncate flex-1">${escapeHtml(ell(item.title, 40))}</div>${renderItemMetaIcons(item)}${chip(`${fmtQty(item.quantity)} ${escapeHtml(item.unit || '')}`, 'bg-indigo-50 text-indigo-700')}${state.categories.find((c) => c.id === item.categoryId) ? chip(escapeHtml(state.categories.find((c) => c.id === item.categoryId).name), 'bg-amber-50 text-amber-700') : ''}${locked ? chip(`gesperrt von ${escapeHtml(lock.userName || lock.userId)}`, 'bg-red-100 text-red-700') : ''}${restItem ? chip('Rest', 'bg-orange-100 text-orange-800 ring-1 ring-orange-300') : ''}</div><div class="text-xs text-gray-500 mt-1">${escapeHtml(stores)}${item.restoredAt ? ` · Wiederhergestellt von ${escapeHtml(item.restoredByName || '—')} · ${dt(item.restoredAt)}` : ''}</div>${item.persistentNote ? `<div class="text-xs text-gray-600 mt-2">${escapeHtml(item.persistentNote)}</div>` : ''}${item.note ? `<div class="text-xs text-gray-600 mt-1">${escapeHtml(item.note)}</div>` : ''}</button><div class="flex items-center justify-end gap-1 sm:gap-2 flex-wrap sm:flex-nowrap">${qtyActionVisible ? `<button class="elaction elaction-qty text-[11px] sm:text-xs px-2 sm:px-3 whitespace-nowrap" data-a="quantity" data-id="${item.id}" title="Menge übernehmen"><span class="sm:hidden">Menge</span><span class="hidden sm:inline">Menge übernehmen</span></button>` : ''}${controls}</div></div>`;
+    const variantInfo = item.variantId ? chip(`Variante${item.variantBrand ? ` · ${escapeHtml(item.variantBrand)}` : ''}${item.variantStoreId ? ` · ${escapeHtml(state.stores.find((store) => store.id === item.variantStoreId)?.name || 'Ohne Geschäft')}` : ''}`, 'bg-indigo-100 text-indigo-700') : '';
+    return `<div class="elitem border-t border-gray-100"><button type="button" class="text-left min-w-0 flex-1" data-a="edit-item" data-id="${item.id}" title="Doppelklick für Bearbeitungsaktionen"><div class="flex flex-wrap gap-2 items-center"><div class="font-bold text-sm text-gray-900 truncate flex-1">${escapeHtml(ell(item.title, 40))}</div>${renderItemMetaIcons(item)}${chip(`${fmtQty(item.quantity)} ${escapeHtml(item.unit || '')}`, 'bg-indigo-50 text-indigo-700')}${state.categories.find((c) => c.id === item.categoryId) ? chip(escapeHtml(state.categories.find((c) => c.id === item.categoryId).name), 'bg-amber-50 text-amber-700') : ''}${variantInfo}${locked ? chip(`gesperrt von ${escapeHtml(lock.userName || lock.userId)}`, 'bg-red-100 text-red-700') : ''}${restItem ? chip('Rest', 'bg-orange-100 text-orange-800 ring-1 ring-orange-300') : ''}</div><div class="text-xs text-gray-500 mt-1">${escapeHtml(stores)}${item.variantLabel ? ` · ${escapeHtml(item.variantLabel)}` : ''}${item.restoredAt ? ` · Wiederhergestellt von ${escapeHtml(item.restoredByName || '—')} · ${dt(item.restoredAt)}` : ''}</div>${item.persistentNote ? `<div class="text-xs text-gray-600 mt-2">${escapeHtml(item.persistentNote)}</div>` : ''}${item.note ? `<div class="text-xs text-gray-600 mt-1">${escapeHtml(item.note)}</div>` : ''}</button><div class="flex items-center justify-end gap-1 sm:gap-2 flex-wrap sm:flex-nowrap">${qtyActionVisible ? `<button class="elaction elaction-qty text-[11px] sm:text-xs px-2 sm:px-3 whitespace-nowrap" data-a="quantity" data-id="${item.id}" title="Menge übernehmen"><span class="sm:hidden">Menge</span><span class="hidden sm:inline">Menge übernehmen</span></button>` : ''}${controls}</div></div>`;
 }
 
 function renderChecked() {
@@ -2058,6 +2335,558 @@ async function onClick(e) {
     if (a === 'close-article') { state.articleEditor = null; render(); return; }
     if (a === 'art-store') { const ids = state.articleEditor.storeIds || []; state.articleEditor.storeIds = ids.includes(btn.dataset.id) ? ids.filter((x) => x !== btn.dataset.id) : [...ids, btn.dataset.id]; renderArticle(); return; }
     if (a === 'save-article') { await saveArticle(); return; }
+    if (a === 'delete-article') { await deleteDoc(doc(master('articles'), btn.dataset.id)); await logActivity('Artikel gelöscht', { articleId: btn.dataset.id }); state.articleEditor = null; render(); return; }
+    if (a === 'add-category') { await addMaster('categories', state.drafts.category, 'name'); state.drafts.category = ''; render(); return; }
+    if (a === 'del-category') { await deleteDoc(doc(master('categories'), btn.dataset.id)); await logActivity('Kategorie gelöscht', { categoryId: btn.dataset.id }); return; }
+    if (a === 'add-store') { const ref = await addMaster('stores', state.drafts.store, 'name'); if (ref?.id && state.listId) { const currentOrder = effectiveStoreOrder(); if (!currentOrder.includes(ref.id)) await updateDoc(listDoc(state.listId), { storeOrder: [...currentOrder, ref.id], updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() }); } state.drafts.store = ''; render(); return; }
+    if (a === 'del-store-master') { const store = state.stores.find((entry) => entry.id === btn.dataset.id); if (!store) return; if (!confirm(`Geschäft "${store.name}" wirklich löschen?`)) return; await deleteDoc(doc(master('stores'), btn.dataset.id)); await logActivity('Geschäft gelöscht', { storeId: btn.dataset.id, storeName: store.name }); return; }
+    if (a === 'store-up' || a === 'store-down') { await moveStore(btn.dataset.id, a === 'store-up' ? -1 : 1); return; }
+    if (a === 'open-store-categories') { openStoreCategoryEditor(btn.dataset.id); return; }
+    if (a === 'close-store-categories') { state.storeCategoryEditor = null; state.dragStoreCategory = null; render(); return; }
+    if (a === 'toggle-store-category') { toggleStoreCategoryDraft(btn.dataset.id); return; }
+    if (a === 'store-category-up') { moveStoreCategoryDraft(btn.dataset.id, -1); return; }
+    if (a === 'store-category-down') { moveStoreCategoryDraft(btn.dataset.id, 1); return; }
+    if (a === 'save-store-categories') { await saveStoreCategoryEditorActive(); return; }
+    if (a === 'add-remark') { await addFree(collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_master_notes'), state.drafts.remark); state.drafts.remark = ''; render(); return; }
+    if (a === 'del-remark') { await deleteDoc(doc(collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_master_notes'), btn.dataset.id)); return; }
+    if (a === 'add-note') { await addFree(collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_master_notizen'), state.drafts.note); state.drafts.note = ''; render(); return; }
+    if (a === 'del-note') { await deleteDoc(doc(collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_master_notizen'), btn.dataset.id)); return; }
+    if (a === 'create-list') { await createList(); return; }
+    if (a === 'save-list') { await saveList(); return; }
+    if (a === 'delete-list') { await deleteList(btn.dataset.id); return; }
+    if (a === 'save-notify-settings') { await saveNotificationSettings(); return; }
+    if (a === 'save-notify-template') { await saveNotificationTemplate(); return; }
+    if (a === 'apply-notify-template') { applyNotificationTemplate(); return; }
+    if (a === 'toggle-notify-target') { toggleNotificationCopyTarget(btn.dataset.id); return; }
+    if (a === 'clear-notify-targets') { state.notificationCopyTargets = []; render(); return; }
+    if (a === 'copy-notify-settings') { await copyNotificationSettingsToTargets(); return; }
+    if (a === 'enable-web-push') { await syncWebPushSubscription({ requestPermission: true }); return; }
+    if (a === 'sync-web-push') { await syncWebPushSubscription({ requestPermission: false }); return; }
+    if (a === 'disable-web-push') { await disableWebPushSubscription(); return; }
+    if (a === 'save-collab') { await saveCollaborator(); return; }
+    if (a === 'del-collab') { await deleteCollaborator(btn.dataset.id); return; }
+    if (a === 'save-detail') { await saveDetailItem(); return; }
+    if (a === 'move-detail') { await moveDetailItem(); return; }
+    if (a === 'delete-detail-item') { await deleteDetailItem(); return; }
+    if (a === 'close-purchase') { closePurchaseModal(); return; }
+    if (a === 'digit') { appendPurchaseInput(btn.dataset.v); renderPurchase(); resetAutoScan(); return; }
+    if (a === 'back') { removePurchaseInput(); renderPurchase(); resetAutoScan(); return; }
+    if (a === 'clear') { clearPurchaseInput(); renderPurchase(); resetAutoScan(); return; }
+    if (a === 'full') { setPurchaseToTarget(); renderPurchase(); resetAutoScan(); return; }
+    if (a === 'confirm-purchase') { await confirmPurchase(); return; }
+}
+
+function resolveInputSelection() {
+    let article = state.selectedArticleId ? state.articles.find((entry) => entry.id === state.selectedArticleId) : null;
+    let variant = article ? findVariantById(article, state.selectedVariantId) : null;
+    if (!article) {
+        const exact = findExactArticleSelection(state.title);
+        article = exact.article;
+        variant = exact.variant;
+    }
+    return { article, variant };
+}
+
+function renderArticle() {
+    const el = document.getElementById('el-article');
+    if (!el) return;
+    const a = state.articleEditor;
+    el.className = `elmodal ${a ? 'o' : ''}`;
+    if (!a) { el.innerHTML = ''; return; }
+    const mode = String(a.articleMode || 'single') === 'variant' ? 'variant' : 'single';
+    const variants = a.variants || [];
+    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="text-xl font-black text-gray-900">${a.id ? 'Artikel bearbeiten' : 'Artikel anlegen'}</div><div class="text-sm text-gray-500">Pflege Einzelartikel oder Variantenartikel direkt in diesem Dialog.</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-article">Schließen</button></div><div class="grid gap-2 sm:grid-cols-2"><button class="elb ${mode === 'single' ? 'a' : 'bg-gray-100 text-gray-700'}" data-a="article-mode" data-v="single">Ein Artikel</button><button class="elb ${mode === 'variant' ? 'a' : 'bg-gray-100 text-gray-700'}" data-a="article-mode" data-v="variant">Artikelvarianten</button></div><div class="space-y-2"><div class="text-xs font-black uppercase text-gray-500">Produkt / Überbegriff</div><input id="ela-title" class="eli" placeholder="Produkt" value="${escapeHtml(a.title || '')}"></div><div class="grid gap-3 sm:grid-cols-2"><select id="ela-cat" class="els"><option value="">Kategorie wählen...</option>${state.categories.map((c) => `<option value="${c.id}" ${a.categoryId === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}</select>${mode === 'single' ? `<div class="grid gap-3 grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"><input id="ela-q" class="eli text-center" placeholder="Standardmenge" value="${escapeHtml(formatEditableQty(a.defaultQuantity || 1))}"><select id="ela-unit" class="els">${UNITS.map((u) => `<option value="${u}" ${a.defaultUnit === u ? 'selected' : ''}>${u}</option>`).join('')}</select></div>` : `<textarea id="ela-aliases" class="elt" placeholder="Alternative Begriffe, eine Zeile pro Alias">${escapeHtml((a.aliases || []).join('\n'))}</textarea>`}</div>${mode === 'single' ? `<div class="space-y-2"><textarea id="ela-ean" class="elt" placeholder="EAN-Codes, eine Zeile pro Code">${escapeHtml((a.eanCodes || []).join('\n'))}</textarea>${a.id ? `<div class="flex justify-end"><button class="elb bg-red-100 text-red-700" data-a="capture-ean" data-id="${a.id}">EAN scannen</button></div>` : ''}<div class="elm">${state.stores.map((s) => `<label class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold ${(a.storeIds || []).includes(s.id) ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}"><input type="checkbox" data-a="art-store" data-id="${s.id}" ${(a.storeIds || []).includes(s.id) ? 'checked' : ''}> ${escapeHtml(s.name)}</label>`).join(' ')}</div></div>` : `<div class="space-y-3"><div class="flex flex-wrap items-center justify-between gap-2"><div><div class="text-xs font-black uppercase text-gray-500">Variantenfunktion</div><div class="text-sm text-gray-500">Jede Variante hat genau ein Geschäft und eigene EAN-Codes.</div></div><button class="elb a" data-a="add-article-variant">+ Variante</button></div>${variants.length ? variants.map((variant, index) => `<div class="rounded-2xl border border-indigo-100 bg-indigo-50 p-3 space-y-3" data-variant-row data-variant-id="${variant.id}"><div class="flex flex-wrap items-center justify-between gap-2"><div class="text-sm font-black text-indigo-900">Variante ${index + 1}</div><div class="flex flex-wrap gap-2"><button class="elb bg-white text-indigo-700" data-a="capture-variant-ean" data-id="${a.id || ''}" data-variant="${variant.id}" ${!a.id ? 'disabled' : ''}>EAN scannen</button><button class="elb bg-red-100 text-red-700" data-a="remove-article-variant" data-variant="${variant.id}">Entfernen</button></div></div><div class="grid gap-3 md:grid-cols-2"><input class="eli" data-variant-field="brand" placeholder="Marke" value="${escapeHtml(variant.brand || '')}"><input class="eli" data-variant-field="label" placeholder="Bezeichnung" value="${escapeHtml(variant.label || '')}"></div><div class="grid gap-3 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:grid-cols-[120px_160px_minmax(0,1fr)]"><input class="eli text-center" data-variant-field="quantity" placeholder="Menge" value="${escapeHtml(formatEditableQty(variant.quantity || 1))}"><select class="els" data-variant-field="unit">${UNITS.map((unit) => `<option value="${unit}" ${variant.unit === unit ? 'selected' : ''}>${unit}</option>`).join('')}</select><select class="els" data-variant-field="store"><option value="">Geschäft wählen...</option>${state.stores.map((store) => `<option value="${store.id}" ${variant.storeId === store.id ? 'selected' : ''}>${escapeHtml(store.name)}</option>`).join('')}</select></div><textarea class="elt" data-variant-field="ean" placeholder="EAN-Codes, eine Zeile pro Code">${escapeHtml((variant.eanCodes || []).join('\n'))}</textarea></div>`).join('') : '<div class="rounded-2xl border border-dashed border-slate-300 px-3 py-4 text-sm text-slate-400">Noch keine Varianten angelegt.</div>'}</div>`}<div class="space-y-2"><div class="text-xs font-black uppercase text-gray-500">Permanente Anmerkungen</div><textarea id="ela-note" class="elt" placeholder="Permanente Anmerkungen, je Zeile">${escapeHtml((a.persistentNotes || []).join('\n'))}</textarea></div><div class="flex flex-wrap justify-end gap-2">${a.id ? `<button class="elb bg-red-600 text-white" data-a="delete-article" data-id="${a.id}">Löschen</button>` : ''}<button class="elb bg-emerald-600 text-white" data-a="save-article">Speichern</button></div></div>`;
+}
+
+function openScanner(mode = 'shopping', articleId = '', variantId = '') {
+    document.activeElement?.blur?.();
+    state.scanOpen = true;
+    state.scanMode = mode;
+    state.scanArticleId = articleId;
+    state.scanVariantId = variantId;
+    state.scanCodes = [];
+    state.scanStatus = String(mode || '').startsWith('article')
+        ? 'Kamera wird für die EAN-Erfassung gestartet...'
+        : mode === 'list-add'
+            ? 'Kamera wird gestartet. Gefundene EANs übernehmen die Eingabefelder...'
+            : 'Kamera wird gestartet. Gefundene EANs öffnen die Mengenübernahme...';
+    state.scanLastCode = '';
+    state.scanLastAt = 0;
+    render();
+}
+
+function closeScannerModal() {
+    state.scanOpen = false;
+    state.scanMode = 'shopping';
+    state.scanArticleId = '';
+    state.scanVariantId = '';
+    state.scanCodes = [];
+    state.scanStatus = '';
+    state.scanLastCode = '';
+    state.scanLastAt = 0;
+    stopScanner();
+    render();
+}
+
+function closeUnknownModal() {
+    state.unknownCode = '';
+    state.unknownArticleId = '';
+    state.unknownVariantId = '';
+    render();
+}
+
+function renderScannerActive() {
+    const el = document.getElementById('el-scanner');
+    if (!el) return;
+    const isArticleMode = state.scanOpen && String(state.scanMode || '').startsWith('article');
+    el.className = `elmodal ${isArticleMode ? 'o' : ''}`;
+    if (!state.scanOpen) { el.innerHTML = ''; stopScanner(); return; }
+    if (isArticleMode) {
+        el.innerHTML = renderScannerPanelActive(false);
+    } else {
+        el.innerHTML = '';
+        el.className = '';
+    }
+    startScannerActive();
+}
+
+function renderUnknown() {
+    const el = document.getElementById('el-unknown');
+    if (!el) return;
+    const article = state.articles.find((entry) => entry.id === state.unknownArticleId);
+    const showVariants = !!article && isVariantArticle(article);
+    el.className = `elmodal ${state.unknownCode ? 'o' : ''}`;
+    if (!state.unknownCode) { el.innerHTML = ''; return; }
+    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="text-xl font-black text-gray-900">Unbekannter Code</div><div class="text-sm text-gray-500">Bitte zuerst einem bestehenden Artikel oder einer Variante zuordnen.</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-unknown">Abbruch</button></div><div class="elc bg-slate-50 text-sm space-y-3"><div><b>Code:</b> ${escapeHtml(state.unknownCode)}</div><select id="el-unknown-article" class="els"><option value="">Bestehendem Artikel zuordnen...</option>${state.articles.map((entry) => `<option value="${entry.id}" ${state.unknownArticleId === entry.id ? 'selected' : ''}>${escapeHtml(entry.title)}</option>`).join('')}</select>${showVariants ? `<select id="el-unknown-variant" class="els"><option value="">Variante auswählen...</option>${(article.variants || []).map((variant) => `<option value="${variant.id}" ${state.unknownVariantId === variant.id ? 'selected' : ''}>${escapeHtml(buildVariantGeneratedTitle(article, variant))} · ${escapeHtml(state.stores.find((store) => store.id === variant.storeId)?.name || 'Ohne Geschäft')}</option>`).join('')}</select>` : ''}<div class="flex flex-wrap justify-end gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="close-unknown">Abbruch</button><button class="elb bg-emerald-600 text-white" data-a="save-unknown">Zuordnen</button></div></div></div>`;
+}
+
+async function addItem() {
+    if (!canAdd()) return alertUser('Keine Berechtigung zum Hinzufügen.', 'error');
+    const title = String(state.title || '').trim();
+    if (!title) return alertUser('Bitte Artikel eingeben.', 'error');
+    let { article, variant } = resolveInputSelection();
+    if (article && isVariantArticle(article) && !variant) {
+        state.variantPickerArticleId = article.id;
+        state.inputDetailsOpen = true;
+        render();
+        return alertUser('Bitte zuerst eine konkrete Variante auswählen.', 'info');
+    }
+    if (!article) {
+        const ref = await addDoc(master('articles'), { articleMode: 'single', title, aliases: [], defaultQuantity: parseQty(state.q || '1') || 1, defaultUnit: state.unit || 'Stück', categoryId: '', eanCodes: [], variants: [], persistentNotes: [], storeIds: [...state.storeIds], createdBy: uid(), createdByName: uname(), createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+        article = normalizeArticle({ id: ref.id, articleMode: 'single', title, aliases: [], defaultQuantity: parseQty(state.q || '1') || 1, defaultUnit: state.unit || 'Stück', categoryId: '', eanCodes: [], variants: [], persistentNotes: [], storeIds: [...state.storeIds] });
+        variant = null;
+    }
+    const quantity = parseQty(state.q || String(variant?.quantity || article.defaultQuantity || '1')) || Number(variant?.quantity || article.defaultQuantity || 1) || 1;
+    const unit = String(state.unit || variant?.unit || article.defaultUnit || 'Stück') || 'Stück';
+    const storeIds = state.storeIds.length ? [...state.storeIds] : (variant?.storeId ? [variant.storeId] : [...(article.storeIds || [])]);
+    const persistentNote = articlePrefillNote(article);
+    const note = String(state.note || '').trim();
+    const itemNote = note && note === persistentNote ? '' : note;
+    const itemTitle = variant ? buildVariantGeneratedTitle(article, variant) : article.title;
+    await addDoc(sub(state.listId, 'items'), { articleId: article.id, variantId: String(variant?.id || ''), variantBrand: String(variant?.brand || ''), variantLabel: String(variant?.label || ''), variantStoreId: String(variant?.storeId || ''), title: itemTitle, quantity, unit, categoryId: article.categoryId || '', storeIds, status: 'open', note: itemNote, persistentNote, eanCodes: variant ? (variant.eanCodes || []) : (article.eanCodes || []), createdAt: serverTimestamp(), createdBy: uid(), createdByName: uname() });
+    await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname(), storeOrder: effectiveStoreOrder() });
+    await logActivity('Artikel hinzugefügt', { title: itemTitle, quantity, unit, variantId: variant?.id || '' });
+    state.q = '1';
+    state.unit = 'Stück';
+    state.title = '';
+    state.note = '';
+    state.storeIds = [];
+    state.inputDetailsOpen = false;
+    resetInputSelection();
+    render();
+}
+
+function openPurchase(itemOrArticle, isScan) {
+    const item = itemOrArticle?.status ? itemOrArticle : null;
+    const article = item ? state.articles.find((a) => a.id === item.articleId) : itemOrArticle;
+    const variant = item
+        ? (item.variantId ? (findVariantById(article, item.variantId) || { id: item.variantId, brand: item.variantBrand || '', label: item.variantLabel || '', storeId: item.variantStoreId || '', quantity: item.quantity, unit: item.unit, eanCodes: item.eanCodes || [] }) : null)
+        : (itemOrArticle?._variant || null);
+    const title = item?.title || (variant ? buildVariantGeneratedTitle(article, variant) : article?.title || 'Artikel');
+    const unit = item?.unit || variant?.unit || article?.defaultUnit || 'Stück';
+    const base = Number(item?.quantity || variant?.quantity || article?.defaultQuantity || 1);
+    const startQuantity = item ? Number(item.quantity || 0) : base;
+    state.purchase = { kind: isScan ? 'scan' : 'manual', itemId: item?.id || '', articleId: item?.articleId || article?.id || '', variantId: String(variant?.id || ''), variantBrand: String(variant?.brand || ''), variantLabel: String(variant?.label || ''), variantStoreId: String(variant?.storeId || ''), title, unit, target: item ? Number(item.quantity || 0) : 0, base, raw: '', quantity: startQuantity, pristine: true, eanCodes: [...(variant?.eanCodes || article?.eanCodes || [])], storeIds: variant?.storeId ? [variant.storeId] : [...(article?.storeIds || [])] };
+    renderPurchase();
+    resetAutoScan(isScan);
+}
+
+async function confirmPurchase() {
+    const p = state.purchase;
+    if (!p) return;
+    const qty = Number(p.quantity || 0);
+    if (!(qty > 0)) return alertUser('Bitte eine Menge eingeben.', 'error');
+    closePurchaseModal();
+    if (p.itemId) {
+        const item = state.items.find((x) => x.id === p.itemId);
+        if (!item) return;
+        hideItemActionButtons(item.id);
+        hideQuantityActionButton(item.id);
+        if (qty >= Number(item.quantity || 0)) {
+            await updateDoc(doc(sub(state.listId, 'items'), item.id), { status: 'checked', purchasedQuantity: qty, checkedAt: serverTimestamp(), checkedBy: uid(), checkedByName: uname() });
+        } else {
+            const rest = Number((Number(item.quantity || 0) - qty).toFixed(2));
+            await updateDoc(doc(sub(state.listId, 'items'), item.id), { status: 'checked', purchasedQuantity: qty, checkedAt: serverTimestamp(), checkedBy: uid(), checkedByName: uname() });
+            const { id: _restItemId, ...restPayload } = item;
+            await addDoc(sub(state.listId, 'items'), { ...restPayload, quantity: rest, title: `Rest von ${item.title}`, status: 'open', createdAt: serverTimestamp(), createdBy: uid(), createdByName: uname(), restoredAt: null, restoredBy: null, restoredByName: null, checkedAt: null, checkedBy: null, checkedByName: null });
+        }
+        await logActivity('Artikel gekauft/abgehakt', { itemId: item.id, title: item.title, quantity: qty });
+    } else {
+        const article = state.articles.find((x) => x.id === p.articleId);
+        if (!article) return;
+        const open = state.items.find((x) => x.articleId === article.id && x.status !== 'checked' && String(x.variantId || '') === String(p.variantId || ''));
+        if (open) {
+            openPurchase(open, true);
+            state.purchase.quantity = qty;
+            await confirmPurchase();
+            return;
+        }
+        const variant = findVariantById(article, p.variantId);
+        await addDoc(sub(state.listId, 'items'), { articleId: article.id, variantId: String(variant?.id || ''), variantBrand: String(variant?.brand || ''), variantLabel: String(variant?.label || ''), variantStoreId: String(variant?.storeId || ''), title: p.title || (variant ? buildVariantGeneratedTitle(article, variant) : article.title), quantity: qty, unit: p.unit || variant?.unit || article.defaultUnit || 'Stück', categoryId: article.categoryId || '', storeIds: p.storeIds?.length ? [...p.storeIds] : (variant?.storeId ? [variant.storeId] : [...(article.storeIds || [])]), status: 'checked', note: '', persistentNote: articlePrefillNote(article), eanCodes: p.eanCodes?.length ? [...p.eanCodes] : (variant ? (variant.eanCodes || []) : (article.eanCodes || [])), createdAt: serverTimestamp(), createdBy: uid(), createdByName: uname(), purchasedQuantity: qty, checkedAt: serverTimestamp(), checkedBy: uid(), checkedByName: uname() });
+        await logActivity('Scan übernommen', { articleId: article.id, quantity: qty, variantId: variant?.id || '' });
+    }
+    render();
+}
+
+async function saveScannedCodesActive(openNext = false) {
+    const article = state.articles.find((a) => a.id === state.scanArticleId);
+    if (!article) return alertUser('Artikel für die EAN-Erfassung wurde nicht gefunden.', 'error');
+    if (!state.scanCodes.length) return alertUser('Bitte zuerst mindestens einen Code erfassen.', 'error');
+    const variant = findVariantById(article, state.scanVariantId);
+    if (variant) {
+        const variants = (article.variants || []).map((entry) => entry.id === variant.id ? { ...entry, eanCodes: Array.from(new Set([...(entry.eanCodes || []), ...state.scanCodes])) } : entry);
+        await updateDoc(doc(master('articles'), article.id), { variants, updatedAt: serverTimestamp() });
+        await logActivity('EANs zur Variante hinzugefügt', { articleId: article.id, variantId: variant.id, count: state.scanCodes.length });
+    } else {
+        const eanCodes = Array.from(new Set([...(article.eanCodes || []), ...state.scanCodes]));
+        await updateDoc(doc(master('articles'), article.id), { eanCodes, updatedAt: serverTimestamp() });
+        await logActivity('EANs zum Artikel hinzugefügt', { articleId: article.id, count: state.scanCodes.length });
+    }
+    flashScanSuccess();
+    if (openNext) {
+        const nextTarget = nextMissingEanTarget(article.id, state.scanVariantId);
+        if (nextTarget) {
+            state.scanArticleId = nextTarget.articleId;
+            state.scanVariantId = nextTarget.variantId;
+            state.scanCodes = [];
+            state.scanStatus = `Nächstes Ziel: ${nextTarget.label}`;
+            state.scanLastCode = '';
+            state.scanLastAt = 0;
+            render();
+            return;
+        }
+        closeScannerModal();
+        alertUser('Keine weiteren Artikel oder Varianten ohne EAN gefunden.', 'success');
+        return;
+    }
+    closeScannerModal();
+}
+
+async function startScannerActive() {
+    try {
+        const video = document.getElementById('el-video');
+        const status = document.getElementById('el-scan-status');
+        if (!video) return;
+        if (!scanStream) scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+        video.srcObject = scanStream;
+        state.scanStatus = String(state.scanMode || '').startsWith('article') ? 'Scanner aktiv. Mehrere Codes können gesammelt werden.' : 'Scanner aktiv.';
+        if (status) status.textContent = state.scanStatus;
+        if ('BarcodeDetector' in window) {
+            if (!scanTimer) {
+                const detector = new window.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'code_128', 'qr_code'] });
+                scanTimer = setInterval(async () => {
+                    if (!state.scanOpen) return;
+                    const liveVideo = document.getElementById('el-video');
+                    if (!liveVideo) return;
+                    try {
+                        const codes = await detector.detect(liveVideo);
+                        if (codes?.length) await processScannerCodeActive(codes[0].rawValue || '');
+                    } catch {}
+                }, 700);
+            }
+        } else {
+            state.scanStatus = 'BarcodeDetector nicht verfügbar. Bitte Code manuell eingeben.';
+            if (status) status.textContent = state.scanStatus;
+        }
+        updateScannerDynamicUi();
+    } catch {
+        const status = document.getElementById('el-scan-status');
+        state.scanStatus = 'Kamera konnte nicht gestartet werden.';
+        if (status) status.textContent = state.scanStatus;
+    }
+}
+
+async function processScannerCodeActive(rawCode) {
+    const code = String(rawCode || '').trim();
+    if (!code) return false;
+    const now = Date.now();
+    for (const [scannedCode, scannedAt] of scanRecentCodes.entries()) {
+        if (now - scannedAt >= SCAN_LOCKOUT_MS) scanRecentCodes.delete(scannedCode);
+    }
+    const lastSeen = scanRecentCodes.get(code) || 0;
+    if (now - lastSeen < SCAN_LOCKOUT_MS) return false;
+    scanRecentCodes.set(code, now);
+    state.scanLastCode = code;
+    state.scanLastAt = now;
+    if (String(state.scanMode || '').startsWith('article')) {
+        state.scanCodes = Array.from(new Set([...(state.scanCodes || []), code]));
+        state.scanStatus = `${state.scanCodes.length} Code(s) erfasst.`;
+        updateScannerDynamicUi();
+        flashScanSuccess();
+        return true;
+    }
+    await handleScanCode(code);
+    return true;
+}
+
+async function handleScanCode(code) {
+    const { article, variant } = findArticleByCode(code);
+    if (!article) {
+        state.scanStatus = `EAN nicht gefunden: ${code}`;
+        updateScannerDynamicUi();
+        alertUser('Kein Artikel zu diesem EAN-Code gefunden.', 'error');
+        return;
+    }
+    if (state.scanMode === 'list-add') {
+        if (variant) prefillInputFromVariant(article, variant); else prefillInputFromArticle(article);
+        flashScanSuccess();
+        closeScannerModal();
+        return;
+    }
+    state.scanStatus = `Gefunden: ${variant ? buildVariantGeneratedTitle(article, variant) : article.title}`;
+    updateScannerDynamicUi();
+    flashScanSuccess();
+    if (variant) {
+        openPurchase({ ...article, title: buildVariantGeneratedTitle(article, variant), defaultQuantity: Number(variant.quantity || 1), defaultUnit: variant.unit || 'Stück', storeIds: variant.storeId ? [variant.storeId] : [], eanCodes: [...(variant.eanCodes || [])], _variant: variant }, true);
+        return;
+    }
+    openPurchase(article, true);
+}
+
+async function saveUnknownCode() {
+    if (!state.unknownCode) return;
+    if (!state.unknownArticleId) return alertUser('Bitte Artikel auswählen.', 'error');
+    const article = state.articles.find((x) => x.id === state.unknownArticleId);
+    if (!article) return alertUser('Artikel wurde nicht gefunden.', 'error');
+    const code = state.unknownCode;
+    if (isVariantArticle(article)) {
+        if (!state.unknownVariantId) return alertUser('Bitte zuerst eine Variante auswählen.', 'error');
+        const variants = (article.variants || []).map((variant) => variant.id === state.unknownVariantId ? { ...variant, eanCodes: Array.from(new Set([...(variant.eanCodes || []), code])) } : variant);
+        await updateDoc(doc(master('articles'), article.id), { variants, updatedAt: serverTimestamp() });
+        await logActivity('Unbekannter Code Variante zugeordnet', { articleId: article.id, variantId: state.unknownVariantId, code });
+    } else {
+        await updateDoc(doc(master('articles'), article.id), { eanCodes: Array.from(new Set([...(article.eanCodes || []), code])), updatedAt: serverTimestamp() });
+        await logActivity('Unbekannter Code zugeordnet', { articleId: article.id, code });
+    }
+    closeUnknownModal();
+}
+
+async function saveArticle() {
+    const draft = normalizeArticle(syncArticleEditorFromDom() || state.articleEditor || createEmptyArticleEditor());
+    const title = String(draft.title || '').trim();
+    if (!title) return alertUser('Bitte Bezeichnung eingeben.', 'error');
+    const mode = String(draft.articleMode || 'single') === 'variant' ? 'variant' : 'single';
+    const basePayload = { articleMode: mode, title, aliases: mode === 'variant' ? draft.aliases : [], categoryId: draft.categoryId || '', persistentNotes: draft.persistentNotes || [], updatedAt: serverTimestamp(), createdBy: uid(), createdByName: uname() };
+    let payload = null;
+    if (mode === 'variant') {
+        const variants = (draft.variants || []).filter((variant) => variant.label || variant.brand || variant.storeId || (variant.eanCodes || []).length).map((variant) => ({ id: variant.id || makeLocalId('variant'), brand: String(variant.brand || '').trim(), label: String(variant.label || '').trim(), quantity: parseQty(variant.quantity || '1') || 1, unit: normalizeVariantUnit(variant.unit || 'Stück'), eanCodes: Array.from(new Set((variant.eanCodes || []).map((entry) => String(entry || '').trim()).filter(Boolean))), storeId: String(variant.storeId || '').trim() }));
+        if (!variants.length) return alertUser('Bitte mindestens eine Variante anlegen.', 'error');
+        if (variants.some((variant) => !variant.label)) return alertUser('Jede Variante braucht eine Bezeichnung.', 'error');
+        if (variants.some((variant) => !variant.storeId)) return alertUser('Jede Variante braucht genau ein Geschäft.', 'error');
+        payload = { ...basePayload, defaultQuantity: 1, defaultUnit: 'Stück', eanCodes: [], variants, storeIds: [] };
+    } else {
+        payload = { ...basePayload, defaultQuantity: parseQty(draft.defaultQuantity || '1') || 1, defaultUnit: normalizeVariantUnit(draft.defaultUnit || 'Stück'), eanCodes: draft.eanCodes || [], variants: [], storeIds: draft.storeIds || [] };
+    }
+    if (draft.id) await updateDoc(doc(master('articles'), draft.id), payload); else await addDoc(master('articles'), { ...payload, createdAt: serverTimestamp() });
+    await logActivity('Artikel gespeichert', { title, articleMode: mode });
+    state.articleEditor = null;
+    render();
+}
+
+function onInput(e) {
+    const t = e.target;
+    if (t.id === 'el-q') state.q = t.value;
+    if (t.id === 'el-title') {
+        state.title = t.value;
+        const article = state.selectedArticleId ? state.articles.find((entry) => entry.id === state.selectedArticleId) : null;
+        const variant = article ? findVariantById(article, state.selectedVariantId) : null;
+        const expected = variant ? buildVariantGeneratedTitle(article, variant) : String(article?.title || '');
+        if (expected && String(t.value || '').trim() !== expected.trim()) resetInputSelection();
+        updateInputTitleUi();
+        return;
+    }
+    if (t.id === 'el-note') state.note = t.value;
+    if (t.id === 'el-search') { state.search = t.value; requestFocusAfterRender('el-search', t.selectionStart, t.selectionEnd); render(); return; }
+    if (t.id === 'el-article-search') { state.articleSearch = t.value; requestFocusAfterRender('el-article-search', t.selectionStart, t.selectionEnd); render(); return; }
+    if (String(t.id || '').startsWith('el-n-int-')) {
+        const key = String(t.id).replace('el-n-int-', '');
+        if (state.notificationSettings?.actions?.[key]) state.notificationSettings.actions[key].intervalMinutes = normalizeNotificationInterval(t.value, state.notificationSettings.actions[key].intervalMinutes);
+        return;
+    }
+    if (t.id === 'el-draft-store') state.drafts.store = t.value;
+    if (t.id === 'el-draft-category') state.drafts.category = t.value;
+    if (t.id === 'el-draft-remark') state.drafts.remark = t.value;
+    if (t.id === 'el-draft-note') state.drafts.note = t.value;
+    if (t.id === 'el-c-from') state.collab.accessFrom = t.value;
+    if (t.id === 'el-c-until') state.collab.accessUntil = t.value;
+    if (t.id === 'el-d-title' && state.detailDraft) { state.detailDraft.title = t.value; return; }
+    if (t.id === 'el-d-qty' && state.detailDraft) { state.detailDraft.quantity = t.value; return; }
+    if (t.id === 'el-d-note' && state.detailDraft) { state.detailDraft.note = t.value; return; }
+}
+
+function onChange(e) {
+    const t = e.target;
+    if (t.id === 'el-unit') state.unit = t.value;
+    if (t.id === 'el-d-cat' && state.detailDraft) { state.detailDraft.categoryId = t.value; return; }
+    if (t.id === 'el-d-store' && state.detailDraft) { state.detailDraft.storeId = t.value; return; }
+    if (t.id === 'el-list-select' && t.value) { selectList(t.value); return; }
+    if (t.id === 'el-store-add' && t.value) {
+        if (state.selectedVariantId) state.storeIds = [t.value];
+        else if (!state.storeIds.includes(t.value)) state.storeIds.push(t.value);
+        t.value = '';
+        render();
+        return;
+    }
+    if (t.id === 'el-store-numbers') { state.storeNumbers = t.checked; saveUserSetting(EL_STORE_NUMBERS_KEY, state.storeNumbers); render(); return; }
+    if (t.id === 'el-missing-ean') { state.missingEanOnly = t.checked; render(); return; }
+    if (t.id === 'el-unknown-article') { state.unknownArticleId = t.value; state.unknownVariantId = ''; renderUnknown(); return; }
+    if (t.id === 'el-unknown-variant') { state.unknownVariantId = t.value; return; }
+    if (t.id === 'el-c-user') state.collab.userId = t.value;
+    if (t.id === 'el-c-from') state.collab.accessFrom = t.value;
+    if (t.id === 'el-c-until') state.collab.accessUntil = t.value;
+    if (t.id === 'el-cr') state.collab.canRead = t.checked;
+    if (t.id === 'el-ca') state.collab.canAdd = t.checked;
+    if (t.id === 'el-cs') state.collab.canShop = t.checked;
+    if (t.id === 'el-cm') state.collab.canManage = t.checked;
+    if (t.id === 'el-cw') state.collab.canManageWrite = t.checked;
+    if (t.id === 'el-n-enabled' && state.notificationSettings) state.notificationSettings.enabled = t.checked;
+    if (t.id === 'el-n-only-others' && state.notificationSettings) state.notificationSettings.onlyOthers = t.checked;
+    if (t.id === 'el-n-direct-link' && state.notificationSettings) state.notificationSettings.directLink = t.checked;
+    if (t.id === 'el-n-push-actions' && state.notificationSettings) state.notificationSettings.pushActions = t.checked;
+    if (String(t.id || '').startsWith('el-n-event-') && state.notificationSettings) {
+        const key = String(t.id).replace('el-n-event-', '');
+        if (state.notificationSettings.actions?.[key]) state.notificationSettings.actions[key].enabled = t.checked;
+    }
+}
+
+async function onClick(e) {
+    const btn = e.target.closest('[data-a]');
+    if (!btn) return;
+    const a = btn.dataset.a;
+    const clickKey = btn.dataset.id ? `${a}:${btn.dataset.id}` : a;
+    if (holdConsumedKey === clickKey && Date.now() - holdConsumedAt < 900) { holdConsumedKey = ''; return; }
+    if (a === 'pick-title-suggestion') {
+        const article = state.articles.find((x) => x.id === btn.dataset.id);
+        const variant = article ? findVariantById(article, btn.dataset.variant) : null;
+        if (article) {
+            if (variant) prefillInputFromVariant(article, variant); else prefillInputFromArticle(article);
+            requestFocusAfterRender('el-title');
+            render();
+        }
+        return;
+    }
+    if (a === 'pick-search-suggestion') {
+        const article = state.articles.find((x) => x.id === btn.dataset.id);
+        const variant = article ? findVariantById(article, btn.dataset.variant) : null;
+        if (article) {
+            state.search = variant ? buildVariantGeneratedTitle(article, variant) : article.title || '';
+            requestFocusAfterRender('el-search');
+            render();
+        }
+        return;
+    }
+    if (a === 'close-variant-picker') { state.variantPickerArticleId = ''; render(); return; }
+    if (a === 'pick-variant-choice') {
+        const article = state.articles.find((x) => x.id === btn.dataset.id);
+        const variant = article ? findVariantById(article, btn.dataset.variant) : null;
+        if (article && variant) {
+            prefillInputFromVariant(article, variant);
+            requestFocusAfterRender('el-title');
+            render();
+        }
+        return;
+    }
+    if (a === 'open-article') { state.articleEditor = createEmptyArticleEditor('single'); render(); return; }
+    if (a === 'edit-article') { const article = state.articles.find((x) => x.id === btn.dataset.id); if (article) { state.articleEditor = cloneArticleEditor(article); render(); } return; }
+    if (a === 'article-mode') {
+        syncArticleEditorFromDom();
+        state.articleEditor.articleMode = btn.dataset.v === 'variant' ? 'variant' : 'single';
+        if (state.articleEditor.articleMode === 'variant' && !(state.articleEditor.variants || []).length) state.articleEditor.variants = [createEmptyVariant()];
+        renderArticle();
+        return;
+    }
+    if (a === 'add-article-variant') {
+        syncArticleEditorFromDom();
+        state.articleEditor.variants = [...(state.articleEditor.variants || []), createEmptyVariant()];
+        renderArticle();
+        return;
+    }
+    if (a === 'remove-article-variant') {
+        syncArticleEditorFromDom();
+        state.articleEditor.variants = (state.articleEditor.variants || []).filter((variant) => variant.id !== btn.dataset.variant);
+        if (!state.articleEditor.variants.length) state.articleEditor.variants = [createEmptyVariant()];
+        renderArticle();
+        return;
+    }
+    if (a === 'capture-variant-ean') {
+        syncArticleEditorFromDom();
+        openScanner('article-variant-ean', btn.dataset.id, btn.dataset.variant);
+        return;
+    }
+    if (a === 'capture-ean' && btn.dataset.id) { openScanner('article-ean', btn.dataset.id); return; }
+    if (a === 'art-store') {
+        syncArticleEditorFromDom();
+        const ids = state.articleEditor.storeIds || [];
+        state.articleEditor.storeIds = ids.includes(btn.dataset.id) ? ids.filter((x) => x !== btn.dataset.id) : [...ids, btn.dataset.id];
+        renderArticle();
+        return;
+    }
+    if (a === 'save-article') { await saveArticle(); return; }
+    if (a === 'save-unknown') { await saveUnknownCode(); return; }
+    return await onClickActive(e);
+}
+
+async function onClickActive(e) {
+    const btn = e.target.closest('[data-a]');
+    if (!btn) return;
+    const a = btn.dataset.a;
+    const clickKey = btn.dataset.id ? `${a}:${btn.dataset.id}` : a;
+    if (holdConsumedKey === clickKey && Date.now() - holdConsumedAt < 900) { holdConsumedKey = ''; return; }
+    if (a === 'back-home') { navigate('home'); return; }
+    if (a === 'open-mode-picker') { state.modePickerOpen = true; render(); return; }
+    if (a === 'close-mode-picker') { state.modePickerOpen = false; render(); return; }
+    if (a === 'toggle-details') { state.detailsOpen = !state.detailsOpen; render(); return; }
+    if (a === 'mode') { state.mode = MODES.some((entry) => entry.id === btn.dataset.v) ? btn.dataset.v : 'shop'; state.modePickerOpen = false; saveUserSetting(EL_MODE_KEY, state.mode); touchPresence(); render(); return; }
+    if (a === 'quick-mode') { state.mode = 'shop'; state.listMode = btn.dataset.v === 'input' ? 'input' : 'search'; saveUserSetting(EL_MODE_KEY, state.mode); saveUserSetting(EL_LIST_MODE_KEY, state.listMode); touchPresence(); render(); return; }
+    if (a === 'toggle-input-details') { state.inputDetailsOpen = !state.inputDetailsOpen; render(); return; }
+    if (a === 'section') { state.section = btn.dataset.v; saveUserSetting(EL_SECTION_KEY, state.section); touchPresence(); render(); return; }
+    if (a === 'store-display') { state.storeDisplay = state.storeDisplay === 'split' ? 'combined' : 'split'; saveUserSetting(EL_STORE_KEY, state.storeDisplay); render(); return; }
+    if (a === 'list') { selectList(btn.dataset.id); return; }
+    if (a === 'open-settings') { state.settingsOpen = true; render(); return; }
+    if (a === 'close-settings') { state.settingsOpen = false; render(); return; }
+    if (a === 'del-store') { state.storeIds = state.storeIds.filter((x) => x !== btn.dataset.id); render(); return; }
+    if (a === 'add-item') { await addItem(); return; }
+    if (a === 'edit-item') { await handleDouble(btn.dataset.id, 'edit-item'); return; }
+    if (a === 'open-detail-item') { const item = state.items.find((x) => x.id === btn.dataset.id); hideItemActionButtons(btn.dataset.id); state.detailId = btn.dataset.id; initDetailDraft(item); render(); return; }
+    if (a === 'delete-item-direct') { hideItemActionButtons(btn.dataset.id); hideQuantityActionButton(btn.dataset.id); await deleteListItem(btn.dataset.id, 'Artikel gelöscht'); return; }
+    if (a === 'check' || a === 'restore') { await handleDouble(btn.dataset.id, a); return; }
+    if (a === 'quantity') { await handleDouble(btn.dataset.id, 'quantity'); return; }
+    if (a === 'detail') { const item = state.items.find((x) => x.id === btn.dataset.id); state.detailId = btn.dataset.id; initDetailDraft(item); render(); return; }
+    if (a === 'close-detail') { state.detailId = null; state.detailDraft = null; render(); return; }
+    if (a === 'remove-detail-pnote') { const index = Number(btn.dataset.index); if (state.detailDraft && index >= 0 && index < state.detailDraft.persistentNotes.length) { const [entry] = state.detailDraft.persistentNotes.splice(index, 1); if (entry && !state.detailDraft.removedPersistentNotes.includes(entry)) state.detailDraft.removedPersistentNotes.push(entry); render(); } return; }
+    if (a === 'restore-detail-pnote') { const index = Number(btn.dataset.index); if (state.detailDraft && index >= 0 && index < state.detailDraft.removedPersistentNotes.length) { const [entry] = state.detailDraft.removedPersistentNotes.splice(index, 1); if (entry && !state.detailDraft.persistentNotes.includes(entry)) state.detailDraft.persistentNotes.push(entry); render(); } return; }
+    if (a === 'toggle-checked-section') { state.checkedOpen = !state.checkedOpen; if (!state.checkedOpen) state.checkedMenuOpen = false; render(); return; }
+    if (a === 'toggle-checked-menu') { state.checkedMenuOpen = !state.checkedMenuOpen; render(); return; }
+    if (a === 'delete-all-checked') { await deleteAllCheckedItems(); return; }
+    if (a === 'delete-checked-item') { await deleteCheckedItem(btn.dataset.id); return; }
+    if (a === 'open-scan') { if (state.scanOpen) closeScannerModal(); else openScanner(state.listMode === 'input' ? 'list-add' : 'shopping'); return; }
+    if (a === 'close-scan') { closeScannerModal(); return; }
+    if (a === 'manual-scan') { await submitScannerManualInputActive(); return; }
+    if (a === 'save-scanned-codes') { await saveScannedCodesActive(false); return; }
+    if (a === 'save-scanned-codes-next') { await saveScannedCodesActive(true); return; }
+    if (a === 'remove-scanned-code') { removeScannedCodeActive(btn.dataset.id); return; }
+    if (a === 'close-unknown') { closeUnknownModal(); return; }
+    if (a === 'close-article') { state.articleEditor = null; render(); return; }
     if (a === 'delete-article') { await deleteDoc(doc(master('articles'), btn.dataset.id)); await logActivity('Artikel gelöscht', { articleId: btn.dataset.id }); state.articleEditor = null; render(); return; }
     if (a === 'add-category') { await addMaster('categories', state.drafts.category, 'name'); state.drafts.category = ''; render(); return; }
     if (a === 'del-category') { await deleteDoc(doc(master('categories'), btn.dataset.id)); await logActivity('Kategorie gelöscht', { categoryId: btn.dataset.id }); return; }

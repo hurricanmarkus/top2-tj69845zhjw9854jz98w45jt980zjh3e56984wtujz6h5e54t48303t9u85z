@@ -1,14 +1,24 @@
 {
-  "version": "1.7.4",
-  "buildId": "20260403-5",
+  "version": "1.8.0",
+  "buildId": "20260403-6",
   "releaseDate": "2026-04-03",
-  "releaseTime": "11:41",
+  "releaseTime": "13:32",
   "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Suchvorschläge zeigen jetzt nur Listenartikel, und im Produktdialog gibt es Geschäftsauswahl sowie entfern- und wiederherstellbare gespeicherte Anmerkungen.",
-  "commitId": "6c9dc6a",
+  "note": "Einkaufsliste unterstützt jetzt Artikelvarianten mit Alias-Suche, Variantenwahl, variantenbezogenem EAN-Scan und Übernahme in die Liste.",
+  "commitId": "6b43fa1",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.8.0",
+      "buildId": "20260403-6",
+      "releaseDate": "2026-04-03",
+      "releaseTime": "13:32",
+      "bereich": "Einkaufsliste",
+      "note": "Einkaufsliste unterstützt jetzt Artikelvarianten mit Alias-Suche, Variantenwahl, variantenbezogenem EAN-Scan und Übernahme in die Liste.",
+      "commitId": "6b43fa1",
+      "obligation": "false"
+    },
     {
       "version": "1.7.4",
       "buildId": "20260403-5",
