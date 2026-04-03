@@ -1,14 +1,24 @@
 {
-  "version": "1.7.0",
-  "buildId": "20260403-1",
+  "version": "1.7.1",
+  "buildId": "20260403-2",
   "releaseDate": "2026-04-03",
-  "releaseTime": "09:52",
+  "releaseTime": "10:07",
   "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Eingabemodus: mobiles Tippen stabilisiert, Layout neu geordnet und Scanner füllt Eingabefelder nur noch vor.",
-  "commitId": "1dea0e7",
+  "note": "Eingabezeile und Detailbereich im Eingabemodus weiter für schmale Displays und die neue +Details-Zeile verfeinert.",
+  "commitId": "dd8fb62",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.7.1",
+      "buildId": "20260403-2",
+      "releaseDate": "2026-04-03",
+      "releaseTime": "10:07",
+      "bereich": "Einkaufsliste",
+      "note": "Eingabezeile und Detailbereich im Eingabemodus weiter für schmale Displays und die neue +Details-Zeile verfeinert.",
+      "commitId": "dd8fb62",
+      "obligation": "false"
+    },
     {
       "version": "1.7.0",
       "buildId": "20260403-1",
