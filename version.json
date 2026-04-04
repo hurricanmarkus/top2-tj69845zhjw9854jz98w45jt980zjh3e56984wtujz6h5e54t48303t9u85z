@@ -1,14 +1,24 @@
 {
-  "version": "1.8.9",
-  "buildId": "20260405-1",
+  "version": "1.8.10",
+  "buildId": "20260405-2",
   "releaseDate": "2026-04-05",
-  "releaseTime": "01:21",
+  "releaseTime": "01:34",
   "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Listenmodus-Eingabe nutzt jetzt mehr Breite für Artikel, fokussiert nach dem Hinzufügen wieder das Artikelfeld und Presence-Updates schließen die Tastatur nicht mehr.",
-  "commitId": "d95dff5",
+  "note": "Menge markiert ihren Wert jetzt sofort beim Fokus und Benachrichtigungszeilen teilen Checkboxen und Intervalle gleich breit auf.",
+  "commitId": "a6ae416",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.8.10",
+      "buildId": "20260405-2",
+      "releaseDate": "2026-04-05",
+      "releaseTime": "01:34",
+      "bereich": "Einkaufsliste",
+      "note": "Menge markiert ihren Wert jetzt sofort beim Fokus und Benachrichtigungszeilen teilen Checkboxen und Intervalle gleich breit auf.",
+      "commitId": "a6ae416",
+      "obligation": "false"
+    },
     {
       "version": "1.8.9",
       "buildId": "20260405-1",
