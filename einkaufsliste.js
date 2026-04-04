@@ -306,6 +306,30 @@ function findArticleByCode(code = '') {
     return { article: null, variant: null };
 }
 
+function isEanSearchQuery(query = '') {
+    return /^\d+$/.test(String(query || '').trim());
+}
+
+function findMatchingArticleEanCodes(article, query = '') {
+    const normalizedQuery = String(query || '').trim().toLowerCase();
+    if (!normalizedQuery) return [];
+    return Array.from(new Set((article?.eanCodes || []).map((entry) => String(entry || '').trim()).filter((code) => code && code.toLowerCase().includes(normalizedQuery))));
+}
+
+function findMatchingVariantEanCodes(article, query = '') {
+    const normalizedQuery = String(query || '').trim().toLowerCase();
+    if (!normalizedQuery) return [];
+    return (article?.variants || []).map((variant) => {
+        const codes = Array.from(new Set((variant?.eanCodes || []).map((entry) => String(entry || '').trim()).filter((code) => code && code.toLowerCase().includes(normalizedQuery))));
+        return codes.length ? { variant, codes } : null;
+    }).filter(Boolean);
+}
+
+function isArticleCaptureScanMode(mode = state.scanMode) {
+    const value = String(mode || '').trim();
+    return value === 'article-ean' || value === 'article-variant-ean';
+}
+
 function suggestionScore(query, text) {
     const value = String(text || '').trim().toLowerCase();
     if (!value || !value.includes(query)) return null;
@@ -1146,11 +1170,11 @@ function renderModeToggle() {
 function renderScannerPanelActive(embedded = false) {
     const article = state.articles.find((a) => a.id === state.scanArticleId);
     const variant = findVariantById(article, state.scanVariantId);
-    const isArticleMode = String(state.scanMode || '').startsWith('article');
+    const isArticleMode = isArticleCaptureScanMode();
     const nextTarget = nextMissingEanTarget(state.scanArticleId, state.scanVariantId);
-    const scannerTitle = isArticleMode ? `EAN zuordnen: ${escapeHtml(variant ? buildVariantGeneratedTitle(article, variant) : (article?.title || 'Artikel'))}` : state.scanMode === 'list-add' ? 'Scanner · Eingeben' : 'Scanner · Listenmodus';
-    const scannerText = isArticleMode ? `Mehrere Codes können gesammelt und gemeinsam gespeichert werden.${variant ? ' Die EANs werden der gewählten Variante zugeordnet.' : ''}` : state.scanMode === 'list-add' ? 'Gefundene EANs übernehmen Titel, Einheit, Menge und Details in die Eingabefelder. Hinzugefügt wird erst mit +.' : 'Gefundene EANs öffnen die Mengenübernahme. Der Scan bleibt aktiv.';
-    const manualLabel = isArticleMode ? 'Code hinzufügen' : state.scanMode === 'list-add' ? 'Werte übernehmen' : 'Code übernehmen';
+    const scannerTitle = isArticleMode ? `EAN zuordnen: ${escapeHtml(variant ? buildVariantGeneratedTitle(article, variant) : (article?.title || 'Artikel'))}` : state.scanMode === 'list-add' ? 'Scanner · Eingeben' : state.scanMode === 'article-search' ? 'Scanner · Artikelwartung' : 'Scanner · Listenmodus';
+    const scannerText = isArticleMode ? `Mehrere Codes können gesammelt und gemeinsam gespeichert werden.${variant ? ' Die EANs werden der gewählten Variante zugeordnet.' : ''}` : state.scanMode === 'list-add' ? 'Gefundene EANs übernehmen Titel, Einheit, Menge und Details in die Eingabefelder. Hinzugefügt wird erst mit +.' : state.scanMode === 'article-search' ? 'Gescanntes EAN wird direkt in die Artikelsuche übernommen und filtert sofort passende Artikel oder Varianten.' : 'Gefundene EANs öffnen die Mengenübernahme. Der Scan bleibt aktiv.';
+    const manualLabel = isArticleMode ? 'Code hinzufügen' : state.scanMode === 'list-add' ? 'Werte übernehmen' : state.scanMode === 'article-search' ? 'EAN übernehmen' : 'Code übernehmen';
     const shellClass = embedded ? 'mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 space-y-3' : 'elpanel p-4 sm:p-5 space-y-4';
     const titleClass = embedded ? 'text-base font-black text-gray-900' : 'text-xl font-black text-gray-900';
     const videoWrapClass = embedded ? 'elcam mx-auto w-full max-w-[92vw] sm:max-w-[70%]' : 'elcam';
@@ -1245,13 +1269,17 @@ function filteredManageArticles() {
     return state.articles.filter((a) => {
         const query = state.articleSearch.trim().toLowerCase();
         const hasAnyEan = articleHasResolvedEan(a);
+        const eanSearch = isEanSearchQuery(query);
         const searchTexts = [
             a.title,
             ...(a.aliases || []),
             ...(a.eanCodes || []),
             ...(a.variants || []).flatMap((variant) => [...buildVariantSearchTerms(a, variant), ...(variant.eanCodes || [])])
         ].filter(Boolean).map((entry) => String(entry).toLowerCase());
-        const matchesSearch = !query || searchTexts.some((text) => text.includes(query));
+        const matchesSearch = !query
+            || (eanSearch
+                ? findMatchingArticleEanCodes(a, query).length > 0 || findMatchingVariantEanCodes(a, query).length > 0
+                : searchTexts.some((text) => text.includes(query)));
         return (!state.missingEanOnly || !hasAnyEan) && matchesSearch;
     });
 }
@@ -1660,8 +1688,12 @@ function renderBodyActive() {
 
 function renderManageArticlesSection() {
     const entries = filteredManageArticles();
-    return `<div class="space-y-3"><div class="elc flex flex-wrap gap-2"><input id="el-article-search" class="eli" placeholder="Artikel suchen..." value="${escapeHtml(state.articleSearch)}"><label class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold bg-slate-100 text-slate-700"><input type="checkbox" id="el-missing-ean" ${state.missingEanOnly ? 'checked' : ''}> Ohne EAN</label><button class="elb a" data-a="open-article" ${!canManageWrite() ? 'disabled' : ''}>+ Artikel</button></div>${entries.map((article) => {
+    const articleSearchQuery = String(state.articleSearch || '').trim();
+    const eanSearch = isEanSearchQuery(articleSearchQuery);
+    return `<div class="space-y-3"><div class="elc flex flex-wrap gap-2"><div class="eltitlewrap flex-1 min-w-[220px]"><input id="el-article-search" class="eli eltitleinput" style="padding-left:2.8rem" placeholder="Artikel suchen..." value="${escapeHtml(state.articleSearch)}"><button id="el-article-search-scan" class="eltitlecam ${state.scanOpen && state.scanMode === 'article-search' ? 'a' : ''}" data-a="toggle-article-search-scan" title="Scanner ${state.scanOpen && state.scanMode === 'article-search' ? 'deaktivieren' : 'aktivieren'}">📷</button></div><label class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold bg-slate-100 text-slate-700"><input type="checkbox" id="el-missing-ean" ${state.missingEanOnly ? 'checked' : ''}> Ohne EAN</label><button class="elb a" data-a="open-article" ${!canManageWrite() ? 'disabled' : ''}>+ Artikel</button></div>${entries.map((article) => {
         const isVariant = isVariantArticle(article);
+        const articleCodeMatches = eanSearch ? findMatchingArticleEanCodes(article, articleSearchQuery) : [];
+        const variantMatches = eanSearch ? findMatchingVariantEanCodes(article, articleSearchQuery) : [];
         const summary = isVariant
             ? `${article.variants.length} Variante(n)${article.aliases?.length ? ` · ${article.aliases.length} Alias` : ''}`
             : `${fmtQty(article.defaultQuantity || 1)} ${escapeHtml(article.defaultUnit || 'Stück')}`;
@@ -1672,7 +1704,7 @@ function renderManageArticlesSection() {
             : statusResolved
                 ? chip('EAN OK', 'bg-emerald-100 text-emerald-700')
                 : `<button class="elb bg-red-100 text-red-700" data-a="capture-ean" data-id="${article.id}" ${!canManageWrite() ? 'disabled' : ''}>EAN fehlt</button>`;
-        return `<div class="elc space-y-2"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="flex flex-wrap items-center gap-2"><div class="font-bold text-sm">${escapeHtml(article.title)}</div>${isVariant ? chip('Variantenartikel', 'bg-amber-100 text-amber-800') : ''}${renderArticleMetaIcons(article)}</div><div class="text-xs text-gray-500">${summary}${categoryName ? ` · ${escapeHtml(categoryName)}` : ''}</div></div><div class="flex flex-wrap gap-2">${statusUi}<button class="elb bg-gray-100 text-gray-700" data-a="edit-article" data-id="${article.id}" ${!canManageWrite() ? 'disabled' : ''}>Bearbeiten</button></div></div>${article.aliases?.length ? `<div class="text-xs text-slate-500">Alias: ${escapeHtml(article.aliases.join(', '))}</div>` : ''}</div>`;
+        return `<div class="elc space-y-2"><div class="flex flex-wrap justify-between gap-2 items-center"><div><div class="flex flex-wrap items-center gap-2"><div class="font-bold text-sm">${escapeHtml(article.title)}</div>${isVariant ? chip('Variantenartikel', 'bg-amber-100 text-amber-800') : ''}${renderArticleMetaIcons(article)}</div><div class="text-xs text-gray-500">${summary}${categoryName ? ` · ${escapeHtml(categoryName)}` : ''}</div></div><div class="flex flex-wrap gap-2">${statusUi}<button class="elb bg-gray-100 text-gray-700" data-a="edit-article" data-id="${article.id}" ${!canManageWrite() ? 'disabled' : ''}>Bearbeiten</button></div></div>${article.aliases?.length ? `<div class="text-xs text-slate-500">Alias: ${escapeHtml(article.aliases.join(', '))}</div>` : ''}${articleCodeMatches.length ? `<div class="text-xs font-semibold text-sky-700">EAN-Treffer: ${escapeHtml(articleCodeMatches.join(', '))}</div>` : ''}${variantMatches.length ? `<div class="rounded-2xl border border-sky-100 bg-sky-50 p-2 space-y-2">${variantMatches.map((entry) => { const variant = entry.variant; const title = buildVariantGeneratedTitle(article, variant); const metaLine = `${fmtQty(variant?.quantity || 1)} ${escapeHtml(variant?.unit || 'Stück')} · ${escapeHtml(state.stores.find((store) => store.id === variant?.storeId)?.name || 'Ohne Geschäft')}`; return `<div class="rounded-xl border border-white bg-white px-3 py-2"><div class="flex flex-wrap items-center gap-2"><div class="text-[11px] font-black uppercase text-sky-600">Variante</div><div class="text-sm font-bold text-slate-800">${escapeHtml(title)}</div></div><div class="text-xs text-slate-500">${metaLine}</div><div class="text-xs font-semibold text-sky-700">EAN-Treffer: ${escapeHtml(entry.codes.join(', '))}</div></div>`; }).join('')}</div>` : ''}</div>`;
     }).join('') || '<div class="elc text-sm text-gray-400">Keine Artikel gefunden.</div>'}</div>`;
 }
 
@@ -2566,8 +2598,10 @@ function openScanner(mode = 'shopping', articleId = '', variantId = '') {
     state.scanArticleId = articleId;
     state.scanVariantId = variantId;
     state.scanCodes = [];
-    state.scanStatus = String(mode || '').startsWith('article')
+    state.scanStatus = isArticleCaptureScanMode(mode)
         ? 'Kamera wird für die EAN-Erfassung gestartet...'
+        : mode === 'article-search'
+            ? 'Kamera wird gestartet. Gefundene EANs übernehmen die Artikelsuche...'
         : mode === 'list-add'
             ? 'Kamera wird gestartet. Gefundene EANs übernehmen die Eingabefelder...'
             : 'Kamera wird gestartet. Gefundene EANs öffnen die Mengenübernahme...';
@@ -2589,6 +2623,14 @@ function closeScannerModal() {
     render();
 }
 
+function applyArticleSearchCode(code = '') {
+    const value = String(code || '').trim();
+    if (!value) return;
+    state.articleSearch = value;
+    requestFocusAfterRender('el-article-search', value.length, value.length);
+    closeScannerModal();
+}
+
 function closeUnknownModal() {
     state.unknownCode = '';
     state.unknownArticleId = '';
@@ -2599,7 +2641,7 @@ function closeUnknownModal() {
 function renderScannerActive() {
     const el = document.getElementById('el-scanner');
     if (!el) return;
-    const isArticleMode = state.scanOpen && String(state.scanMode || '').startsWith('article');
+    const isArticleMode = state.scanOpen && (isArticleCaptureScanMode() || state.scanMode === 'article-search');
     el.className = `elmodal ${isArticleMode ? 'o' : ''}`;
     if (!state.scanOpen) { el.innerHTML = ''; stopScanner(); return; }
     if (isArticleMode) {
@@ -2751,7 +2793,11 @@ async function startScannerActive() {
         if (!video) return;
         if (!scanStream) scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
         video.srcObject = scanStream;
-        state.scanStatus = String(state.scanMode || '').startsWith('article') ? 'Scanner aktiv. Mehrere Codes können gesammelt werden.' : 'Scanner aktiv.';
+        state.scanStatus = isArticleCaptureScanMode()
+            ? 'Scanner aktiv. Mehrere Codes können gesammelt werden.'
+            : state.scanMode === 'article-search'
+                ? 'Scanner aktiv. Nach dem Scan wird die Artikelsuche direkt gefiltert.'
+                : 'Scanner aktiv.';
         if (status) status.textContent = state.scanStatus;
         if ('BarcodeDetector' in window) {
             if (!scanTimer) {
@@ -2790,7 +2836,11 @@ async function processScannerCodeActive(rawCode) {
     scanRecentCodes.set(code, now);
     state.scanLastCode = code;
     state.scanLastAt = now;
-    if (String(state.scanMode || '').startsWith('article')) {
+    if (state.scanMode === 'article-search') {
+        applyArticleSearchCode(code);
+        return true;
+    }
+    if (isArticleCaptureScanMode()) {
         state.scanCodes = Array.from(new Set([...(state.scanCodes || []), code]));
         state.scanStatus = `${state.scanCodes.length} Code(s) erfasst.`;
         updateScannerDynamicUi();
@@ -2972,6 +3022,7 @@ async function onClick(e) {
         return;
     }
     if (a === 'open-article') { state.articleEditor = createEmptyArticleEditor('single'); render(); return; }
+    if (a === 'toggle-article-search-scan') { if (state.scanOpen && state.scanMode === 'article-search') closeScannerModal(); else openScanner('article-search'); return; }
     if (a === 'edit-article') { const article = state.articles.find((x) => x.id === btn.dataset.id); if (article) { state.articleEditor = cloneArticleEditor(article); render(); } return; }
     if (a === 'article-mode') {
         syncArticleEditorFromDom();

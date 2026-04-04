@@ -1,14 +1,24 @@
 {
-  "version": "1.8.10",
-  "buildId": "20260405-2",
+  "version": "1.8.11",
+  "buildId": "20260405-3",
   "releaseDate": "2026-04-05",
-  "releaseTime": "01:34",
+  "releaseTime": "01:49",
   "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Menge markiert ihren Wert jetzt sofort beim Fokus und Benachrichtigungszeilen teilen Checkboxen und Intervalle gleich breit auf.",
-  "commitId": "a6ae416",
+  "note": "Artikelwartung kann EANs jetzt direkt ins Suchfeld scannen und zeigt bei Variantentreffern den Oberartikel mit den passenden Varianten darunter an.",
+  "commitId": "3a4c038",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.8.11",
+      "buildId": "20260405-3",
+      "releaseDate": "2026-04-05",
+      "releaseTime": "01:49",
+      "bereich": "Einkaufsliste",
+      "note": "Artikelwartung kann EANs jetzt direkt ins Suchfeld scannen und zeigt bei Variantentreffern den Oberartikel mit den passenden Varianten darunter an.",
+      "commitId": "3a4c038",
+      "obligation": "false"
+    },
     {
       "version": "1.8.10",
       "buildId": "20260405-2",
