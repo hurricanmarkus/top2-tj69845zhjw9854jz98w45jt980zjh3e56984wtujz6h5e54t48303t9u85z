@@ -1,14 +1,24 @@
 {
-  "version": "1.8.8",
-  "buildId": "20260403-14",
-  "releaseDate": "2026-04-03",
-  "releaseTime": "20:54",
-  "bereich": "Versionssystem",
+  "version": "1.8.9",
+  "buildId": "20260405-1",
+  "releaseDate": "2026-04-05",
+  "releaseTime": "01:21",
+  "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Optionale Updates zeigen jetzt nur noch einen gelb blinkenden Hinweis, Pflichtupdates bleiben erzwungen und die Prüfung reagiert deutlich schneller.",
-  "commitId": "c9cbb97",
+  "note": "Listenmodus-Eingabe nutzt jetzt mehr Breite für Artikel, fokussiert nach dem Hinzufügen wieder das Artikelfeld und Presence-Updates schließen die Tastatur nicht mehr.",
+  "commitId": "d95dff5",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.8.9",
+      "buildId": "20260405-1",
+      "releaseDate": "2026-04-05",
+      "releaseTime": "01:21",
+      "bereich": "Einkaufsliste",
+      "note": "Listenmodus-Eingabe nutzt jetzt mehr Breite für Artikel, fokussiert nach dem Hinzufügen wieder das Artikelfeld und Presence-Updates schließen die Tastatur nicht mehr.",
+      "commitId": "d95dff5",
+      "obligation": "false"
+    },
     {
       "version": "1.8.8",
       "buildId": "20260403-14",
