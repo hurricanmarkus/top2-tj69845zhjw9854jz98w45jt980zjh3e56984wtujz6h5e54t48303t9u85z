@@ -1,14 +1,24 @@
 {
-  "version": "1.10.0",
-  "buildId": "20260405-6",
+  "version": "1.10.1",
+  "buildId": "20260405-7",
   "releaseDate": "2026-04-05",
-  "releaseTime": "12:41",
+  "releaseTime": "13:13",
   "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Das Sync-Center der Einkaufsliste ist jetzt als klare Schritt-für-Schritt-Ansicht mit einklappbaren Boxen, Einzel-Zielliste und Statusfarben für neue, geänderte und identische Einträge aufgebaut.",
-  "commitId": "ae52555",
+  "note": "Das Sync-Center zeigt Auto-Sync jetzt innerhalb der geöffneten Box, Sync-Infos sind mobil antippbar und Auto-Sync gleicht Stammdaten beim Aktivieren sowie bei späteren Änderungen der Quelle automatisch ab.",
+  "commitId": "6665dce",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.10.1",
+      "buildId": "20260405-7",
+      "releaseDate": "2026-04-05",
+      "releaseTime": "13:13",
+      "bereich": "Einkaufsliste",
+      "note": "Das Sync-Center zeigt Auto-Sync jetzt innerhalb der geöffneten Box, Sync-Infos sind mobil antippbar und Auto-Sync gleicht Stammdaten beim Aktivieren sowie bei späteren Änderungen der Quelle automatisch ab.",
+      "commitId": "6665dce",
+      "obligation": "false"
+    },
     {
       "version": "1.10.0",
       "buildId": "20260405-6",
