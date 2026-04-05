@@ -29,6 +29,10 @@ function createEmptySyncSelection() {
     return { articles: [], categories: [], stores: [], remarks: [], notes: [] };
 }
 
+function createEmptySyncConfirm() {
+    return { open: false, action: '', title: '', message: '', confirmLabel: 'OK eingeben', input: '', targetListId: '', enableAutoSync: false };
+}
+
 function createEmptySyncPreview() {
     return { articles: {}, categories: {}, stores: {}, remarks: {}, notes: {} };
 }
@@ -132,6 +136,7 @@ const state = {
     autoSyncOpen: false,
     autoSyncTargets: [],
     autoSyncBidirectional: false,
+    syncConfirm: createEmptySyncConfirm(),
     notificationPublicKey: '',
     notificationSubscribed: false,
     notificationBusy: false,
@@ -545,7 +550,7 @@ function ensureRoot() {
     root = document.getElementById('einkaufsliste-root');
     if (!root) return;
     if (!root.querySelector('#el-main')) {
-        root.innerHTML = `<div class="space-y-3" id="el-main"></div><div id="el-modepicker"></div><div id="el-settings"></div><div id="el-purchase"></div><div id="el-detail"></div><div id="el-storecat"></div><div id="el-article"></div><div id="el-scanner"></div><div id="el-unknown"></div>`;
+        root.innerHTML = `<div class="space-y-3" id="el-main"></div><div id="el-modepicker"></div><div id="el-settings"></div><div id="el-purchase"></div><div id="el-detail"></div><div id="el-storecat"></div><div id="el-article"></div><div id="el-scanner"></div><div id="el-unknown"></div><div id="el-syncconfirm"></div>`;
     }
     root.removeEventListener('click', onClickActive);
     root.removeEventListener('click', onClick);
@@ -1718,6 +1723,62 @@ function syncSelectedTransferableCount() {
     return ['articles', 'categories', 'stores', 'remarks', 'notes'].reduce((count, type) => count + (state.syncSelection[type] || []).filter((id) => syncTransferableMode(syncPreviewEntry(type, id).mode)).length, 0);
 }
 
+function syncTransferableIds(type) {
+    return syncEntriesByType(type).filter((entry) => syncTransferableMode(syncPreviewEntry(type, entry.id).mode)).map((entry) => entry.id);
+}
+
+function toggleSyncTypeSelection(type) {
+    if (!syncTargetListId() || state.syncPreviewLoading) return;
+    const transferableIds = syncTransferableIds(type);
+    if (!transferableIds.length) return;
+    const current = state.syncSelection[type] || [];
+    const allSelected = transferableIds.every((id) => current.includes(id));
+    state.syncSelection[type] = allSelected
+        ? current.filter((id) => !transferableIds.includes(id))
+        : Array.from(new Set([...current, ...transferableIds]));
+    render();
+}
+
+function closeSyncConfirmModal() {
+    state.syncConfirm = createEmptySyncConfirm();
+    render();
+}
+
+function openSyncConfirmModal({ action = '', title = '', message = '', targetListId = '', enableAutoSync = false } = {}) {
+    state.syncConfirm = {
+        open: true,
+        action,
+        title,
+        message,
+        confirmLabel: 'OK eingeben',
+        input: '',
+        targetListId: String(targetListId || '').trim(),
+        enableAutoSync: !!enableAutoSync
+    };
+    render();
+}
+
+function syncConfirmAccepted() {
+    return String(state.syncConfirm?.input || '').trim().toUpperCase() === 'OK';
+}
+
+async function submitSyncConfirmModal() {
+    if (!state.syncConfirm?.open || !syncConfirmAccepted()) return;
+    const { action, targetListId } = state.syncConfirm;
+    closeSyncConfirmModal();
+    if (action === 'sync-all') {
+        await syncMastersToTargets({ onlySelected: false });
+        return;
+    }
+    if (action === 'sync-selected') {
+        await syncMastersToTargets({ onlySelected: true });
+        return;
+    }
+    if (action === 'toggle-auto-sync') {
+        await toggleAutoSyncLink(targetListId);
+    }
+}
+
 async function refreshSyncPreview(targetListId = syncTargetListId()) {
     const normalizedTargetListId = String(targetListId || '').trim();
     if (!normalizedTargetListId) {
@@ -2091,6 +2152,8 @@ function renderSyncCenterSection(list = activeList()) {
         const entries = syncEntriesByType(type);
         const typeTransferable = syncTransferableCount(type);
         const selection = state.syncSelection[type] || [];
+        const transferableIds = syncTransferableIds(type);
+        const allSelected = transferableIds.length && transferableIds.every((id) => selection.includes(id));
         const content = entries.length
             ? entries.map((entry) => {
                 const preview = syncPreviewEntry(type, entry.id);
@@ -2110,7 +2173,7 @@ function renderSyncCenterSection(list = activeList()) {
                 return `<div class="inline-flex items-center gap-1 align-top"><button type="button" class="rounded-full px-3 py-1.5 text-xs font-bold inline-flex items-center gap-2 ${buttonClass}" data-a="toggle-sync-entry" data-type="${type}" data-id="${entry.id}" ${selectable ? '' : 'disabled'} title="${escapeHtml(preview.info || '')}"><span>${escapeHtml(syncEntryLabel(type, entry) || 'Ohne Name')}</span></button>${infoButton}</div>`;
             }).join('')
             : '<span class="text-xs text-slate-400">Keine Einträge vorhanden.</span>';
-        return `<div class="rounded-2xl border border-white/70 bg-white/80 p-3 space-y-2"><div class="flex items-center justify-between gap-2"><div class="text-sm font-black text-slate-800">${MASTER_ENTITY_LABELS[type]}</div><div class="text-[11px] font-semibold text-slate-500">${selection.length} gewählt · ${typeTransferable} aktiv</div></div><div class="flex flex-wrap gap-2">${content}</div></div>`;
+        return `<div class="rounded-2xl border border-white/70 bg-white/80 p-3 space-y-2"><div class="flex items-center justify-between gap-2"><div class="text-sm font-black text-slate-800">${MASTER_ENTITY_LABELS[type]}</div><div class="flex items-center gap-2"><div class="text-[11px] font-semibold text-slate-500">${selection.length} gewählt · ${typeTransferable} aktiv</div><button type="button" class="rounded-full px-3 py-1 text-[11px] font-bold ${typeTransferable && !state.syncPreviewLoading ? availableActionClass : disabledActionClass}" data-a="toggle-sync-type-selection" data-type="${type}" ${typeTransferable && !state.syncPreviewLoading ? '' : 'disabled'}>${allSelected ? 'Alle abwählen' : 'Alle'}</button></div></div><div class="flex flex-wrap gap-2">${content}</div></div>`;
     };
     const stepOne = !candidates.length
         ? '<div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-500">Keine weiteren eigenen Listen verfügbar.</div>'
@@ -2121,12 +2184,22 @@ function renderSyncCenterSection(list = activeList()) {
             ? '<div class="rounded-2xl border border-dashed border-amber-300 bg-white/60 px-3 py-4 text-sm text-amber-900/80">Vergleiche Einträge mit der Zielliste...</div>'
             : `<div class="grid gap-3 md:grid-cols-2">${types.map((type) => renderTypeCard(type)).join('')}</div>`;
     const stepTwo = `<div class="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-3"><div class="flex flex-wrap items-start justify-between gap-2"><div><div class="inline-flex rounded-full bg-amber-500 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-white">Schritt 2</div><div class="mt-2 text-sm font-black text-amber-900">Einträge auswählen</div><div class="text-xs text-amber-900/80">Weiß = neu, Gelb = existiert bereits und wird ersetzt, Grau = bereits exakt gleich vorhanden. Das i ist jetzt auch auf dem Handy antippbar.</div></div><div class="text-[11px] font-bold text-amber-900">${hasTarget ? `${transferableCount} übertragbar` : 'Bitte erst Ziel-Liste wählen'}</div></div>${stepTwoBody}</div>`;
-    const stepThree = `<div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 space-y-3"><div class="flex flex-wrap items-start justify-between gap-2"><div><div class="inline-flex rounded-full bg-emerald-600 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-white">Schritt 3</div><div class="mt-2 text-sm font-black text-emerald-900">Übertragung starten</div><div class="text-xs text-emerald-900/80">Nur weiße und gelbe Einträge werden berücksichtigt.</div></div><div class="text-[11px] font-bold text-emerald-900">${selectedCount} ausgewählt</div></div><div class="flex flex-wrap gap-2"><button class="elb ${hasTarget && !state.syncPreviewLoading && transferableCount ? primaryActionClass : disabledActionClass}" data-a="sync-all-targets" ${hasTarget && !state.syncPreviewLoading && transferableCount ? '' : 'disabled'}>Alle übertragbaren Einträge übertragen</button><button class="elb ${hasTarget && !state.syncPreviewLoading && selectedCount ? availableActionClass : disabledActionClass}" data-a="sync-selected-targets" ${hasTarget && !state.syncPreviewLoading && selectedCount ? '' : 'disabled'}>Nur Auswahl übertragen</button><button class="elb ${selectedCount ? availableActionClass : disabledActionClass}" data-a="clear-sync-selection" ${selectedCount ? '' : 'disabled'}>Auswahl leeren</button></div></div>`;
+    const stepThree = `<div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 space-y-3"><div class="flex flex-wrap items-start justify-between gap-2"><div><div class="inline-flex rounded-full bg-emerald-600 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-white">Schritt 3</div><div class="mt-2 text-sm font-black text-emerald-900">Übertragung starten</div><div class="text-xs text-emerald-900/80">Nur weiße und gelbe Einträge werden berücksichtigt.</div></div><div class="text-[11px] font-bold text-emerald-900">${selectedCount} ausgewählt</div></div><div class="flex flex-wrap gap-2"><button class="elb ${hasTarget && !state.syncPreviewLoading && transferableCount ? availableActionClass : disabledActionClass}" data-a="sync-all-targets" ${hasTarget && !state.syncPreviewLoading && transferableCount ? '' : 'disabled'}>Alle übertragbaren Einträge übertragen</button><button class="elb ${hasTarget && !state.syncPreviewLoading && selectedCount ? availableActionClass : disabledActionClass}" data-a="sync-selected-targets" ${hasTarget && !state.syncPreviewLoading && selectedCount ? '' : 'disabled'}>Nur Auswahl übertragen</button><button class="elb ${selectedCount ? availableActionClass : disabledActionClass}" data-a="clear-sync-selection" ${selectedCount ? '' : 'disabled'}>Auswahl leeren</button></div></div>`;
     const autoContent = candidates.length
-        ? `<div class="space-y-3"><div class="text-sm font-black text-sky-900">Verknüpfte Ziel-Listen</div><div class="text-xs text-sky-900/80">Auto-Sync synchronisiert nur Stammdaten dieser Liste, nicht die eigentlichen Einkaufspositionen. Beim Aktivieren wird der aktuelle Stammdatenbestand sofort in die Ziel-Liste übernommen. Spätere Änderungen an Artikeln, Kategorien, Geschäften, Anmerkungen und Notizen werden ebenfalls nachgezogen.</div><div class="flex flex-wrap gap-2">${candidates.map((entry) => `<button class="elb ${state.autoSyncTargets.includes(entry.id) ? autoEnabledClass : autoDisabledClass}" data-a="toggle-auto-sync-target" data-id="${entry.id}">${state.autoSyncTargets.includes(entry.id) ? 'Auto-Sync aktiv' : 'Auto-Sync aus'} · ${escapeHtml(entry.name || 'Liste')}</button>`).join('')}</div></div>`
+        ? `<div class="space-y-3"><div class="text-xs text-slate-500">Auto-Sync synchronisiert nur Stammdaten dieser Liste, nicht die eigentlichen Einkaufspositionen. Beim Aktivieren wird der aktuelle Stammdatenbestand sofort in die Ziel-Liste übernommen. Spätere Änderungen an Artikeln, Kategorien, Geschäften, Anmerkungen und Notizen werden ebenfalls nachgezogen.</div><div class="flex flex-wrap gap-2">${candidates.map((entry) => `<button class="elb ${state.autoSyncTargets.includes(entry.id) ? autoEnabledClass : autoDisabledClass}" data-a="toggle-auto-sync-target" data-id="${entry.id}">${state.autoSyncTargets.includes(entry.id) ? 'Auto-Sync aktiv' : 'Auto-Sync aus'} · ${escapeHtml(entry.name || 'Liste')}</button>`).join('')}</div></div>`
         : '<div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-500">Keine weiteren eigenen Listen verfügbar.</div>';
-    const autoPanel = `<div class="rounded-2xl border border-sky-200 bg-sky-50 overflow-hidden"><button class="w-full px-4 py-4 text-left" data-a="toggle-sync-panel" data-panel="auto"><div class="flex items-start justify-between gap-3"><div><div class="font-black text-sm text-sky-900">Auto-Sync</div><div class="text-xs text-sky-900/80">Wird erst innerhalb des geöffneten Sync-Centers sichtbar und arbeitet von der aktuellen Liste aus in die aktivierten Ziel-Listen.</div></div><div class="text-lg font-black text-sky-400">${state.autoSyncOpen ? '−' : '+'}</div></div></button>${state.autoSyncOpen ? `<div class="border-t border-sky-100 px-4 pb-4 pt-4">${autoContent}</div>` : ''}</div>`;
+    const autoPanel = `<div class="rounded-2xl border border-slate-200 bg-white overflow-hidden"><button class="w-full px-4 py-2.5 text-left" data-a="toggle-sync-panel" data-panel="auto"><div class="flex items-center justify-between gap-3"><div class="font-black text-sm text-slate-900">Auto-Sync</div><div class="text-lg font-black text-slate-400">${state.autoSyncOpen ? '−' : '+'}</div></div></button>${state.autoSyncOpen ? `<div class="border-t border-slate-100 px-4 pb-4 pt-4 bg-white">${autoContent}</div>` : ''}</div>`;
     return `<div class="space-y-3"><div class="elc !p-0 overflow-hidden"><button class="w-full px-4 py-4 text-left" data-a="toggle-sync-panel" data-panel="manual"><div class="flex items-start justify-between gap-3"><div><div class="font-black text-sm text-gray-900">Sync-Center</div><div class="text-xs text-gray-500">Stammdaten gezielt in genau eine andere Liste übertragen.</div></div><div class="text-lg font-black text-slate-400">${state.syncCenterOpen ? '−' : '+'}</div></div></button>${state.syncCenterOpen ? `<div class="border-t border-slate-100 px-4 pb-4 pt-4 space-y-4">${stepOne}${stepTwo}${stepThree}${autoPanel}</div>` : ''}</div></div>`;
+}
+
+function renderSyncConfirmModal() {
+    const el = document.getElementById('el-syncconfirm');
+    if (!el) return;
+    const confirmState = state.syncConfirm;
+    el.className = `elmodal ${confirmState?.open ? 'o' : ''}`;
+    if (!confirmState?.open) { el.innerHTML = ''; return; }
+    const canConfirm = syncConfirmAccepted();
+    el.innerHTML = `<div class="elpanel p-4 sm:p-5 space-y-4"><div class="flex flex-wrap justify-between gap-2 items-start"><div><div class="text-xl font-black text-gray-900">${escapeHtml(confirmState.title || 'Sicherheitsabfrage')}</div><div class="text-sm text-gray-500">${escapeHtml(confirmState.message || '')}</div></div><button class="elb bg-gray-100 text-gray-700" data-a="close-sync-confirm">Schließen</button></div><div class="elc space-y-3 bg-slate-50"><div class="text-sm font-semibold text-slate-700">Zum Fortfahren bitte exakt <span class="font-black">OK</span> eingeben.</div><input id="el-sync-confirm-input" class="eli" placeholder="OK" value="${escapeHtml(confirmState.input || '')}" autocomplete="off" autocapitalize="characters" spellcheck="false"><div class="flex flex-wrap justify-end gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="close-sync-confirm">Abbrechen</button><button class="elb ${canConfirm ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-400 border border-slate-200 opacity-70 cursor-not-allowed'}" data-a="submit-sync-confirm" ${canConfirm ? '' : 'disabled'}>Bestätigen</button></div></div></div>`;
 }
 
 function openScannerLegacy(mode = 'shopping', articleId = '') {
@@ -2256,6 +2329,7 @@ function render() {
     renderArticle();
     renderScannerActive();
     renderUnknown();
+    renderSyncConfirmModal();
     applyPendingFocus();
 }
 
@@ -3563,6 +3637,7 @@ function onInput(e) {
     if (t.id === 'el-draft-category') state.drafts.category = t.value;
     if (t.id === 'el-draft-remark') state.drafts.remark = t.value;
     if (t.id === 'el-draft-note') state.drafts.note = t.value;
+    if (t.id === 'el-sync-confirm-input' && state.syncConfirm?.open) { state.syncConfirm.input = t.value; renderSyncConfirmModal(); return; }
     if (t.id === 'el-c-from') state.collab.accessFrom = t.value;
     if (t.id === 'el-c-until') state.collab.accessUntil = t.value;
     if (t.id === 'el-d-title' && state.detailDraft) { state.detailDraft.title = t.value; return; }
@@ -3745,14 +3820,17 @@ async function onClickActive(e) {
     if (a === 'del-remark') { await deleteDoc(doc(master('remarks'), btn.dataset.id)); await logActivity('Anmerkung gelöscht', { eventType: 'changed', noteId: btn.dataset.id }); return; }
     if (a === 'add-note') { await addFree(master('notes'), state.drafts.note); state.drafts.note = ''; render(); return; }
     if (a === 'del-note') { await deleteDoc(doc(master('notes'), btn.dataset.id)); await logActivity('Notiz gelöscht', { eventType: 'changed', noteId: btn.dataset.id }); return; }
+    if (a === 'close-sync-confirm') { closeSyncConfirmModal(); return; }
+    if (a === 'submit-sync-confirm') { await submitSyncConfirmModal(); return; }
     if (a === 'toggle-sync-panel') { await toggleSyncPanel(btn.dataset.panel || 'manual'); return; }
     if (a === 'toggle-sync-target') { await toggleSyncTarget(btn.dataset.id); return; }
     if (a === 'toggle-sync-entry') { toggleSyncEntry(btn.dataset.type, btn.dataset.id); return; }
+    if (a === 'toggle-sync-type-selection') { toggleSyncTypeSelection(btn.dataset.type); return; }
     if (a === 'show-sync-entry-info') { showSyncEntryInfo(btn.dataset.type, btn.dataset.id); return; }
     if (a === 'clear-sync-selection') { clearSyncSelection(); return; }
-    if (a === 'sync-all-targets') { await syncMastersToTargets({ onlySelected: false }); return; }
-    if (a === 'sync-selected-targets') { await syncMastersToTargets({ onlySelected: true }); return; }
-    if (a === 'toggle-auto-sync-target') { await toggleAutoSyncLink(btn.dataset.id); return; }
+    if (a === 'sync-all-targets') { openSyncConfirmModal({ action: 'sync-all', title: 'Alle übertragbaren Einträge übertragen', message: 'Die ausgewählten Stammdaten werden jetzt in die aktuell gewählte Zielliste übertragen.' }); return; }
+    if (a === 'sync-selected-targets') { openSyncConfirmModal({ action: 'sync-selected', title: 'Nur Auswahl übertragen', message: 'Es werden nur die aktuell markierten übertragbaren Einträge in die Zielliste geschrieben.' }); return; }
+    if (a === 'toggle-auto-sync-target') { const targetId = String(btn.dataset.id || '').trim(); const targetList = state.lists.find((entry) => entry.id === targetId); const enableAutoSync = !state.autoSyncTargets.includes(targetId); openSyncConfirmModal({ action: 'toggle-auto-sync', title: enableAutoSync ? 'Auto-Sync starten' : 'Auto-Sync beenden', message: `${enableAutoSync ? 'Auto-Sync wird für' : 'Auto-Sync wird für'} ${targetList?.name || 'die Zielliste'} ${enableAutoSync ? 'aktiviert' : 'deaktiviert'}. Bitte mit OK bestätigen.`, targetListId: targetId, enableAutoSync }); return; }
     if (a === 'create-list') { await createList(); return; }
     if (a === 'save-list') { await saveList(); return; }
     if (a === 'delete-list') { await deleteList(btn.dataset.id); return; }

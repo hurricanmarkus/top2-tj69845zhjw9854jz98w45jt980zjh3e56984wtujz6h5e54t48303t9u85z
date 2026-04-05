@@ -1,14 +1,24 @@
 {
-  "version": "1.10.2",
-  "buildId": "20260405-8",
+  "version": "1.10.3",
+  "buildId": "20260405-9",
   "releaseDate": "2026-04-05",
-  "releaseTime": "13:23",
+  "releaseTime": "13:39",
   "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Doppelte Funktionsdefinitionen im Sync-Center wurden bereinigt, sodass einkaufsliste.js wieder ohne Syntaxfehler lädt und der Auto-Sync-Code nur noch einmal definiert ist.",
-  "commitId": "6dade9c",
+  "note": "Das Sync-Center wurde weiter verfeinert: Auto-Sync ist jetzt als schmale weiße Kopfzeile gestaltet, Schritt 2 hat Alle-Buttons pro Bereich und manuelle Syncs sowie Auto-Sync Start/Stop verlangen ein OK-Bestätigungsmodal.",
+  "commitId": "08f616c",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.10.3",
+      "buildId": "20260405-9",
+      "releaseDate": "2026-04-05",
+      "releaseTime": "13:39",
+      "bereich": "Einkaufsliste",
+      "note": "Das Sync-Center wurde weiter verfeinert: Auto-Sync ist jetzt als schmale weiße Kopfzeile gestaltet, Schritt 2 hat Alle-Buttons pro Bereich und manuelle Syncs sowie Auto-Sync Start/Stop verlangen ein OK-Bestätigungsmodal.",
+      "commitId": "08f616c",
+      "obligation": "false"
+    },
     {
       "version": "1.10.2",
       "buildId": "20260405-8",
