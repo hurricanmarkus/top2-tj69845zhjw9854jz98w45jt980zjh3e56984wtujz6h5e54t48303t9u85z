@@ -682,6 +682,65 @@ service cloud.firestore {
           && hasEinkaufslisteActorId()
           && userId == einkaufslisteActorId();
       }
+
+      match /master_sync_targets/{targetListId} {
+        allow read, create, update, delete: if isEinkaufslisteOwner(listId);
+      }
+
+      match /master_categories/{categoryId} {
+        allow read: if canAccessEinkaufslisteList(listId);
+        allow create: if canManageWriteEinkaufsliste(listId)
+          && request.resource.data.listId == listId;
+        allow update: if canManageWriteEinkaufsliste(listId)
+          && resource.data.listId == listId
+          && request.resource.data.listId == listId;
+        allow delete: if canManageWriteEinkaufsliste(listId)
+          && resource.data.listId == listId;
+      }
+
+      match /master_stores/{storeId} {
+        allow read: if canAccessEinkaufslisteList(listId);
+        allow create: if canManageWriteEinkaufsliste(listId)
+          && request.resource.data.listId == listId;
+        allow update: if canManageWriteEinkaufsliste(listId)
+          && resource.data.listId == listId
+          && request.resource.data.listId == listId;
+        allow delete: if canManageWriteEinkaufsliste(listId)
+          && resource.data.listId == listId;
+      }
+
+      match /master_articles/{articleId} {
+        allow read: if canAccessEinkaufslisteList(listId);
+        allow create: if (canAddEinkaufslisteItems(listId) || canManageWriteEinkaufsliste(listId))
+          && request.resource.data.listId == listId;
+        allow update: if (canAddEinkaufslisteItems(listId) || canManageWriteEinkaufsliste(listId))
+          && resource.data.listId == listId
+          && request.resource.data.listId == listId;
+        allow delete: if canManageWriteEinkaufsliste(listId)
+          && resource.data.listId == listId;
+      }
+
+      match /master_remarks/{remarkId} {
+        allow read: if canAccessEinkaufslisteList(listId);
+        allow create: if canManageWriteEinkaufsliste(listId)
+          && request.resource.data.listId == listId;
+        allow update: if canManageWriteEinkaufsliste(listId)
+          && resource.data.listId == listId
+          && request.resource.data.listId == listId;
+        allow delete: if canManageWriteEinkaufsliste(listId)
+          && resource.data.listId == listId;
+      }
+
+      match /master_notes/{noteId} {
+        allow read: if canAccessEinkaufslisteList(listId);
+        allow create: if canManageWriteEinkaufsliste(listId)
+          && request.resource.data.listId == listId;
+        allow update: if canManageWriteEinkaufsliste(listId)
+          && resource.data.listId == listId
+          && request.resource.data.listId == listId;
+        allow delete: if canManageWriteEinkaufsliste(listId)
+          && resource.data.listId == listId;
+      }
     }
 
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/einkaufsliste_master_categories/{categoryId} {

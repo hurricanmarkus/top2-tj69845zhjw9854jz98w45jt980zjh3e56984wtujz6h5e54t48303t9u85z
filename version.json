@@ -1,14 +1,24 @@
 {
-  "version": "1.8.12",
-  "buildId": "20260405-4",
+  "version": "1.9.0",
+  "buildId": "20260405-5",
   "releaseDate": "2026-04-05",
-  "releaseTime": "02:07",
+  "releaseTime": "03:16",
   "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Benachrichtigungen prüfen Push-Subscriptions jetzt selbstheilend nach, respektieren Berechtigungs-Zeitfenster im Backend und erkennen Ereignistypen robuster über strukturierte Activity-Payloads.",
-  "commitId": "30cb9ae",
+  "note": "Einkaufsliste nutzt Stammdaten jetzt listenbezogen mit Sync-Center, Auto-Sync-Links und neuen Regeln für gemeinsame Bearbeitung pro Liste.",
+  "commitId": "b2e4bbf",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.9.0",
+      "buildId": "20260405-5",
+      "releaseDate": "2026-04-05",
+      "releaseTime": "03:16",
+      "bereich": "Einkaufsliste",
+      "note": "Einkaufsliste nutzt Stammdaten jetzt listenbezogen mit Sync-Center, Auto-Sync-Links und neuen Regeln für gemeinsame Bearbeitung pro Liste.",
+      "commitId": "b2e4bbf",
+      "obligation": "false"
+    },
     {
       "version": "1.8.12",
       "buildId": "20260405-4",

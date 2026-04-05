@@ -4,6 +4,7 @@ import { addDoc, collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, l
 
 const MODES = [{ id: 'shop', label: 'Listenmodus' }, { id: 'manage', label: 'Verwaltung' }, { id: 'notify', label: 'Benachrichtigungen' }];
 const MANAGE = [{ id: 'general', label: 'Allgemein' }, { id: 'stores', label: 'Geschäftewartung' }, { id: 'articles', label: 'Artikelwartung' }, { id: 'categories', label: 'Kategorienwartung' }, { id: 'remarks', label: 'Anmerkungswartung' }, { id: 'notes', label: 'Notizwartung' }];
+const MASTER_ENTITY_LABELS = { articles: 'Artikel', categories: 'Kategorien', stores: 'Geschäfte', remarks: 'Anmerkungen', notes: 'Notizen' };
 const UNITS = ['Stück', 'Kg', 'Gramm', 'Liter', 'Milliliter', 'Bund', 'Netz', 'Sack', 'Dose', 'Flasche', 'Becher', 'Packung'];
 const NOTIFY_ACTIONS = [
     { id: 'added', label: 'Hinzugefügt', description: 'Neue Artikel auf der Liste' },
@@ -113,6 +114,10 @@ const state = {
     notificationSettings: null,
     notificationTemplate: null,
     notificationCopyTargets: [],
+    syncTargets: [],
+    syncSelection: { articles: [], categories: [], stores: [], remarks: [], notes: [] },
+    autoSyncTargets: [],
+    autoSyncBidirectional: false,
     notificationPublicKey: '',
     notificationSubscribed: false,
     notificationBusy: false,
@@ -121,6 +126,46 @@ const state = {
 
 function makeLocalId(prefix = 'id') {
     return `${prefix}-${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+}
+
+function normalizeSyncText(value = '') {
+    return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function buildMasterSyncLabel(name, payload = {}) {
+    if (name === 'articles') return normalizeSyncText(payload.title || '');
+    if (name === 'categories' || name === 'stores') return normalizeSyncText(payload.name || '');
+    return normalizeSyncText(payload.text || payload.name || '');
+}
+
+function normalizeMasterEntry(name, entry = {}, id = '') {
+    const normalized = {
+        id: String(id || entry.id || '').trim(),
+        ...entry
+    };
+    normalized.masterId = String(normalized.masterId || normalized.id || '').trim();
+    normalized.syncLabel = String(normalized.syncLabel || buildMasterSyncLabel(name, normalized)).trim();
+    normalized.listId = String(normalized.listId || state.listId || '').trim();
+    return normalized;
+}
+
+function buildMasterWritePayload(name, payload = {}, { masterId = '', keepCreatedBy = false } = {}) {
+    const nextMasterId = String(masterId || payload.masterId || makeLocalId(name)).trim();
+    const base = {
+        ...payload,
+        masterId: nextMasterId,
+        syncLabel: buildMasterSyncLabel(name, payload),
+        syncRevision: String(payload.syncRevision || makeLocalId('sync')).trim(),
+        listId: String(payload.listId || state.listId || '').trim(),
+        updatedAt: serverTimestamp(),
+        updatedBy: uid(),
+        updatedByName: uname()
+    };
+    if (!keepCreatedBy) {
+        base.createdBy = uid();
+        base.createdByName = uname();
+    }
+    return base;
 }
 
 function splitLinesUnique(value = '') {
@@ -141,7 +186,8 @@ function createEmptyVariant(seed = {}) {
         unit: normalizeVariantUnit(seed.unit || 'Stück'),
         eanCodes: Array.from(new Set((seed.eanCodes || []).map((entry) => String(entry || '').trim()).filter(Boolean))),
         noEan: !!seed.noEan,
-        storeId: String(seed.storeId || '').trim()
+        storeId: String(seed.storeId || '').trim(),
+        storeMasterId: String(seed.storeMasterId || '').trim()
     };
 }
 
@@ -159,6 +205,7 @@ function normalizeArticle(article = {}) {
     const rawVariants = Array.isArray(article.variants) ? article.variants : [];
     const normalized = {
         ...article,
+        masterId: String(article.masterId || article.id || '').trim(),
         articleMode: isVariantArticle(article) || rawVariants.some((variant) => String(variant?.brand || variant?.storeId || '').trim()) || (article.aliases || []).length ? 'variant' : 'single',
         title: String(article.title || '').trim(),
         aliases: Array.from(new Set((article.aliases || []).map((entry) => String(entry || '').trim()).filter(Boolean))),
@@ -169,8 +216,12 @@ function normalizeArticle(article = {}) {
         noEan: !!article.noEan,
         persistentNotes: Array.from(new Set((article.persistentNotes || []).map((entry) => String(entry || '').trim()).filter(Boolean))),
         storeIds: Array.from(new Set((article.storeIds || []).map((entry) => String(entry || '').trim()).filter(Boolean))),
+        storeMasterIds: Array.from(new Set((article.storeMasterIds || []).map((entry) => String(entry || '').trim()).filter(Boolean))),
+        categoryMasterId: String(article.categoryMasterId || '').trim(),
         variants: rawVariants.map((variant, index) => createEmptyVariant({ ...variant, id: variant?.id || `${article.id || 'article'}-${index}` }))
     };
+    normalized.syncLabel = String(article.syncLabel || buildMasterSyncLabel('articles', normalized)).trim();
+    normalized.listId = String(article.listId || state.listId || '').trim();
     if (normalized.articleMode === 'single') normalized.aliases = [];
     return normalized;
 }
@@ -357,7 +408,6 @@ async function deleteListItem(itemId, activityLabel = 'Artikel gelöscht') {
     }
     if (!(await acquireLock(item.id))) return;
     await deleteDoc(doc(sub(state.listId, 'items'), item.id));
-    await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() });
     await logActivity(activityLabel, { itemId: item.id, title: item.title });
     render();
 }
@@ -367,7 +417,9 @@ const uname = () => currentUser?.displayName || 'Unbekannt';
 const listsRef = () => collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_lists');
 const listDoc = (id) => doc(listsRef(), id);
 const sub = (id, name) => collection(listDoc(id), name);
-const master = (name) => collection(db, 'artifacts', appId, 'public', 'data', `einkaufsliste_master_${name}`);
+const master = (name, listId = state.listId) => collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_lists', String(listId || '__missing__'), `master_${name}`);
+const legacyMaster = (name) => collection(db, 'artifacts', appId, 'public', 'data', `einkaufsliste_master_${name}`);
+const syncTargetsRef = (listId = state.listId) => collection(listDoc(listId), 'master_sync_targets');
 const webPushSettingsDoc = () => doc(db, 'artifacts', appId, 'public', 'data', 'app-settings', 'einkaufsliste_webpush');
 const notificationSettingsDoc = (listId = state.listId, userId = uid()) => doc(sub(listId, 'notification_settings'), userId);
 const notificationSubscriptionsRef = (userId = uid()) => collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_notification_subscriptions', userId, 'devices');
@@ -498,20 +550,7 @@ function ensureRoot() {
 }
 
 async function seedDefaults() {
-    if (!uid() || uid() === GUEST_MODE) return;
-    const batch = [];
-    const checkSeed = async (ref, items, key = 'name') => {
-        const snap = await getDocs(query(ref, where('createdBy', '==', uid()), limit(1)));
-        if (!snap.empty) return;
-        for (const name of items) batch.push(addDoc(ref, { [key]: name, text: name, createdBy: uid(), createdByName: uname(), createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
-    };
-    await Promise.all([
-        checkSeed(master('categories'), DEFAULTS.categories),
-        checkSeed(master('stores'), DEFAULTS.stores),
-        checkSeed(master('notes'), DEFAULTS.remarks, 'text'),
-        checkSeed(collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_master_notizen'), DEFAULTS.notes, 'text')
-    ]);
-    await Promise.all(batch);
+    return;
 }
 
 async function ensurePrivateList() {
@@ -537,7 +576,11 @@ function stopActive() {
 function stopMasters() {
     masterUnsubs.forEach((fn) => typeof fn === 'function' && fn());
     masterUnsubs = [];
-    if (root?.dataset) delete root.dataset.masters;
+    state.categories = [];
+    state.stores = [];
+    state.articles = [];
+    state.remarks = [];
+    state.notes = [];
 }
 
 function stopScanner() {
@@ -1072,14 +1115,17 @@ const EL_NOTIFY_PENDING_LIST_KEY = 'einkaufsliste_pending_list';
 const EL_NOTIFY_PENDING_MODE_KEY = 'einkaufsliste_pending_mode';
 
 function listenMasters() {
-    if (masterUnsubs.length) return;
-    if (root.dataset.masters === 'true') return;
-    root.dataset.masters = 'true';
-    masterUnsubs.push(onSnapshot(query(master('categories'), where('createdBy', '==', uid())), (s) => { state.categories = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'de')); render(); }, (error) => reportListenerError('listenMasters:categories', error)));
-    masterUnsubs.push(onSnapshot(query(master('stores'), where('createdBy', '==', uid())), (s) => { state.stores = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'de')); render(); }, (error) => reportListenerError('listenMasters:stores', error)));
-    masterUnsubs.push(onSnapshot(query(master('articles'), where('createdBy', '==', uid())), (s) => { state.articles = s.docs.map((d) => normalizeArticle({ id: d.id, ...d.data() })).sort((a, b) => String(a.title).localeCompare(String(b.title), 'de')); render(); }, (error) => reportListenerError('listenMasters:articles', error)));
-    masterUnsubs.push(onSnapshot(query(master('notes'), where('createdBy', '==', uid())), (s) => { state.remarks = s.docs.map((d) => ({ id: d.id, ...d.data() })); render(); }, (error) => reportListenerError('listenMasters:notes', error)));
-    masterUnsubs.push(onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_master_notizen'), where('createdBy', '==', uid())), (s) => { state.notes = s.docs.map((d) => ({ id: d.id, ...d.data() })); render(); }, (error) => reportListenerError('listenMasters:notizen', error)));
+    const list = activeList();
+    stopMasters();
+    if (!list?.id) {
+        render();
+        return;
+    }
+    masterUnsubs.push(onSnapshot(query(master('categories', list.id), orderBy('name')), (s) => { state.categories = s.docs.map((d) => normalizeMasterEntry('categories', d.data(), d.id)); render(); }, (error) => reportListenerError('listenMasters:categories', error)));
+    masterUnsubs.push(onSnapshot(query(master('stores', list.id), orderBy('name')), (s) => { state.stores = s.docs.map((d) => normalizeMasterEntry('stores', d.data(), d.id)); render(); }, (error) => reportListenerError('listenMasters:stores', error)));
+    masterUnsubs.push(onSnapshot(query(master('articles', list.id), orderBy('title')), (s) => { state.articles = s.docs.map((d) => normalizeArticle({ id: d.id, ...d.data() })).sort((a, b) => String(a.title).localeCompare(String(b.title), 'de')); render(); }, (error) => reportListenerError('listenMasters:articles', error)));
+    masterUnsubs.push(onSnapshot(query(master('remarks', list.id), orderBy('text')), (s) => { state.remarks = s.docs.map((d) => normalizeMasterEntry('remarks', d.data(), d.id)); render(); }, (error) => reportListenerError('listenMasters:remarks', error)));
+    masterUnsubs.push(onSnapshot(query(master('notes', list.id), orderBy('text')), (s) => { state.notes = s.docs.map((d) => normalizeMasterEntry('notes', d.data(), d.id)); render(); }, (error) => reportListenerError('listenMasters:notes', error)));
 }
 
 function listenLists() {
@@ -1089,14 +1135,25 @@ function listenLists() {
 function listenActiveList() {
     stopActive();
     const list = activeList();
+    listenMasters();
+    state.syncTargets = [];
+    state.syncSelection = { articles: [], categories: [], stores: [], remarks: [], notes: [] };
+    state.autoSyncTargets = [];
     if (!list) {
         state.notificationSettings = null;
         state.notificationCopyTargets = [];
+        state.syncTargets = [];
+        state.autoSyncTargets = [];
         return;
     }
     state.notificationSettings = normalizeNotificationSettings({}, list.id);
     state.notificationCopyTargets = [];
     if (list.ownerId === uid()) {
+        activeUnsubs.push(onSnapshot(syncTargetsRef(list.id), (s) => {
+            const docs = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+            state.autoSyncTargets = docs.filter((entry) => entry.enabled !== false).map((entry) => entry.targetListId).filter(Boolean);
+            render();
+        }, (error) => reportListenerError('listenActiveList:syncTargets', error)));
         activeUnsubs.push(onSnapshot(sub(list.id, 'permissions'), (s) => {
             clearPermEntries(list.id);
             s.docs.forEach((d) => state.perms.set(`${list.id}:${d.id}`, { listId: list.id, userId: d.id, ...d.data() }));
@@ -1535,6 +1592,204 @@ function nextMissingEanTarget(currentArticleId = '', currentVariantId = '') {
     return targets[index + 1] || null;
 }
 
+function syncCandidates(list = activeList()) {
+    return state.lists.filter((entry) => entry.id !== list?.id && entry.ownerId === uid());
+}
+
+function syncEntriesByType(type) {
+    if (type === 'articles') return state.articles;
+    if (type === 'categories') return state.categories;
+    if (type === 'stores') return state.stores;
+    if (type === 'remarks') return state.remarks;
+    return state.notes;
+}
+
+function syncEntryLabel(type, entry = {}) {
+    if (type === 'articles') return String(entry.title || '').trim();
+    if (type === 'categories' || type === 'stores') return String(entry.name || '').trim();
+    return String(entry.text || entry.name || '').trim();
+}
+
+function toggleSyncTarget(listId) {
+    state.syncTargets = state.syncTargets.includes(listId)
+        ? state.syncTargets.filter((id) => id !== listId)
+        : [...state.syncTargets, listId];
+    render();
+}
+
+function toggleSyncEntry(type, id) {
+    const current = state.syncSelection[type] || [];
+    state.syncSelection[type] = current.includes(id)
+        ? current.filter((entryId) => entryId !== id)
+        : [...current, id];
+    render();
+}
+
+function clearSyncSelection(type = '') {
+    if (type) state.syncSelection[type] = [];
+    else state.syncSelection = { articles: [], categories: [], stores: [], remarks: [], notes: [] };
+    render();
+}
+
+async function findSyncMatch(type, targetListId, sourceEntry) {
+    const masterId = String(sourceEntry?.masterId || sourceEntry?.id || '').trim();
+    if (masterId) {
+        const byMasterId = await getDocs(query(master(type, targetListId), where('masterId', '==', masterId), limit(1)));
+        if (!byMasterId.empty) return byMasterId.docs[0];
+    }
+    const syncLabel = String(sourceEntry?.syncLabel || buildMasterSyncLabel(type, sourceEntry)).trim();
+    if (!syncLabel) return null;
+    const byLabel = await getDocs(query(master(type, targetListId), where('syncLabel', '==', syncLabel), limit(1)));
+    return byLabel.docs[0] || null;
+}
+
+async function resolveTargetMasterDocId(type, targetListId, sourceId = '', sourceMasterId = '') {
+    const normalizedSourceId = String(sourceId || '').trim();
+    const normalizedMasterId = String(sourceMasterId || '').trim();
+    if (!normalizedSourceId && !normalizedMasterId) return '';
+    const sourceEntries = type === 'categories' ? state.categories : state.stores;
+    const sourceEntry = normalizedSourceId ? sourceEntries.find((entry) => entry.id === normalizedSourceId) : null;
+    const match = await findSyncMatch(type, targetListId, sourceEntry || { id: normalizedSourceId, masterId: normalizedMasterId });
+    return String(match?.id || normalizedSourceId || '').trim();
+}
+
+async function buildArticlePayloadForTarget(article, targetListId) {
+    const categoryId = await resolveTargetMasterDocId('categories', targetListId, article.categoryId, article.categoryMasterId);
+    const storeIds = [];
+    for (let index = 0; index < (article.storeIds || []).length; index += 1) {
+        const sourceStoreId = String(article.storeIds[index] || '').trim();
+        const sourceStoreMasterId = String((article.storeMasterIds || [])[index] || state.stores.find((entry) => entry.id === sourceStoreId)?.masterId || '').trim();
+        if (!sourceStoreId && !sourceStoreMasterId) continue;
+        const targetStoreId = await resolveTargetMasterDocId('stores', targetListId, sourceStoreId, sourceStoreMasterId);
+        if (targetStoreId && !storeIds.includes(targetStoreId)) storeIds.push(targetStoreId);
+    }
+    const variants = [];
+    for (const variant of article.variants || []) {
+        const targetStoreId = await resolveTargetMasterDocId('stores', targetListId, variant.storeId, variant.storeMasterId);
+        variants.push({ ...variant, storeId: targetStoreId || '', storeMasterId: String(variant.storeMasterId || '').trim() });
+    }
+    return {
+        ...article,
+        categoryId,
+        storeIds,
+        variants,
+        categoryMasterId: String(article.categoryMasterId || '').trim(),
+        storeMasterIds: Array.from(new Set((article.storeMasterIds || []).map((entry) => String(entry || '').trim()).filter(Boolean)))
+    };
+}
+
+async function syncArticleDependenciesToTarget(article, targetListId) {
+    if (!article || !targetListId) return;
+    if (article.categoryId) {
+        const category = state.categories.find((entry) => entry.id === article.categoryId);
+        if (category) await syncMasterEntryToList('categories', category, targetListId);
+    }
+    for (const storeId of article.storeIds || []) {
+        const store = state.stores.find((entry) => entry.id === storeId);
+        if (store) await syncMasterEntryToList('stores', store, targetListId);
+    }
+    for (const variant of article.variants || []) {
+        const store = state.stores.find((entry) => entry.id === variant.storeId);
+        if (store) await syncMasterEntryToList('stores', store, targetListId);
+    }
+}
+
+async function syncMasterEntryToList(type, sourceEntry, targetListId) {
+    if (!sourceEntry || !targetListId) return null;
+    const matched = await findSyncMatch(type, targetListId, sourceEntry);
+    const nextMasterId = String(sourceEntry.masterId || sourceEntry.id || matched?.id || makeLocalId(type)).trim();
+    const targetRef = matched ? matched.ref : doc(master(type, targetListId), nextMasterId);
+    const preparedSource = type === 'articles' ? await buildArticlePayloadForTarget(sourceEntry, targetListId) : sourceEntry;
+    const payload = { ...preparedSource, listId: targetListId, masterId: nextMasterId, syncRevision: String(sourceEntry.syncRevision || makeLocalId('sync')).trim() };
+    delete payload.id;
+    if (!payload.createdAt && !matched) payload.createdAt = serverTimestamp();
+    await setDoc(targetRef, buildMasterWritePayload(type, payload, { masterId: nextMasterId, keepCreatedBy: true }), { merge: true });
+    return targetRef.id;
+}
+
+async function syncMastersToTargets({ onlySelected = false } = {}) {
+    if (!state.listId) return;
+    if (!state.syncTargets.length) return alertUser('Bitte zuerst mindestens eine Zielliste auswählen.', 'info');
+    const types = ['categories', 'stores', 'remarks', 'notes', 'articles'];
+    let moved = 0;
+    for (const targetListId of state.syncTargets) {
+        for (const type of types) {
+            const entries = syncEntriesByType(type).filter((entry) => !onlySelected || (state.syncSelection[type] || []).includes(entry.id));
+            for (const entry of entries) {
+                if (type === 'articles') await syncArticleDependenciesToTarget(entry, targetListId);
+                await syncMasterEntryToList(type, entry, targetListId);
+                moved += 1;
+            }
+        }
+    }
+    if (onlySelected) clearSyncSelection();
+    alertUser(moved ? `${moved} Stammdatensätze synchronisiert.` : 'Keine passenden Stammdatensätze ausgewählt.', moved ? 'success' : 'info');
+}
+
+async function ensureItemMastersInTarget(item, targetListId) {
+    const article = state.articles.find((entry) => entry.id === item.articleId);
+    let targetCategoryId = String(item.categoryId || '').trim();
+    if (item.categoryId) {
+        const category = state.categories.find((entry) => entry.id === item.categoryId);
+        if (category) targetCategoryId = await syncMasterEntryToList('categories', category, targetListId) || targetCategoryId;
+    }
+    const targetStoreIds = [];
+    for (const storeId of item.storeIds || []) {
+        const store = state.stores.find((entry) => entry.id === storeId);
+        if (store) targetStoreIds.push(await syncMasterEntryToList('stores', store, targetListId) || storeId);
+        else if (storeId) targetStoreIds.push(storeId);
+    }
+    let targetVariantStoreId = String(item.variantStoreId || '').trim();
+    if (item.variantStoreId) {
+        const variantStore = state.stores.find((entry) => entry.id === item.variantStoreId);
+        if (variantStore) targetVariantStoreId = await syncMasterEntryToList('stores', variantStore, targetListId) || targetVariantStoreId;
+    }
+    const targetArticleId = article ? (await syncMasterEntryToList('articles', article, targetListId) || item.articleId) : String(item.articleId || '').trim();
+    return {
+        articleId: targetArticleId,
+        categoryId: targetCategoryId,
+        storeIds: targetStoreIds,
+        variantStoreId: targetVariantStoreId
+    };
+}
+
+async function toggleAutoSyncLink(targetListId) {
+    const list = activeList();
+    const targetList = state.lists.find((entry) => entry.id === targetListId && entry.ownerId === uid());
+    if (!list || list.ownerId !== uid() || !targetList) return;
+    const enabled = !state.autoSyncTargets.includes(targetListId);
+    const payload = {
+        sourceListId: list.id,
+        targetListId,
+        enabled,
+        bidirectional: true,
+        types: { articles: true, categories: true, stores: true, remarks: true, notes: true },
+        updatedAt: serverTimestamp(),
+        updatedBy: uid(),
+        updatedByName: uname()
+    };
+    if (enabled) {
+        await Promise.all([
+            setDoc(doc(syncTargetsRef(list.id), targetListId), payload, { merge: true }),
+            setDoc(doc(syncTargetsRef(targetListId), list.id), { ...payload, sourceListId: targetListId, targetListId: list.id }, { merge: true })
+        ]);
+        alertUser(`Auto-Sync mit ${targetList.name || 'Zielliste'} aktiviert.`, 'success');
+        return;
+    }
+    await Promise.all([
+        deleteDoc(doc(syncTargetsRef(list.id), targetListId)),
+        deleteDoc(doc(syncTargetsRef(targetListId), list.id))
+    ]);
+    alertUser(`Auto-Sync mit ${targetList.name || 'Zielliste'} deaktiviert.`, 'success');
+}
+
+function renderSyncCenterSection(list = activeList()) {
+    if (!list || list.ownerId !== uid()) return '';
+    const candidates = syncCandidates(list);
+    const types = ['articles', 'categories', 'stores', 'remarks', 'notes'];
+    return `<div class="elc space-y-3"><div><div class="font-black text-sm text-gray-900">Sync-Center</div><div class="text-xs text-gray-500">Stammdaten zwischen deinen Listen übertragen oder dauerhaft koppeln.</div></div>${candidates.length ? `<div class="space-y-3"><div><div class="text-xs font-black uppercase text-slate-500 mb-2">Ziel-Listen für manuellen Sync</div><div class="flex flex-wrap gap-2">${candidates.map((entry) => `<button class="elb ${state.syncTargets.includes(entry.id) ? 'a' : 'bg-gray-100 text-gray-700'}" data-a="toggle-sync-target" data-id="${entry.id}">${escapeHtml(entry.name || 'Liste')}</button>`).join('')}</div></div><div class="flex flex-wrap gap-2"><button class="elb a" data-a="sync-all-targets" ${!state.syncTargets.length ? 'disabled' : ''}>Alle Stammdaten übertragen</button><button class="elb bg-gray-100 text-gray-700" data-a="sync-selected-targets" ${!state.syncTargets.length ? 'disabled' : ''}>Nur Auswahl übertragen</button><button class="elb bg-gray-100 text-gray-700" data-a="clear-sync-selection">Auswahl leeren</button></div><div class="grid gap-3 md:grid-cols-2">${types.map((type) => { const entries = syncEntriesByType(type); return `<div class="rounded-2xl border border-slate-200 bg-slate-50 p-3 space-y-2"><div class="flex items-center justify-between gap-2"><div class="text-sm font-black text-slate-800">${MASTER_ENTITY_LABELS[type]}</div><div class="text-[11px] font-semibold text-slate-400">${(state.syncSelection[type] || []).length} gewählt</div></div><div class="flex flex-wrap gap-2">${entries.length ? entries.map((entry) => `<button class="rounded-full px-3 py-1 text-xs font-bold ${(state.syncSelection[type] || []).includes(entry.id) ? 'bg-indigo-600 text-white' : 'bg-white text-slate-700 border border-slate-200'}" data-a="toggle-sync-entry" data-type="${type}" data-id="${entry.id}">${escapeHtml(syncEntryLabel(type, entry) || 'Ohne Name')}</button>`).join('') : '<span class="text-xs text-slate-400">Keine Einträge vorhanden.</span>'}</div></div>`; }).join('')}</div><div><div class="text-xs font-black uppercase text-slate-500 mb-2">Auto-Sync (bidirektional)</div><div class="flex flex-wrap gap-2">${candidates.map((entry) => `<button class="elb ${state.autoSyncTargets.includes(entry.id) ? 'a' : 'bg-gray-100 text-gray-700'}" data-a="toggle-auto-sync-target" data-id="${entry.id}">${state.autoSyncTargets.includes(entry.id) ? '↔' : '⇄'} ${escapeHtml(entry.name || 'Liste')}</button>`).join('')}</div><div class="mt-2 text-xs text-slate-500">Aktivierte Listen halten Artikel, Kategorien, Geschäfte, Anmerkungen und Notizen automatisch gegenseitig synchron.</div></div></div>` : '<div class="text-sm text-gray-400">Keine weiteren eigenen Listen für Sync vorhanden.</div>'}</div>`;
+}
+
 function canConfirmPurchase(p = state.purchase) {
     return !!p && Number(p.quantity || 0) > 0;
 }
@@ -1694,7 +1949,7 @@ function renderBodyActive() {
     if (state.mode === 'notify') return renderBody();
     if (!canManage()) return '<div class="elc text-sm text-red-700">Keine Verwaltungsberechtigung für diese Liste.</div>';
     if (state.section === 'stores') {
-        return `<div class="space-y-3"><div class="elc flex flex-wrap gap-2"><input id="el-draft-store" class="eli" placeholder="Neues Geschäft" value="${escapeHtml(state.drafts.store)}"><button class="elb a" data-a="add-store" ${!canManageWrite() ? 'disabled' : ''}>+ Geschäft</button></div>${effectiveStoreOrder(activeList()).map((id, i, arr) => { const s = state.stores.find((x) => x.id === id); if (!s) return ''; const categoryNames = (s.categoryOrder || []).map((catId) => state.categories.find((c) => c.id === catId)?.name).filter(Boolean); return `<div class="elc space-y-2"><div class="flex flex-wrap justify-between gap-2 items-start"><div><div class="font-bold text-sm">${escapeHtml(s.name)}</div><div class="text-xs text-gray-500">${categoryNames.length ? `${categoryNames.length} Kategorie(n) für Sortierung gewählt` : 'Noch keine Kategorien ausgewählt'}</div></div><div class="flex flex-wrap gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="store-up" data-id="${s.id}" ${i === 0 || !canManageWrite() ? 'disabled' : ''}>↑</button><button class="elb bg-gray-100 text-gray-700" data-a="store-down" data-id="${s.id}" ${i === arr.length - 1 || !canManageWrite() ? 'disabled' : ''}>↓</button><button class="elb bg-indigo-100 text-indigo-700" data-a="open-store-categories" data-id="${s.id}" ${!canManageWrite() ? 'disabled' : ''}>Kategorienwartung</button><button class="elb bg-red-600 text-white" data-a="del-store-master" data-id="${s.id}" ${!canManageWrite() ? 'disabled' : ''}>Löschen</button></div></div><div class="flex flex-wrap items-center gap-1.5 text-xs">${categoryNames.length ? categoryNames.map((name, index) => `${index ? '<span class="font-black text-slate-400">→</span>' : ''}${chip(escapeHtml(name), 'bg-indigo-100 text-indigo-700')}`).join(' ') : '<span class="text-xs text-gray-400">Keine Kategorien sortiert.</span>'}</div></div>`; }).join('')}</div>`;
+        return `<div class="space-y-3"><div class="elc flex flex-wrap gap-2"><input id="el-draft-store" class="eli" placeholder="Neues Geschäft" value="${escapeHtml(state.drafts.store)}"><button class="elb a" data-a="add-store" ${!canManageWrite() ? 'disabled' : ''}>+ Geschäft</button></div>${effectiveStoreOrder(activeList()).map((id, i, arr) => { const s = state.stores.find((x) => x.id === id); if (!s) return ''; const categoryNames = (s.categoryOrder || []).map((catId) => state.categories.find((c) => c.id === catId)?.name).filter(Boolean); return `<div class="elc space-y-2"><div class="flex flex-wrap justify-between gap-2 items-start"><div><div class="font-bold text-sm">${escapeHtml(s.name)}</div><div class="text-xs text-gray-500">${categoryNames.length ? `${categoryNames.length} Kategorie(n) für Sortierung gewählt` : 'Noch keine Kategorien ausgewählt'}</div></div><div class="flex flex-wrap gap-2"><button class="elb bg-gray-100 text-gray-700" data-a="store-up" data-id="${s.id}" ${i === 0 || !canManageWrite() || list.ownerId !== uid() ? 'disabled' : ''}>↑</button><button class="elb bg-gray-100 text-gray-700" data-a="store-down" data-id="${s.id}" ${i === arr.length - 1 || !canManageWrite() || list.ownerId !== uid() ? 'disabled' : ''}>↓</button><button class="elb bg-indigo-100 text-indigo-700" data-a="open-store-categories" data-id="${s.id}" ${!canManageWrite() ? 'disabled' : ''}>Kategorienwartung</button><button class="elb bg-red-600 text-white" data-a="del-store-master" data-id="${s.id}" ${!canManageWrite() ? 'disabled' : ''}>Löschen</button></div></div><div class="flex flex-wrap items-center gap-1.5 text-xs">${categoryNames.length ? categoryNames.map((name, index) => `${index ? '<span class="font-black text-slate-400">→</span>' : ''}${chip(escapeHtml(name), 'bg-indigo-100 text-indigo-700')}`).join(' ') : '<span class="text-xs text-gray-400">Keine Kategorien sortiert.</span>'}</div></div>`; }).join('')}</div>`;
     }
     return renderBody();
 }
@@ -1728,7 +1983,7 @@ function renderManageGeneralSection() {
     const listType = list.isPrivateSystemList ? 'Privatliste' : 'Normale Liste';
     const listState = list.active !== false ? 'aktiv' : 'pausiert';
     const accessText = list.ownerId === uid() ? 'Owner' : (permActive(perm(list.id)) ? 'Freigabe aktiv' : 'Freigabe abgelaufen');
-    return `<div class="space-y-3"><div class="elc space-y-3"><div class="flex flex-wrap justify-between gap-2 items-start"><div><div class="font-black text-sm text-gray-900">Allgemein</div><div class="text-xs text-gray-500">Übersicht zur aktuellen Liste und schneller Einstieg in Einstellungen & Freigaben.</div></div><button class="elb bg-gray-100 text-gray-700" data-a="open-settings">Einstellungen öffnen</button></div><div class="flex flex-wrap gap-2 text-xs">${chip(listType, 'bg-slate-100 text-slate-700')}${chip(listState, list.active !== false ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700')}${chip(accessText, 'bg-indigo-100 text-indigo-700')}</div><div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3"><div class="text-[11px] font-black uppercase text-slate-500">Liste</div><div class="mt-1 text-sm font-bold text-slate-800">${escapeHtml(list.name || 'Ohne Namen')}</div></div><div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3"><div class="text-[11px] font-black uppercase text-slate-500">Owner</div><div class="mt-1 text-sm font-bold text-slate-800">${escapeHtml(ownerName)}</div></div><div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3"><div class="text-[11px] font-black uppercase text-slate-500">Artikelstamm</div><div class="mt-1 text-sm font-bold text-slate-800">${state.articles.length}</div></div><div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3"><div class="text-[11px] font-black uppercase text-slate-500">Geschäfte / Kategorien</div><div class="mt-1 text-sm font-bold text-slate-800">${state.stores.length} / ${state.categories.length}</div></div></div></div></div>`;
+    return `<div class="space-y-3"><div class="elc space-y-3"><div class="flex flex-wrap justify-between gap-2 items-start"><div><div class="font-black text-sm text-gray-900">Allgemein</div><div class="text-xs text-gray-500">Übersicht zur aktuellen Liste und schneller Einstieg in Einstellungen & Freigaben.</div></div><button class="elb bg-gray-100 text-gray-700" data-a="open-settings">Einstellungen öffnen</button></div><div class="flex flex-wrap gap-2 text-xs">${chip(listType, 'bg-slate-100 text-slate-700')}${chip(listState, list.active !== false ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700')}${chip(accessText, 'bg-indigo-100 text-indigo-700')}</div><div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3"><div class="text-[11px] font-black uppercase text-slate-500">Liste</div><div class="mt-1 text-sm font-bold text-slate-800">${escapeHtml(list.name || 'Ohne Namen')}</div></div><div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3"><div class="text-[11px] font-black uppercase text-slate-500">Owner</div><div class="mt-1 text-sm font-bold text-slate-800">${escapeHtml(ownerName)}</div></div><div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3"><div class="text-[11px] font-black uppercase text-slate-500">Artikelstamm</div><div class="mt-1 text-sm font-bold text-slate-800">${state.articles.length}</div></div><div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3"><div class="text-[11px] font-black uppercase text-slate-500">Geschäfte / Kategorien</div><div class="mt-1 text-sm font-bold text-slate-800">${state.stores.length} / ${state.categories.length}</div></div></div></div>${renderSyncCenterSection(list)}</div>`;
 }
 
 function renderManageCategoriesSection() {
@@ -2083,14 +2338,18 @@ function finalizePointerState() {
 
 async function addMaster(name, value, key) {
     const v = String(value || '').trim();
-    if (!v) return;
-    return await addDoc(master(name), { [key]: v, createdBy: uid(), createdByName: uname(), createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+    if (!v || !state.listId) return;
+    const ref = doc(master(name));
+    await setDoc(ref, { ...buildMasterWritePayload(name, { [key]: v, text: v, name: v }, { masterId: ref.id }), createdAt: serverTimestamp() });
+    return ref;
 }
 
 async function addFree(ref, value) {
     const v = String(value || '').trim();
-    if (!v) return;
-    await addDoc(ref, { text: v, createdBy: uid(), createdByName: uname(), createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+    if (!v || !state.listId) return;
+    const name = ref.id === 'master_notes' ? 'notes' : 'remarks';
+    const targetRef = doc(ref);
+    await setDoc(targetRef, { ...buildMasterWritePayload(name, { text: v }, { masterId: targetRef.id }), createdAt: serverTimestamp() });
 }
 
 async function addItemLegacy() {
@@ -2127,7 +2386,6 @@ async function saveDetailItem() {
     if (!title) return alertUser('Bitte Produktnamen eingeben.', 'error');
     const itemData = { title, quantity, categoryId, note, persistentNote, storeIds: storeId ? [storeId] : [] };
     await updateDoc(doc(sub(state.listId, 'items'), item.id), itemData);
-    await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() });
     await logActivity('Artikel bearbeitet', { eventType: 'changed', itemId: item.id, title, quantity });
     Object.assign(item, itemData);
     state.detailId = null;
@@ -2147,9 +2405,14 @@ async function moveDetailItem() {
     if (!(canAdd(targetList) || canShop(targetList))) return alertUser('Keine Berechtigung für die Zielliste.', 'error');
     if (!(await acquireLock(item.id))) return;
     const sourceList = activeList();
+    const targetMasterRefs = await ensureItemMastersInTarget(item, targetListId);
     const { id: _itemId, ...payload } = item;
     await addDoc(sub(targetListId, 'items'), {
         ...payload,
+        articleId: targetMasterRefs.articleId || payload.articleId || '',
+        categoryId: targetMasterRefs.categoryId || payload.categoryId || '',
+        storeIds: targetMasterRefs.storeIds || payload.storeIds || [],
+        variantStoreId: targetMasterRefs.variantStoreId || payload.variantStoreId || '',
         movedFromListId: sourceList?.id || '',
         movedFromListName: sourceList?.name || '',
         movedAt: serverTimestamp(),
@@ -2157,10 +2420,6 @@ async function moveDetailItem() {
         movedByName: uname()
     });
     await deleteDoc(doc(sub(state.listId, 'items'), item.id));
-    await Promise.all([
-        updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() }),
-        updateDoc(listDoc(targetListId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() })
-    ]);
     await logActivity('Artikel verschoben', { itemId: item.id, title: item.title, targetListId, targetListName: targetList.name || '' });
     state.detailId = null;
     render();
@@ -2222,7 +2481,6 @@ async function deleteAllCheckedItems() {
         hideQuantityActionButton(item.id);
         await deleteDoc(doc(sub(state.listId, 'items'), item.id));
     }
-    await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() });
     await logActivity('Alle abgehakten Einträge gelöscht', { count: checked.length });
     render();
 }
@@ -2332,7 +2590,6 @@ async function addScannedArticleToList(article, code = '') {
     const note = String(state.note || '').trim();
     const itemNote = note && note === persistentNote ? '' : note;
     await addDoc(sub(state.listId, 'items'), { articleId: article.id, title: article.title, quantity, unit, categoryId: article.categoryId || '', storeIds, status: 'open', note: itemNote, persistentNote, eanCodes: article.eanCodes || [], createdAt: serverTimestamp(), createdBy: uid(), createdByName: uname() });
-    await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname(), storeOrder: effectiveStoreOrder() });
     await logActivity('Artikel per Scan hinzugefügt', { eventType: 'added', articleId: article.id, title: article.title, code, quantity, unit });
     state.scanStatus = `Hinzugefügt: ${article.title}`;
     updateScannerDynamicUi();
@@ -2439,17 +2696,19 @@ async function saveArticleLegacy() {
 }
 
 async function moveStore(id, dir) {
-    const list = activeList(); if (!list) return; const order = [...effectiveStoreOrder(list)]; const i = order.indexOf(id); const j = i + dir; if (i < 0 || j < 0 || j >= order.length) return; [order[i], order[j]] = [order[j], order[i]]; await updateDoc(listDoc(list.id), { storeOrder: order, updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() }); await logActivity('Geschäftsreihenfolge geändert', { storeId: id });
+    const list = activeList(); if (!list) return; if (list.ownerId !== uid()) return alertUser('Die Reihenfolge der Geschäfte kann aktuell nur der Listeninhaber ändern.', 'info'); const order = [...effectiveStoreOrder(list)]; const i = order.indexOf(id); const j = i + dir; if (i < 0 || j < 0 || j >= order.length) return; [order[i], order[j]] = [order[j], order[i]]; await updateDoc(listDoc(list.id), { storeOrder: order, updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() }); await logActivity('Geschäftsreihenfolge geändert', { storeId: id });
 }
 
 async function toggleStoreCategory(storeId, catId, checked) {
-    const store = state.stores.find((s) => s.id === storeId); if (!store) return; const next = checked ? Array.from(new Set([...(store.categoryOrder || []), catId])) : (store.categoryOrder || []).filter((x) => x !== catId); await updateDoc(doc(master('stores'), storeId), { categoryOrder: next, updatedAt: serverTimestamp() }); await logActivity('Geschäftskategorie geändert', { storeId, catId, checked });
+    const store = state.stores.find((s) => s.id === storeId); if (!store) return; const next = checked ? Array.from(new Set([...(store.categoryOrder || []), catId])) : (store.categoryOrder || []).filter((x) => x !== catId); await updateDoc(doc(master('stores'), storeId), buildMasterWritePayload('stores', { ...store, categoryOrder: next }, { masterId: store.masterId || store.id, keepCreatedBy: true })); await logActivity('Geschäftskategorie geändert', { storeId, catId, checked });
 }
 
 async function saveStoreCategoryEditorActive() {
     const editor = state.storeCategoryEditor;
     if (!editor) return;
-    await updateDoc(doc(master('stores'), editor.storeId), { categoryOrder: editor.categoryOrder, updatedAt: serverTimestamp() });
+    const store = state.stores.find((entry) => entry.id === editor.storeId);
+    if (!store) return;
+    await updateDoc(doc(master('stores'), editor.storeId), buildMasterWritePayload('stores', { ...store, categoryOrder: editor.categoryOrder }, { masterId: store.masterId || store.id, keepCreatedBy: true }));
     await logActivity('Geschäftskategorien sortiert', { storeId: editor.storeId, categoryCount: editor.categoryOrder.length });
     state.dragStoreCategory = null;
     state.storeCategoryEditor = null;
@@ -2458,7 +2717,7 @@ async function saveStoreCategoryEditorActive() {
 
 async function createList() {
     const name = prompt('Name der neuen Einkaufsliste:'); if (!String(name || '').trim()) return;
-    const ref = doc(listsRef()); await setDoc(ref, { name: String(name).trim(), ownerId: uid(), ownerName: uname(), isPrivateSystemList: false, active: true, memberIds: [uid()], storeOrder: state.stores.map((s) => s.id), storeNotes: {}, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() }); state.listId = ref.id; persistListId(); await logActivity('Liste erstellt', { listId: ref.id, name: String(name).trim() });
+    const ref = doc(listsRef()); await setDoc(ref, { name: String(name).trim(), ownerId: uid(), ownerName: uname(), isPrivateSystemList: false, active: true, memberIds: [uid()], storeOrder: [], storeNotes: {}, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() }); state.listId = ref.id; persistListId(); await logActivity('Liste erstellt', { listId: ref.id, name: String(name).trim() });
 }
 
 async function saveList() {
@@ -2690,8 +2949,10 @@ async function addItem() {
         return alertUser('Bitte zuerst eine konkrete Variante auswählen.', 'info');
     }
     if (!article) {
-        const ref = await addDoc(master('articles'), { articleMode: 'single', title, aliases: [], defaultQuantity: parseQty(state.q || '1') || 1, defaultUnit: state.unit || 'Stück', categoryId: '', eanCodes: [], variants: [], persistentNotes: [], storeIds: [...state.storeIds], createdBy: uid(), createdByName: uname(), createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-        article = normalizeArticle({ id: ref.id, articleMode: 'single', title, aliases: [], defaultQuantity: parseQty(state.q || '1') || 1, defaultUnit: state.unit || 'Stück', categoryId: '', eanCodes: [], variants: [], persistentNotes: [], storeIds: [...state.storeIds] });
+        const ref = doc(master('articles'));
+        const payload = buildMasterWritePayload('articles', { articleMode: 'single', title, aliases: [], defaultQuantity: parseQty(state.q || '1') || 1, defaultUnit: state.unit || 'Stück', categoryId: '', categoryMasterId: '', eanCodes: [], variants: [], persistentNotes: [], storeIds: [...state.storeIds], storeMasterIds: state.storeIds.map((storeId) => state.stores.find((entry) => entry.id === storeId)?.masterId || storeId).filter(Boolean) }, { masterId: ref.id });
+        await setDoc(ref, { ...payload, createdAt: serverTimestamp() });
+        article = normalizeArticle({ id: ref.id, ...payload });
         variant = null;
     }
     const quantity = parseQty(state.q || String(variant?.quantity || article.defaultQuantity || '1')) || Number(variant?.quantity || article.defaultQuantity || 1) || 1;
@@ -2702,8 +2963,7 @@ async function addItem() {
     const itemNote = note && note === persistentNote ? '' : note;
     const itemTitle = variant ? buildVariantGeneratedTitle(article, variant) : article.title;
     await addDoc(sub(state.listId, 'items'), { articleId: article.id, variantId: String(variant?.id || ''), variantBrand: String(variant?.brand || ''), variantLabel: String(variant?.label || ''), variantStoreId: String(variant?.storeId || ''), title: itemTitle, quantity, unit, categoryId: article.categoryId || '', storeIds, status: 'open', note: itemNote, persistentNote, eanCodes: variant ? (variant.eanCodes || []) : (article.eanCodes || []), createdAt: serverTimestamp(), createdBy: uid(), createdByName: uname() });
-    await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname(), storeOrder: effectiveStoreOrder() });
-    await logActivity('Artikel hinzugefügt', { title: itemTitle, quantity, unit, variantId: variant?.id || '' });
+    await logActivity('Artikel hinzugefügt', { eventType: 'added', title: itemTitle, quantity, unit, variantId: variant?.id || '' });
     state.q = '1';
     state.unit = 'Stück';
     state.title = '';
@@ -2774,11 +3034,11 @@ async function saveScannedCodesActive(openNext = false) {
     const variant = findVariantById(article, state.scanVariantId);
     if (variant) {
         const variants = (article.variants || []).map((entry) => entry.id === variant.id ? { ...entry, noEan: false, eanCodes: Array.from(new Set([...(entry.eanCodes || []), ...state.scanCodes])) } : entry);
-        await updateDoc(doc(master('articles'), article.id), { variants, updatedAt: serverTimestamp() });
+        await updateDoc(doc(master('articles'), article.id), buildMasterWritePayload('articles', { ...article, variants }, { masterId: article.masterId || article.id, keepCreatedBy: true }));
         await logActivity('EANs zur Variante hinzugefügt', { eventType: 'changed', articleId: article.id, variantId: variant.id, count: state.scanCodes.length });
     } else {
         const eanCodes = Array.from(new Set([...(article.eanCodes || []), ...state.scanCodes]));
-        await updateDoc(doc(master('articles'), article.id), { eanCodes, noEan: false, updatedAt: serverTimestamp() });
+        await updateDoc(doc(master('articles'), article.id), buildMasterWritePayload('articles', { ...article, eanCodes, noEan: false }, { masterId: article.masterId || article.id, keepCreatedBy: true }));
         await logActivity('EANs zum Artikel hinzugefügt', { eventType: 'changed', articleId: article.id, count: state.scanCodes.length });
     }
     flashScanSuccess();
@@ -2899,10 +3159,10 @@ async function saveUnknownCode() {
     if (isVariantArticle(article)) {
         if (!state.unknownVariantId) return alertUser('Bitte zuerst eine Variante auswählen.', 'error');
         const variants = (article.variants || []).map((variant) => variant.id === state.unknownVariantId ? { ...variant, noEan: false, eanCodes: Array.from(new Set([...(variant.eanCodes || []), code])) } : variant);
-        await updateDoc(doc(master('articles'), article.id), { variants, updatedAt: serverTimestamp() });
+        await updateDoc(doc(master('articles'), article.id), buildMasterWritePayload('articles', { ...article, variants }, { masterId: article.masterId || article.id, keepCreatedBy: true }));
         await logActivity('Unbekannter Code Variante zugeordnet', { eventType: 'changed', articleId: article.id, variantId: state.unknownVariantId, code });
     } else {
-        await updateDoc(doc(master('articles'), article.id), { eanCodes: Array.from(new Set([...(article.eanCodes || []), code])), noEan: false, updatedAt: serverTimestamp() });
+        await updateDoc(doc(master('articles'), article.id), buildMasterWritePayload('articles', { ...article, eanCodes: Array.from(new Set([...(article.eanCodes || []), code])), noEan: false }, { masterId: article.masterId || article.id, keepCreatedBy: true }));
         await logActivity('Unbekannter Code zugeordnet', { eventType: 'changed', articleId: article.id, code });
     }
     closeUnknownModal();
@@ -2913,17 +3173,21 @@ async function saveArticle() {
     const title = String(draft.title || '').trim();
     if (!title) return alertUser('Bitte Bezeichnung eingeben.', 'error');
     const mode = String(draft.articleMode || 'single') === 'variant' ? 'variant' : 'single';
-    const basePayload = { articleMode: mode, title, aliases: mode === 'variant' ? draft.aliases : [], categoryId: draft.categoryId || '', persistentNotes: draft.persistentNotes || [], updatedAt: serverTimestamp(), createdBy: uid(), createdByName: uname() };
+    const categoryEntry = state.categories.find((entry) => entry.id === draft.categoryId);
+    const basePayload = { articleMode: mode, title, aliases: mode === 'variant' ? draft.aliases : [], categoryId: draft.categoryId || '', categoryMasterId: String(categoryEntry?.masterId || '').trim(), persistentNotes: draft.persistentNotes || [] };
     let payload = null;
     if (mode === 'variant') {
-        const variants = (draft.variants || []).filter((variant) => variant.label || variant.brand || variant.storeId || (variant.eanCodes || []).length || variant.noEan).map((variant) => ({ id: variant.id || makeLocalId('variant'), brand: String(variant.brand || '').trim(), label: String(variant.label || '').trim(), quantity: parseQty(variant.quantity || '1') || 1, unit: normalizeVariantUnit(variant.unit || 'Stück'), eanCodes: Array.from(new Set((variant.eanCodes || []).map((entry) => String(entry || '').trim()).filter(Boolean))), noEan: !!variant.noEan, storeId: String(variant.storeId || '').trim() }));
+        const variants = (draft.variants || []).filter((variant) => variant.label || variant.brand || variant.storeId || (variant.eanCodes || []).length || variant.noEan).map((variant) => ({ id: variant.id || makeLocalId('variant'), brand: String(variant.brand || '').trim(), label: String(variant.label || '').trim(), quantity: parseQty(variant.quantity || '1') || 1, unit: normalizeVariantUnit(variant.unit || 'Stück'), eanCodes: Array.from(new Set((variant.eanCodes || []).map((entry) => String(entry || '').trim()).filter(Boolean))), noEan: !!variant.noEan, storeId: String(variant.storeId || '').trim(), storeMasterId: String(state.stores.find((entry) => entry.id === variant.storeId)?.masterId || '').trim() }));
         if (!variants.length) return alertUser('Bitte mindestens eine Variante anlegen.', 'error');
         if (variants.some((variant) => !variant.label)) return alertUser('Jede Variante braucht eine Bezeichnung.', 'error');
-        payload = { ...basePayload, defaultQuantity: 1, defaultUnit: 'Stück', eanCodes: [], noEan: false, variants, storeIds: [] };
+        payload = { ...basePayload, defaultQuantity: 1, defaultUnit: 'Stück', eanCodes: [], noEan: false, variants, storeIds: [], storeMasterIds: [] };
     } else {
-        payload = { ...basePayload, defaultQuantity: parseQty(draft.defaultQuantity || '1') || 1, defaultUnit: normalizeVariantUnit(draft.defaultUnit || 'Stück'), eanCodes: draft.eanCodes || [], noEan: !!draft.noEan, variants: [], storeIds: draft.storeIds || [] };
+        payload = { ...basePayload, defaultQuantity: parseQty(draft.defaultQuantity || '1') || 1, defaultUnit: normalizeVariantUnit(draft.defaultUnit || 'Stück'), eanCodes: draft.eanCodes || [], noEan: !!draft.noEan, variants: [], storeIds: draft.storeIds || [], storeMasterIds: (draft.storeIds || []).map((storeId) => state.stores.find((entry) => entry.id === storeId)?.masterId || '').filter(Boolean) };
     }
-    if (draft.id) await updateDoc(doc(master('articles'), draft.id), payload); else await addDoc(master('articles'), { ...payload, createdAt: serverTimestamp() });
+    if (draft.id) await updateDoc(doc(master('articles'), draft.id), buildMasterWritePayload('articles', { ...draft, ...payload }, { masterId: draft.masterId || draft.id, keepCreatedBy: true })); else {
+        const ref = doc(master('articles'));
+        await setDoc(ref, { ...buildMasterWritePayload('articles', payload, { masterId: ref.id }), createdAt: serverTimestamp() });
+    }
     await logActivity('Artikel gespeichert', { eventType: 'changed', title, articleMode: mode });
     state.articleEditor = null;
     render();
@@ -3119,11 +3383,11 @@ async function onClickActive(e) {
     if (a === 'remove-scanned-code') { removeScannedCodeActive(btn.dataset.id); return; }
     if (a === 'close-unknown') { closeUnknownModal(); return; }
     if (a === 'close-article') { state.articleEditor = null; render(); return; }
-    if (a === 'delete-article') { await deleteDoc(doc(master('articles'), btn.dataset.id)); await logActivity('Artikel gelöscht', { articleId: btn.dataset.id }); state.articleEditor = null; render(); return; }
+    if (a === 'delete-article') { await deleteDoc(doc(master('articles'), btn.dataset.id)); await logActivity('Artikel gelöscht', { eventType: 'changed', articleId: btn.dataset.id }); state.articleEditor = null; render(); return; }
     if (a === 'add-category') { await addMaster('categories', state.drafts.category, 'name'); state.drafts.category = ''; render(); return; }
-    if (a === 'del-category') { await deleteDoc(doc(master('categories'), btn.dataset.id)); await logActivity('Kategorie gelöscht', { categoryId: btn.dataset.id }); return; }
-    if (a === 'add-store') { const ref = await addMaster('stores', state.drafts.store, 'name'); if (ref?.id && state.listId) { const currentOrder = effectiveStoreOrder(); if (!currentOrder.includes(ref.id)) await updateDoc(listDoc(state.listId), { storeOrder: [...currentOrder, ref.id], updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() }); } state.drafts.store = ''; render(); return; }
-    if (a === 'del-store-master') { const store = state.stores.find((entry) => entry.id === btn.dataset.id); if (!store) return; if (!confirm(`Geschäft "${store.name}" wirklich löschen?`)) return; await deleteDoc(doc(master('stores'), btn.dataset.id)); await logActivity('Geschäft gelöscht', { storeId: btn.dataset.id, storeName: store.name }); return; }
+    if (a === 'del-category') { await deleteDoc(doc(master('categories'), btn.dataset.id)); await logActivity('Kategorie gelöscht', { eventType: 'changed', categoryId: btn.dataset.id }); return; }
+    if (a === 'add-store') { await addMaster('stores', state.drafts.store, 'name'); state.drafts.store = ''; render(); return; }
+    if (a === 'del-store-master') { const store = state.stores.find((entry) => entry.id === btn.dataset.id); if (!store) return; if (!confirm(`Geschäft "${store.name}" wirklich löschen?`)) return; await deleteDoc(doc(master('stores'), btn.dataset.id)); await logActivity('Geschäft gelöscht', { eventType: 'changed', storeId: btn.dataset.id, storeName: store.name }); return; }
     if (a === 'store-up' || a === 'store-down') { await moveStore(btn.dataset.id, a === 'store-up' ? -1 : 1); return; }
     if (a === 'open-store-categories') { openStoreCategoryEditor(btn.dataset.id); return; }
     if (a === 'close-store-categories') { state.storeCategoryEditor = null; state.dragStoreCategory = null; render(); return; }
@@ -3131,10 +3395,16 @@ async function onClickActive(e) {
     if (a === 'store-category-up') { moveStoreCategoryDraft(btn.dataset.id, -1); return; }
     if (a === 'store-category-down') { moveStoreCategoryDraft(btn.dataset.id, 1); return; }
     if (a === 'save-store-categories') { await saveStoreCategoryEditorActive(); return; }
-    if (a === 'add-remark') { await addFree(collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_master_notes'), state.drafts.remark); state.drafts.remark = ''; render(); return; }
-    if (a === 'del-remark') { await deleteDoc(doc(collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_master_notes'), btn.dataset.id)); return; }
-    if (a === 'add-note') { await addFree(collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_master_notizen'), state.drafts.note); state.drafts.note = ''; render(); return; }
-    if (a === 'del-note') { await deleteDoc(doc(collection(db, 'artifacts', appId, 'public', 'data', 'einkaufsliste_master_notizen'), btn.dataset.id)); return; }
+    if (a === 'add-remark') { await addFree(master('remarks'), state.drafts.remark); state.drafts.remark = ''; render(); return; }
+    if (a === 'del-remark') { await deleteDoc(doc(master('remarks'), btn.dataset.id)); await logActivity('Anmerkung gelöscht', { eventType: 'changed', noteId: btn.dataset.id }); return; }
+    if (a === 'add-note') { await addFree(master('notes'), state.drafts.note); state.drafts.note = ''; render(); return; }
+    if (a === 'del-note') { await deleteDoc(doc(master('notes'), btn.dataset.id)); await logActivity('Notiz gelöscht', { eventType: 'changed', noteId: btn.dataset.id }); return; }
+    if (a === 'toggle-sync-target') { toggleSyncTarget(btn.dataset.id); return; }
+    if (a === 'toggle-sync-entry') { toggleSyncEntry(btn.dataset.type, btn.dataset.id); return; }
+    if (a === 'clear-sync-selection') { clearSyncSelection(); return; }
+    if (a === 'sync-all-targets') { await syncMastersToTargets({ onlySelected: false }); return; }
+    if (a === 'sync-selected-targets') { await syncMastersToTargets({ onlySelected: true }); return; }
+    if (a === 'toggle-auto-sync-target') { await toggleAutoSyncLink(btn.dataset.id); return; }
     if (a === 'create-list') { await createList(); return; }
     if (a === 'save-list') { await saveList(); return; }
     if (a === 'delete-list') { await deleteList(btn.dataset.id); return; }
