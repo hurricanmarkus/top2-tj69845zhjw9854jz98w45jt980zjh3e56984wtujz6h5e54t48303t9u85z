@@ -1,14 +1,24 @@
 {
-  "version": "1.10.1",
-  "buildId": "20260405-7",
+  "version": "1.10.2",
+  "buildId": "20260405-8",
   "releaseDate": "2026-04-05",
-  "releaseTime": "13:13",
+  "releaseTime": "13:23",
   "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Das Sync-Center zeigt Auto-Sync jetzt innerhalb der geöffneten Box, Sync-Infos sind mobil antippbar und Auto-Sync gleicht Stammdaten beim Aktivieren sowie bei späteren Änderungen der Quelle automatisch ab.",
-  "commitId": "6665dce",
+  "note": "Doppelte Funktionsdefinitionen im Sync-Center wurden bereinigt, sodass einkaufsliste.js wieder ohne Syntaxfehler lädt und der Auto-Sync-Code nur noch einmal definiert ist.",
+  "commitId": "6dade9c",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.10.2",
+      "buildId": "20260405-8",
+      "releaseDate": "2026-04-05",
+      "releaseTime": "13:23",
+      "bereich": "Einkaufsliste",
+      "note": "Doppelte Funktionsdefinitionen im Sync-Center wurden bereinigt, sodass einkaufsliste.js wieder ohne Syntaxfehler lädt und der Auto-Sync-Code nur noch einmal definiert ist.",
+      "commitId": "6dade9c",
+      "obligation": "false"
+    },
     {
       "version": "1.10.1",
       "buildId": "20260405-7",
