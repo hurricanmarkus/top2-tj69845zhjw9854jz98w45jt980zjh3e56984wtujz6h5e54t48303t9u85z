@@ -717,6 +717,19 @@ async function refreshNotificationSubscriptionState() {
         const registration = await navigator.serviceWorker.ready;
         const current = await registration.pushManager.getSubscription();
         state.notificationSubscribed = !!current;
+        if (current?.endpoint) {
+            const data = current.toJSON();
+            await setDoc(doc(notificationSubscriptionsRef(), subscriptionDocId(current.endpoint)), {
+                userId: uid(),
+                userName: uname(),
+                endpoint: current.endpoint,
+                subscription: data,
+                permission: Notification.permission,
+                userAgent: navigator.userAgent || '',
+                updatedAt: serverTimestamp(),
+                createdAt: serverTimestamp()
+            }, { merge: true });
+        }
     } catch (error) {
         console.warn('Einkaufsliste Web-Push Status konnte nicht gelesen werden:', error);
     }
@@ -2095,7 +2108,7 @@ async function addItemLegacy() {
     const itemNote = note && note === persistentNote ? '' : note;
     await addDoc(sub(state.listId, 'items'), { articleId: article.id, title: article.title, quantity, unit: state.unit, categoryId: article.categoryId || '', storeIds: [...state.storeIds], status: 'open', note: itemNote, persistentNote, eanCodes: article.eanCodes || [], createdAt: serverTimestamp(), createdBy: uid(), createdByName: uname() });
     await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname(), storeOrder: effectiveStoreOrder() });
-    await logActivity('Artikel hinzugefügt', { title, quantity, unit: state.unit });
+    await logActivity('Artikel hinzugefügt', { eventType: 'added', title, quantity, unit: state.unit });
     state.q = '1'; state.unit = 'Stück'; state.title = ''; state.note = ''; state.storeIds = []; state.inputDetailsOpen = false; render();
 }
 
@@ -2115,7 +2128,7 @@ async function saveDetailItem() {
     const itemData = { title, quantity, categoryId, note, persistentNote, storeIds: storeId ? [storeId] : [] };
     await updateDoc(doc(sub(state.listId, 'items'), item.id), itemData);
     await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() });
-    await logActivity('Artikel bearbeitet', { itemId: item.id, title, quantity });
+    await logActivity('Artikel bearbeitet', { eventType: 'changed', itemId: item.id, title, quantity });
     Object.assign(item, itemData);
     state.detailId = null;
     state.detailDraft = null;
@@ -2168,7 +2181,7 @@ async function handleDouble(id, action) {
     if (action === 'quantity') { hideQuantityActionButton(id); const item = state.items.find((x) => x.id === id); if (item) openPurchase(item, false); return; }
     const item = state.items.find((x) => x.id === id); if (!item) return;
     await updateDoc(doc(sub(state.listId, 'items'), item.id), { status: 'open', restoredAt: serverTimestamp(), restoredBy: uid(), restoredByName: uname(), checkedAt: null, checkedBy: null, checkedByName: null });
-    await logActivity('Artikel wiederhergestellt', { itemId: id, title: item.title });
+    await logActivity('Artikel wiederhergestellt', { eventType: 'changed', itemId: id, title: item.title });
 }
 
 async function checkItemDirect(id) {
@@ -2179,7 +2192,7 @@ async function checkItemDirect(id) {
     hideItemActionButtons(id);
     hideQuantityActionButton(id);
     await updateDoc(doc(sub(state.listId, 'items'), item.id), { status: 'checked', purchasedQuantity: Number(item.quantity || 0), checkedAt: serverTimestamp(), checkedBy: uid(), checkedByName: uname() });
-    await logActivity('Artikel abgehakt', { itemId: id, title: item.title, quantity: item.quantity });
+    await logActivity('Artikel abgehakt', { eventType: 'checked', itemId: id, title: item.title, quantity: item.quantity });
 }
 
 async function deleteDetailItem() {
@@ -2320,7 +2333,7 @@ async function addScannedArticleToList(article, code = '') {
     const itemNote = note && note === persistentNote ? '' : note;
     await addDoc(sub(state.listId, 'items'), { articleId: article.id, title: article.title, quantity, unit, categoryId: article.categoryId || '', storeIds, status: 'open', note: itemNote, persistentNote, eanCodes: article.eanCodes || [], createdAt: serverTimestamp(), createdBy: uid(), createdByName: uname() });
     await updateDoc(listDoc(state.listId), { updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname(), storeOrder: effectiveStoreOrder() });
-    await logActivity('Artikel per Scan hinzugefügt', { articleId: article.id, title: article.title, code, quantity, unit });
+    await logActivity('Artikel per Scan hinzugefügt', { eventType: 'added', articleId: article.id, title: article.title, code, quantity, unit });
     state.scanStatus = `Hinzugefügt: ${article.title}`;
     updateScannerDynamicUi();
     flashScanSuccess();
@@ -2453,10 +2466,12 @@ async function saveList() {
 }
 
 async function deleteList(id) {
-    const list = state.lists.find((x) => x.id === id); if (!list || list.ownerId !== uid() || list.isPrivateSystemList) return; if (!confirm(`Liste "${list.name}" löschen?`)) return; await deleteDoc(listDoc(id)); if (state.listId === id) state.listId = null; persistListId(); }
+    const list = state.lists.find((x) => x.id === id); if (!list || list.ownerId !== uid() || list.isPrivateSystemList) return; if (!confirm(`Liste "${list.name}" löschen?`)) return; await deleteDoc(listDoc(id)); if (state.listId === id) state.listId = null; persistListId(); await logActivity('Liste gelöscht', { listId: id });
+}
 
 async function saveCollaborator() {
-    const list = activeList(); if (!list || list.ownerId !== uid() || list.isPrivateSystemList) return; const c = state.collab; if (!c.userId) return alertUser('Bitte Person auswählen.', 'error'); await setDoc(doc(sub(list.id, 'permissions'), c.userId), { listId: list.id, userId: c.userId, userName: USERS[c.userId]?.name || c.userId, accessFrom: fromLocal(c.accessFrom || dtLocal(new Date())), accessUntil: fromLocal(c.accessUntil || ''), canRead: !!c.canRead, canAdd: !!c.canAdd, canShop: !!c.canShop, canManage: !!c.canManage, canManageWrite: !!c.canManageWrite, paused: list.active === false, updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() }); await updateDoc(listDoc(list.id), { memberIds: Array.from(new Set([...(list.memberIds || []), c.userId])), updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() }); await logActivity('Mitbearbeiter gespeichert', { userId: c.userId });
+    const list = activeList(); if (!list || list.ownerId !== uid() || list.isPrivateSystemList) return; const c = state.collab; if (!c.userId) return alertUser('Bitte Person auswählen.', 'error'); await setDoc(doc(sub(list.id, 'permissions'), c.userId), { listId: list.id, userId: c.userId, userName: USERS[c.userId]?.name || c.userId, accessFrom: fromLocal(c.accessFrom || dtLocal(new Date())), accessUntil: fromLocal(c.accessUntil || ''), canRead: !!c.canRead, canAdd: !!c.canAdd, canShop: !!c.canShop, canManage: !!c.canManage, canManageWrite: !!c.canManageWrite, paused: list.active === false, updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() }); await updateDoc(listDoc(list.id), { memberIds: Array.from(new Set([...(list.memberIds || []), c.userId])), updatedAt: serverTimestamp(), updatedBy: uid(), updatedByName: uname() });
+    await logActivity('Mitbearbeiter gespeichert', { eventType: 'invited', userId: c.userId });
 }
 
 async function deleteCollaborator(userId) {
@@ -2734,7 +2749,7 @@ async function confirmPurchase() {
             const { id: _restItemId, ...restPayload } = item;
             await addDoc(sub(state.listId, 'items'), { ...restPayload, quantity: rest, title: `Rest von ${item.title}`, status: 'open', createdAt: serverTimestamp(), createdBy: uid(), createdByName: uname(), restoredAt: null, restoredBy: null, restoredByName: null, checkedAt: null, checkedBy: null, checkedByName: null });
         }
-        await logActivity('Artikel gekauft/abgehakt', { itemId: item.id, title: item.title, quantity: qty });
+        await logActivity('Artikel gekauft/abgehakt', { eventType: 'checked', itemId: item.id, title: item.title, quantity: qty });
     } else {
         const article = state.articles.find((x) => x.id === p.articleId);
         if (!article) return;
@@ -2747,7 +2762,7 @@ async function confirmPurchase() {
         }
         const variant = findVariantById(article, p.variantId);
         await addDoc(sub(state.listId, 'items'), { articleId: article.id, variantId: String(variant?.id || ''), variantBrand: String(variant?.brand || ''), variantLabel: String(variant?.label || ''), variantStoreId: String(variant?.storeId || ''), title: p.title || (variant ? buildVariantGeneratedTitle(article, variant) : article.title), quantity: qty, unit: p.unit || variant?.unit || article.defaultUnit || 'Stück', categoryId: article.categoryId || '', storeIds: p.storeIds?.length ? [...p.storeIds] : (variant?.storeId ? [variant.storeId] : [...(article.storeIds || [])]), status: 'checked', note: '', persistentNote: articlePrefillNote(article), eanCodes: p.eanCodes?.length ? [...p.eanCodes] : (variant ? (variant.eanCodes || []) : (article.eanCodes || [])), createdAt: serverTimestamp(), createdBy: uid(), createdByName: uname(), purchasedQuantity: qty, checkedAt: serverTimestamp(), checkedBy: uid(), checkedByName: uname() });
-        await logActivity('Scan übernommen', { articleId: article.id, quantity: qty, variantId: variant?.id || '' });
+        await logActivity('Scan übernommen', { eventType: 'added', articleId: article.id, quantity: qty, variantId: variant?.id || '' });
     }
     render();
 }
@@ -2760,11 +2775,11 @@ async function saveScannedCodesActive(openNext = false) {
     if (variant) {
         const variants = (article.variants || []).map((entry) => entry.id === variant.id ? { ...entry, noEan: false, eanCodes: Array.from(new Set([...(entry.eanCodes || []), ...state.scanCodes])) } : entry);
         await updateDoc(doc(master('articles'), article.id), { variants, updatedAt: serverTimestamp() });
-        await logActivity('EANs zur Variante hinzugefügt', { articleId: article.id, variantId: variant.id, count: state.scanCodes.length });
+        await logActivity('EANs zur Variante hinzugefügt', { eventType: 'changed', articleId: article.id, variantId: variant.id, count: state.scanCodes.length });
     } else {
         const eanCodes = Array.from(new Set([...(article.eanCodes || []), ...state.scanCodes]));
         await updateDoc(doc(master('articles'), article.id), { eanCodes, noEan: false, updatedAt: serverTimestamp() });
-        await logActivity('EANs zum Artikel hinzugefügt', { articleId: article.id, count: state.scanCodes.length });
+        await logActivity('EANs zum Artikel hinzugefügt', { eventType: 'changed', articleId: article.id, count: state.scanCodes.length });
     }
     flashScanSuccess();
     if (openNext) {
@@ -2885,10 +2900,10 @@ async function saveUnknownCode() {
         if (!state.unknownVariantId) return alertUser('Bitte zuerst eine Variante auswählen.', 'error');
         const variants = (article.variants || []).map((variant) => variant.id === state.unknownVariantId ? { ...variant, noEan: false, eanCodes: Array.from(new Set([...(variant.eanCodes || []), code])) } : variant);
         await updateDoc(doc(master('articles'), article.id), { variants, updatedAt: serverTimestamp() });
-        await logActivity('Unbekannter Code Variante zugeordnet', { articleId: article.id, variantId: state.unknownVariantId, code });
+        await logActivity('Unbekannter Code Variante zugeordnet', { eventType: 'changed', articleId: article.id, variantId: state.unknownVariantId, code });
     } else {
         await updateDoc(doc(master('articles'), article.id), { eanCodes: Array.from(new Set([...(article.eanCodes || []), code])), noEan: false, updatedAt: serverTimestamp() });
-        await logActivity('Unbekannter Code zugeordnet', { articleId: article.id, code });
+        await logActivity('Unbekannter Code zugeordnet', { eventType: 'changed', articleId: article.id, code });
     }
     closeUnknownModal();
 }
@@ -2909,7 +2924,7 @@ async function saveArticle() {
         payload = { ...basePayload, defaultQuantity: parseQty(draft.defaultQuantity || '1') || 1, defaultUnit: normalizeVariantUnit(draft.defaultUnit || 'Stück'), eanCodes: draft.eanCodes || [], noEan: !!draft.noEan, variants: [], storeIds: draft.storeIds || [] };
     }
     if (draft.id) await updateDoc(doc(master('articles'), draft.id), payload); else await addDoc(master('articles'), { ...payload, createdAt: serverTimestamp() });
-    await logActivity('Artikel gespeichert', { title, articleMode: mode });
+    await logActivity('Artikel gespeichert', { eventType: 'changed', title, articleMode: mode });
     state.articleEditor = null;
     render();
 }

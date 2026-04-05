@@ -1,14 +1,24 @@
 {
-  "version": "1.8.11",
-  "buildId": "20260405-3",
+  "version": "1.8.12",
+  "buildId": "20260405-4",
   "releaseDate": "2026-04-05",
-  "releaseTime": "01:49",
+  "releaseTime": "02:07",
   "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Artikelwartung kann EANs jetzt direkt ins Suchfeld scannen und zeigt bei Variantentreffern den Oberartikel mit den passenden Varianten darunter an.",
-  "commitId": "3a4c038",
+  "note": "Benachrichtigungen prüfen Push-Subscriptions jetzt selbstheilend nach, respektieren Berechtigungs-Zeitfenster im Backend und erkennen Ereignistypen robuster über strukturierte Activity-Payloads.",
+  "commitId": "30cb9ae",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.8.12",
+      "buildId": "20260405-4",
+      "releaseDate": "2026-04-05",
+      "releaseTime": "02:07",
+      "bereich": "Einkaufsliste",
+      "note": "Benachrichtigungen prüfen Push-Subscriptions jetzt selbstheilend nach, respektieren Berechtigungs-Zeitfenster im Backend und erkennen Ereignistypen robuster über strukturierte Activity-Payloads.",
+      "commitId": "30cb9ae",
+      "obligation": "false"
+    },
     {
       "version": "1.8.11",
       "buildId": "20260405-3",
