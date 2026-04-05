@@ -1,14 +1,24 @@
 {
-  "version": "1.9.0",
-  "buildId": "20260405-5",
+  "version": "1.10.0",
+  "buildId": "20260405-6",
   "releaseDate": "2026-04-05",
-  "releaseTime": "03:16",
+  "releaseTime": "12:41",
   "bereich": "Einkaufsliste",
   "timezone": "Europe/Vienna",
-  "note": "Einkaufsliste nutzt Stammdaten jetzt listenbezogen mit Sync-Center, Auto-Sync-Links und neuen Regeln für gemeinsame Bearbeitung pro Liste.",
-  "commitId": "b2e4bbf",
+  "note": "Das Sync-Center der Einkaufsliste ist jetzt als klare Schritt-für-Schritt-Ansicht mit einklappbaren Boxen, Einzel-Zielliste und Statusfarben für neue, geänderte und identische Einträge aufgebaut.",
+  "commitId": "ae52555",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.10.0",
+      "buildId": "20260405-6",
+      "releaseDate": "2026-04-05",
+      "releaseTime": "12:41",
+      "bereich": "Einkaufsliste",
+      "note": "Das Sync-Center der Einkaufsliste ist jetzt als klare Schritt-für-Schritt-Ansicht mit einklappbaren Boxen, Einzel-Zielliste und Statusfarben für neue, geänderte und identische Einträge aufgebaut.",
+      "commitId": "ae52555",
+      "obligation": "false"
+    },
     {
       "version": "1.9.0",
       "buildId": "20260405-5",

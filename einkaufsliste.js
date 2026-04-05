@@ -25,6 +25,14 @@ const PRESENCE_MS = 90 * 1000;
 const LOCK_MS = 2 * 60 * 1000;
 const AUTO_SCAN_MS = 5000;
 
+function createEmptySyncSelection() {
+    return { articles: [], categories: [], stores: [], remarks: [], notes: [] };
+}
+
+function createEmptySyncPreview() {
+    return { articles: {}, categories: {}, stores: {}, remarks: {}, notes: {} };
+}
+
 let root = null;
 let inited = false;
 let listUnsub = null;
@@ -115,7 +123,13 @@ const state = {
     notificationTemplate: null,
     notificationCopyTargets: [],
     syncTargets: [],
-    syncSelection: { articles: [], categories: [], stores: [], remarks: [], notes: [] },
+    syncSelection: createEmptySyncSelection(),
+    syncPreview: createEmptySyncPreview(),
+    syncPreviewTargetId: '',
+    syncPreviewLoading: false,
+    syncPreviewRequestKey: '',
+    syncCenterOpen: false,
+    autoSyncOpen: false,
     autoSyncTargets: [],
     autoSyncBidirectional: false,
     notificationPublicKey: '',
@@ -1137,7 +1151,11 @@ function listenActiveList() {
     const list = activeList();
     listenMasters();
     state.syncTargets = [];
-    state.syncSelection = { articles: [], categories: [], stores: [], remarks: [], notes: [] };
+    state.syncSelection = createEmptySyncSelection();
+    state.syncPreview = createEmptySyncPreview();
+    state.syncPreviewTargetId = '';
+    state.syncPreviewLoading = false;
+    state.syncPreviewRequestKey = '';
     state.autoSyncTargets = [];
     if (!list) {
         state.notificationSettings = null;
@@ -1610,14 +1628,209 @@ function syncEntryLabel(type, entry = {}) {
     return String(entry.text || entry.name || '').trim();
 }
 
-function toggleSyncTarget(listId) {
-    state.syncTargets = state.syncTargets.includes(listId)
-        ? state.syncTargets.filter((id) => id !== listId)
-        : [...state.syncTargets, listId];
+function syncTargetListId() {
+    return String(state.syncTargets[0] || '').trim();
+}
+
+function buildArticleComparableData(article = {}) {
+    const normalized = normalizeArticle(article);
+    return {
+        articleMode: normalized.articleMode,
+        title: normalized.title,
+        aliases: [...(normalized.aliases || [])],
+        defaultQuantity: Number(normalized.defaultQuantity || 1) || 1,
+        defaultUnit: normalizeVariantUnit(normalized.defaultUnit || 'Stück'),
+        categoryId: String(normalized.categoryId || '').trim(),
+        categoryMasterId: String(normalized.categoryMasterId || '').trim(),
+        eanCodes: [...(normalized.eanCodes || [])],
+        noEan: !!normalized.noEan,
+        persistentNotes: [...(normalized.persistentNotes || [])],
+        storeIds: [...(normalized.storeIds || [])],
+        storeMasterIds: [...(normalized.storeMasterIds || [])],
+        variants: (normalized.variants || []).map((variant) => ({
+            id: String(variant.id || '').trim(),
+            brand: String(variant.brand || '').trim(),
+            label: String(variant.label || '').trim(),
+            quantity: Number(parseQty(variant.quantity || 1) || 1) || 1,
+            unit: normalizeVariantUnit(variant.unit || 'Stück'),
+            eanCodes: [...(variant.eanCodes || [])],
+            noEan: !!variant.noEan,
+            storeId: String(variant.storeId || '').trim(),
+            storeMasterId: String(variant.storeMasterId || '').trim()
+        }))
+    };
+}
+
+function buildSyncComparableData(type, entry = {}) {
+    if (type === 'articles') return buildArticleComparableData(entry);
+    const normalized = normalizeMasterEntry(type, entry, entry.id);
+    if (type === 'categories') {
+        return { name: String(normalized.name || '').trim() };
+    }
+    if (type === 'stores') {
+        return {
+            name: String(normalized.name || '').trim(),
+            categoryOrder: Array.from(new Set((normalized.categoryOrder || []).map((value) => String(value || '').trim()).filter(Boolean)))
+        };
+    }
+    return { text: String(normalized.text || normalized.name || '').trim() };
+}
+
+async function buildStorePayloadForTarget(store, targetListId) {
+    const normalized = normalizeMasterEntry('stores', store, store.id);
+    const categoryOrder = [];
+    for (const categoryId of normalized.categoryOrder || []) {
+        const sourceCategory = state.categories.find((entry) => entry.id === categoryId);
+        const targetCategoryId = await resolveTargetMasterDocId('categories', targetListId, categoryId, sourceCategory?.masterId || '');
+        if (targetCategoryId && !categoryOrder.includes(targetCategoryId)) categoryOrder.push(targetCategoryId);
+    }
+    return {
+        ...normalized,
+        categoryOrder
+    };
+}
+
+function findSyncMatchInEntries(type, targetEntries = [], sourceEntry = {}) {
+    const masterId = String(sourceEntry?.masterId || sourceEntry?.id || '').trim();
+    if (masterId) {
+        const matchedByMasterId = targetEntries.find((entry) => String(entry?.masterId || entry?.id || '').trim() === masterId);
+        if (matchedByMasterId) return matchedByMasterId;
+    }
+    const syncLabel = String(sourceEntry?.syncLabel || buildMasterSyncLabel(type, sourceEntry)).trim();
+    if (!syncLabel) return null;
+    return targetEntries.find((entry) => String(entry?.syncLabel || buildMasterSyncLabel(type, entry)).trim() === syncLabel) || null;
+}
+
+function syncPreviewEntry(type, id) {
+    return state.syncPreview?.[type]?.[id] || { mode: syncTargetListId() ? 'missing' : 'idle', info: '', matchedId: '' };
+}
+
+function syncTransferableMode(mode = '') {
+    return mode === 'missing' || mode === 'changed';
+}
+
+function syncTransferableCount(type = '') {
+    const types = type ? [type] : ['articles', 'categories', 'stores', 'remarks', 'notes'];
+    return types.reduce((count, key) => count + syncEntriesByType(key).filter((entry) => syncTransferableMode(syncPreviewEntry(key, entry.id).mode)).length, 0);
+}
+
+function syncSelectedTransferableCount() {
+    return ['articles', 'categories', 'stores', 'remarks', 'notes'].reduce((count, type) => count + (state.syncSelection[type] || []).filter((id) => syncTransferableMode(syncPreviewEntry(type, id).mode)).length, 0);
+}
+
+async function refreshSyncPreview(targetListId = syncTargetListId()) {
+    const normalizedTargetListId = String(targetListId || '').trim();
+    if (!normalizedTargetListId) {
+        state.syncPreview = createEmptySyncPreview();
+        state.syncPreviewTargetId = '';
+        state.syncPreviewLoading = false;
+        state.syncPreviewRequestKey = '';
+        state.syncSelection = createEmptySyncSelection();
+        render();
+        return;
+    }
+    const requestKey = `${normalizedTargetListId}:${Date.now()}`;
+    state.syncPreviewTargetId = normalizedTargetListId;
+    state.syncPreviewLoading = true;
+    state.syncPreviewRequestKey = requestKey;
+    state.syncPreview = createEmptySyncPreview();
     render();
+    try {
+        const types = ['articles', 'categories', 'stores', 'remarks', 'notes'];
+        const snapshots = await Promise.all(types.map((type) => getDocs(master(type, normalizedTargetListId))));
+        if (state.syncPreviewRequestKey !== requestKey) return;
+        const targetEntriesByType = {
+            articles: snapshots[0].docs.map((docSnap) => normalizeArticle({ id: docSnap.id, ...docSnap.data() })),
+            categories: snapshots[1].docs.map((docSnap) => normalizeMasterEntry('categories', docSnap.data(), docSnap.id)),
+            stores: snapshots[2].docs.map((docSnap) => normalizeMasterEntry('stores', docSnap.data(), docSnap.id)),
+            remarks: snapshots[3].docs.map((docSnap) => normalizeMasterEntry('remarks', docSnap.data(), docSnap.id)),
+            notes: snapshots[4].docs.map((docSnap) => normalizeMasterEntry('notes', docSnap.data(), docSnap.id))
+        };
+        const nextPreview = createEmptySyncPreview();
+        for (const type of types) {
+            for (const entry of syncEntriesByType(type)) {
+                const matched = findSyncMatchInEntries(type, targetEntriesByType[type], entry);
+                if (!matched) {
+                    nextPreview[type][entry.id] = {
+                        mode: 'missing',
+                        info: 'Existiert in der Zielliste noch nicht und wird neu angelegt.',
+                        matchedId: ''
+                    };
+                    continue;
+                }
+                const sourceComparable = type === 'articles'
+                    ? buildArticleComparableData(await buildArticlePayloadForTarget(entry, normalizedTargetListId))
+                    : (type === 'stores'
+                        ? buildSyncComparableData('stores', await buildStorePayloadForTarget(entry, normalizedTargetListId))
+                        : buildSyncComparableData(type, entry));
+                const targetComparable = buildSyncComparableData(type, matched);
+                const identical = JSON.stringify(sourceComparable) === JSON.stringify(targetComparable);
+                nextPreview[type][entry.id] = identical
+                    ? {
+                        mode: 'same',
+                        info: 'Dieser Eintrag existiert in der Zielliste bereits exakt gleich und kann daher nicht übertragen werden.',
+                        matchedId: matched.id
+                    }
+                    : {
+                        mode: 'changed',
+                        info: 'Dieser Eintrag existiert in der Zielliste bereits, wurde dort aber verändert. Bei Übertragung wird er mit den aktuellen Daten ersetzt.',
+                        matchedId: matched.id
+                    };
+            }
+        }
+        state.syncSelection = {
+            articles: (state.syncSelection.articles || []).filter((id) => syncTransferableMode(nextPreview.articles[id]?.mode)),
+            categories: (state.syncSelection.categories || []).filter((id) => syncTransferableMode(nextPreview.categories[id]?.mode)),
+            stores: (state.syncSelection.stores || []).filter((id) => syncTransferableMode(nextPreview.stores[id]?.mode)),
+            remarks: (state.syncSelection.remarks || []).filter((id) => syncTransferableMode(nextPreview.remarks[id]?.mode)),
+            notes: (state.syncSelection.notes || []).filter((id) => syncTransferableMode(nextPreview.notes[id]?.mode))
+        };
+        state.syncPreview = nextPreview;
+        state.syncPreviewTargetId = normalizedTargetListId;
+        state.syncPreviewLoading = false;
+        render();
+    } catch (error) {
+        if (state.syncPreviewRequestKey !== requestKey) return;
+        state.syncPreviewLoading = false;
+        render();
+        alertUser('Die Sync-Vorschau für die Zielliste konnte nicht geladen werden.', 'error');
+    }
+}
+
+async function toggleSyncTarget(listId) {
+    const normalizedListId = String(listId || '').trim();
+    const nextTargetId = syncTargetListId() === normalizedListId ? '' : normalizedListId;
+    state.syncTargets = nextTargetId ? [nextTargetId] : [];
+    state.syncSelection = createEmptySyncSelection();
+    if (!nextTargetId) {
+        state.syncPreview = createEmptySyncPreview();
+        state.syncPreviewTargetId = '';
+        state.syncPreviewLoading = false;
+        state.syncPreviewRequestKey = '';
+        render();
+        return;
+    }
+    await refreshSyncPreview(nextTargetId);
+}
+
+async function toggleSyncPanel(panel = 'manual') {
+    if (panel === 'manual') {
+        state.syncCenterOpen = !state.syncCenterOpen;
+        render();
+        if (state.syncCenterOpen && syncTargetListId() && state.syncPreviewTargetId !== syncTargetListId()) {
+            await refreshSyncPreview(syncTargetListId());
+        }
+        return;
+    }
+    if (panel === 'auto') {
+        state.autoSyncOpen = !state.autoSyncOpen;
+        render();
+    }
 }
 
 function toggleSyncEntry(type, id) {
+    const preview = syncPreviewEntry(type, id);
+    if (!syncTransferableMode(preview.mode) || state.syncPreviewLoading || !syncTargetListId()) return;
     const current = state.syncSelection[type] || [];
     state.syncSelection[type] = current.includes(id)
         ? current.filter((entryId) => entryId !== id)
@@ -1627,7 +1840,7 @@ function toggleSyncEntry(type, id) {
 
 function clearSyncSelection(type = '') {
     if (type) state.syncSelection[type] = [];
-    else state.syncSelection = { articles: [], categories: [], stores: [], remarks: [], notes: [] };
+    else state.syncSelection = createEmptySyncSelection();
     render();
 }
 
@@ -1694,12 +1907,22 @@ async function syncArticleDependenciesToTarget(article, targetListId) {
     }
 }
 
+async function syncStoreDependenciesToTarget(store, targetListId) {
+    if (!store || !targetListId) return;
+    for (const categoryId of store.categoryOrder || []) {
+        const category = state.categories.find((entry) => entry.id === categoryId);
+        if (category) await syncMasterEntryToList('categories', category, targetListId);
+    }
+}
+
 async function syncMasterEntryToList(type, sourceEntry, targetListId) {
     if (!sourceEntry || !targetListId) return null;
     const matched = await findSyncMatch(type, targetListId, sourceEntry);
     const nextMasterId = String(sourceEntry.masterId || sourceEntry.id || matched?.id || makeLocalId(type)).trim();
     const targetRef = matched ? matched.ref : doc(master(type, targetListId), nextMasterId);
-    const preparedSource = type === 'articles' ? await buildArticlePayloadForTarget(sourceEntry, targetListId) : sourceEntry;
+    const preparedSource = type === 'articles'
+        ? await buildArticlePayloadForTarget(sourceEntry, targetListId)
+        : (type === 'stores' ? await buildStorePayloadForTarget(sourceEntry, targetListId) : sourceEntry);
     const payload = { ...preparedSource, listId: targetListId, masterId: nextMasterId, syncRevision: String(sourceEntry.syncRevision || makeLocalId('sync')).trim() };
     delete payload.id;
     if (!payload.createdAt && !matched) payload.createdAt = serverTimestamp();
@@ -1709,20 +1932,26 @@ async function syncMasterEntryToList(type, sourceEntry, targetListId) {
 
 async function syncMastersToTargets({ onlySelected = false } = {}) {
     if (!state.listId) return;
-    if (!state.syncTargets.length) return alertUser('Bitte zuerst mindestens eine Zielliste auswählen.', 'info');
+    const targetListId = syncTargetListId();
+    if (!targetListId) return alertUser('Bitte zuerst eine Zielliste auswählen.', 'info');
+    if (state.syncPreviewLoading) return alertUser('Die Sync-Vorschau wird noch geladen. Bitte kurz warten.', 'info');
     const types = ['categories', 'stores', 'remarks', 'notes', 'articles'];
     let moved = 0;
-    for (const targetListId of state.syncTargets) {
-        for (const type of types) {
-            const entries = syncEntriesByType(type).filter((entry) => !onlySelected || (state.syncSelection[type] || []).includes(entry.id));
-            for (const entry of entries) {
-                if (type === 'articles') await syncArticleDependenciesToTarget(entry, targetListId);
-                await syncMasterEntryToList(type, entry, targetListId);
-                moved += 1;
-            }
+    for (const type of types) {
+        const entries = syncEntriesByType(type).filter((entry) => {
+            const preview = syncPreviewEntry(type, entry.id);
+            if (!syncTransferableMode(preview.mode)) return false;
+            if (!onlySelected) return true;
+            return (state.syncSelection[type] || []).includes(entry.id);
+        });
+        for (const entry of entries) {
+            if (type === 'stores') await syncStoreDependenciesToTarget(entry, targetListId);
+            if (type === 'articles') await syncArticleDependenciesToTarget(entry, targetListId);
+            await syncMasterEntryToList(type, entry, targetListId);
+            moved += 1;
         }
     }
-    if (onlySelected) clearSyncSelection();
+    await refreshSyncPreview(targetListId);
     alertUser(moved ? `${moved} Stammdatensätze synchronisiert.` : 'Keine passenden Stammdatensätze ausgewählt.', moved ? 'success' : 'info');
 }
 
@@ -1787,11 +2016,23 @@ function renderSyncCenterSection(list = activeList()) {
     if (!list || list.ownerId !== uid()) return '';
     const candidates = syncCandidates(list);
     const types = ['articles', 'categories', 'stores', 'remarks', 'notes'];
-    return `<div class="elc space-y-3"><div><div class="font-black text-sm text-gray-900">Sync-Center</div><div class="text-xs text-gray-500">Stammdaten zwischen deinen Listen übertragen oder dauerhaft koppeln.</div></div>${candidates.length ? `<div class="space-y-3"><div><div class="text-xs font-black uppercase text-slate-500 mb-2">Ziel-Listen für manuellen Sync</div><div class="flex flex-wrap gap-2">${candidates.map((entry) => `<button class="elb ${state.syncTargets.includes(entry.id) ? 'a' : 'bg-gray-100 text-gray-700'}" data-a="toggle-sync-target" data-id="${entry.id}">${escapeHtml(entry.name || 'Liste')}</button>`).join('')}</div></div><div class="flex flex-wrap gap-2"><button class="elb a" data-a="sync-all-targets" ${!state.syncTargets.length ? 'disabled' : ''}>Alle Stammdaten übertragen</button><button class="elb bg-gray-100 text-gray-700" data-a="sync-selected-targets" ${!state.syncTargets.length ? 'disabled' : ''}>Nur Auswahl übertragen</button><button class="elb bg-gray-100 text-gray-700" data-a="clear-sync-selection">Auswahl leeren</button></div><div class="grid gap-3 md:grid-cols-2">${types.map((type) => { const entries = syncEntriesByType(type); return `<div class="rounded-2xl border border-slate-200 bg-slate-50 p-3 space-y-2"><div class="flex items-center justify-between gap-2"><div class="text-sm font-black text-slate-800">${MASTER_ENTITY_LABELS[type]}</div><div class="text-[11px] font-semibold text-slate-400">${(state.syncSelection[type] || []).length} gewählt</div></div><div class="flex flex-wrap gap-2">${entries.length ? entries.map((entry) => `<button class="rounded-full px-3 py-1 text-xs font-bold ${(state.syncSelection[type] || []).includes(entry.id) ? 'bg-indigo-600 text-white' : 'bg-white text-slate-700 border border-slate-200'}" data-a="toggle-sync-entry" data-type="${type}" data-id="${entry.id}">${escapeHtml(syncEntryLabel(type, entry) || 'Ohne Name')}</button>`).join('') : '<span class="text-xs text-slate-400">Keine Einträge vorhanden.</span>'}</div></div>`; }).join('')}</div><div><div class="text-xs font-black uppercase text-slate-500 mb-2">Auto-Sync (bidirektional)</div><div class="flex flex-wrap gap-2">${candidates.map((entry) => `<button class="elb ${state.autoSyncTargets.includes(entry.id) ? 'a' : 'bg-gray-100 text-gray-700'}" data-a="toggle-auto-sync-target" data-id="${entry.id}">${state.autoSyncTargets.includes(entry.id) ? '↔' : '⇄'} ${escapeHtml(entry.name || 'Liste')}</button>`).join('')}</div><div class="mt-2 text-xs text-slate-500">Aktivierte Listen halten Artikel, Kategorien, Geschäfte, Anmerkungen und Notizen automatisch gegenseitig synchron.</div></div></div>` : '<div class="text-sm text-gray-400">Keine weiteren eigenen Listen für Sync vorhanden.</div>'}</div>`;
-}
-
-function canConfirmPurchase(p = state.purchase) {
-    return !!p && Number(p.quantity || 0) > 0;
+    const targetListId = syncTargetListId();
+    const targetList = candidates.find((entry) => entry.id === targetListId) || null;
+    const hasTarget = !!targetListId;
+    const transferableCount = syncTransferableCount();
+    const selectedCount = syncSelectedTransferableCount();
+    const disabledActionClass = 'bg-slate-100 text-slate-400 border border-slate-200 opacity-70 cursor-not-allowed';
+    const availableActionClass = 'bg-white text-slate-700 border border-slate-200 hover:border-indigo-300';
+    const primaryActionClass = 'bg-indigo-600 text-white border border-indigo-600';
+    const autoEnabledClass = 'bg-indigo-600 text-white border border-indigo-600';
+    const autoDisabledClass = 'bg-white text-indigo-700 border border-indigo-200';
+    const manualContent = !candidates.length
+        ? '<div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-500">Keine weiteren eigenen Listen verfügbar.</div>'
+        : `<div class="rounded-2xl border border-indigo-200 bg-indigo-50 p-4 space-y-3"><div><div class="inline-flex rounded-full bg-indigo-600 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-white">Schritt 1</div><div class="mt-2 text-sm font-black text-indigo-900">Ziel-Liste wählen</div><div class="text-xs text-indigo-800/80">Es kann pro Vorgang nur eine Zielliste ausgewählt werden.</div></div><div class="flex flex-wrap gap-2">${candidates.map((entry) => `<button class="elb ${targetListId === entry.id ? primaryActionClass : availableActionClass}" data-a="toggle-sync-target" data-id="${entry.id}">${escapeHtml(entry.name || 'Liste')}</button>`).join('')}</div>${targetList ? `<div class="text-xs font-semibold text-indigo-900">Aktuelle Zielliste: ${escapeHtml(targetList.name || 'Liste')}</div>` : '<div class="text-xs text-indigo-900/80">Noch keine Zielliste ausgewählt.</div>'}</div><div class="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-3"><div class="flex flex-wrap items-start justify-between gap-2"><div><div class="inline-flex rounded-full bg-amber-500 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-white">Schritt 2</div><div class="mt-2 text-sm font-black text-amber-900">Einträge auswählen</div><div class="text-xs text-amber-900/80">Weiß = neu, Gelb = existiert bereits und wird ersetzt, Grau = bereits exakt gleich vorhanden.</div></div><div class="text-[11px] font-bold text-amber-900">${hasTarget ? `${transferableCount} übertragbar` : 'Bitte erst Ziel-Liste wählen'}</div></div>${!hasTarget ? '<div class="rounded-2xl border border-dashed border-amber-300 bg-white/60 px-3 py-4 text-sm text-amber-900/80">Wähle zuerst in Schritt 1 genau eine Zielliste aus.</div>' : state.syncPreviewLoading ? '<div class="rounded-2xl border border-dashed border-amber-300 bg-white/60 px-3 py-4 text-sm text-amber-900/80">Vergleiche Einträge mit der Zielliste...</div>' : `<div class="grid gap-3 md:grid-cols-2">${types.map((type) => { const entries = syncEntriesByType(type); const typeTransferable = syncTransferableCount(type); return `<div class="rounded-2xl border border-white/70 bg-white/80 p-3 space-y-2"><div class="flex items-center justify-between gap-2"><div class="text-sm font-black text-slate-800">${MASTER_ENTITY_LABELS[type]}</div><div class="text-[11px] font-semibold text-slate-500">${(state.syncSelection[type] || []).length} gewählt · ${typeTransferable} aktiv</div></div><div class="flex flex-wrap gap-2">${entries.length ? entries.map((entry) => { const preview = syncPreviewEntry(type, entry.id); const selected = (state.syncSelection[type] || []).includes(entry.id); const selectable = syncTransferableMode(preview.mode); const infoTone = preview.mode === 'changed' ? 'bg-amber-200 text-amber-900' : 'bg-slate-200 text-slate-600'; const buttonClass = !selectable ? 'bg-slate-100 text-slate-400 border border-slate-200 opacity-70 cursor-not-allowed' : selected ? 'bg-indigo-600 text-white border border-indigo-600' : preview.mode === 'changed' ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-white text-slate-700 border border-slate-200'; return `<button class="rounded-full px-3 py-1.5 text-xs font-bold inline-flex items-center gap-2 ${buttonClass}" data-a="toggle-sync-entry" data-type="${type}" data-id="${entry.id}" ${selectable ? '' : 'disabled'} title="${escapeHtml(preview.info || '')}"><span>${escapeHtml(syncEntryLabel(type, entry) || 'Ohne Name')}</span>${preview.mode === 'changed' || preview.mode === 'same' ? `<span class="inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-black ${infoTone}" title="${escapeHtml(preview.info || '')}">i</span>` : ''}</button>`; }).join('') : '<span class="text-xs text-slate-400">Keine Einträge vorhanden.</span>'}</div></div>`; }).join('')}</div>`}</div><div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 space-y-3"><div class="flex flex-wrap items-start justify-between gap-2"><div><div class="inline-flex rounded-full bg-emerald-600 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-white">Schritt 3</div><div class="mt-2 text-sm font-black text-emerald-900">Übertragung starten</div><div class="text-xs text-emerald-900/80">Nur weiße und gelbe Einträge werden berücksichtigt.</div></div><div class="text-[11px] font-bold text-emerald-900">${selectedCount} ausgewählt</div></div><div class="flex flex-wrap gap-2"><button class="elb ${hasTarget && !state.syncPreviewLoading && transferableCount ? primaryActionClass : disabledActionClass}" data-a="sync-all-targets" ${hasTarget && !state.syncPreviewLoading && transferableCount ? '' : 'disabled'}>Alle übertragbaren Einträge übertragen</button><button class="elb ${hasTarget && !state.syncPreviewLoading && selectedCount ? availableActionClass : disabledActionClass}" data-a="sync-selected-targets" ${hasTarget && !state.syncPreviewLoading && selectedCount ? '' : 'disabled'}>Nur Auswahl übertragen</button><button class="elb ${selectedCount ? availableActionClass : disabledActionClass}" data-a="clear-sync-selection" ${selectedCount ? '' : 'disabled'}>Auswahl leeren</button></div></div>`;
+    const autoContent = candidates.length
+        ? `<div class="rounded-2xl border border-sky-200 bg-sky-50 p-4 space-y-3"><div class="text-sm font-black text-sky-900">Verknüpfte Ziel-Listen</div><div class="text-xs text-sky-900/80">Auto-Sync bleibt bewusst opt-in und kann pro Zielliste getrennt aktiviert werden.</div><div class="flex flex-wrap gap-2">${candidates.map((entry) => `<button class="elb ${state.autoSyncTargets.includes(entry.id) ? autoEnabledClass : autoDisabledClass}" data-a="toggle-auto-sync-target" data-id="${entry.id}">${state.autoSyncTargets.includes(entry.id) ? 'Auto-Sync aktiv' : 'Auto-Sync aus'} · ${escapeHtml(entry.name || 'Liste')}</button>`).join('')}</div></div>`
+        : '<div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-500">Keine weiteren eigenen Listen verfügbar.</div>';
+    return `<div class="space-y-3"><div class="elc !p-0 overflow-hidden"><button class="w-full px-4 py-4 text-left" data-a="toggle-sync-panel" data-panel="manual"><div class="flex items-start justify-between gap-3"><div><div class="font-black text-sm text-gray-900">Sync-Center</div><div class="text-xs text-gray-500">Stammdaten gezielt in genau eine andere Liste übertragen.</div></div><div class="text-lg font-black text-slate-400">${state.syncCenterOpen ? '−' : '+'}</div></div></button>${state.syncCenterOpen ? `<div class="border-t border-slate-100 px-4 pb-4 pt-4 space-y-4">${manualContent}</div>` : ''}</div><div class="elc !p-0 overflow-hidden"><button class="w-full px-4 py-4 text-left" data-a="toggle-sync-panel" data-panel="auto"><div class="flex items-start justify-between gap-3"><div><div class="font-black text-sm text-gray-900">Auto-Sync</div><div class="text-xs text-gray-500">Listen dauerhaft koppeln, damit Änderungen an Stammdaten automatisch gespiegelt werden.</div></div><div class="text-lg font-black text-slate-400">${state.autoSyncOpen ? '−' : '+'}</div></div></button>${state.autoSyncOpen ? `<div class="border-t border-slate-100 px-4 pb-4 pt-4">${autoContent}</div>` : ''}</div></div>`;
 }
 
 function openScannerLegacy(mode = 'shopping', articleId = '') {
@@ -3399,7 +3640,8 @@ async function onClickActive(e) {
     if (a === 'del-remark') { await deleteDoc(doc(master('remarks'), btn.dataset.id)); await logActivity('Anmerkung gelöscht', { eventType: 'changed', noteId: btn.dataset.id }); return; }
     if (a === 'add-note') { await addFree(master('notes'), state.drafts.note); state.drafts.note = ''; render(); return; }
     if (a === 'del-note') { await deleteDoc(doc(master('notes'), btn.dataset.id)); await logActivity('Notiz gelöscht', { eventType: 'changed', noteId: btn.dataset.id }); return; }
-    if (a === 'toggle-sync-target') { toggleSyncTarget(btn.dataset.id); return; }
+    if (a === 'toggle-sync-panel') { await toggleSyncPanel(btn.dataset.panel || 'manual'); return; }
+    if (a === 'toggle-sync-target') { await toggleSyncTarget(btn.dataset.id); return; }
     if (a === 'toggle-sync-entry') { toggleSyncEntry(btn.dataset.type, btn.dataset.id); return; }
     if (a === 'clear-sync-selection') { clearSyncSelection(); return; }
     if (a === 'sync-all-targets') { await syncMastersToTargets({ onlySelected: false }); return; }
