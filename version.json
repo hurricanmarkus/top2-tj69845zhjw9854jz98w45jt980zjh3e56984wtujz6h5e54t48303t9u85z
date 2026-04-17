@@ -1,14 +1,24 @@
 {
-  "version": "1.10.6",
-  "buildId": "20260417-2",
+  "version": "1.10.7",
+  "buildId": "20260417-3",
   "releaseDate": "2026-04-17",
-  "releaseTime": "09:53",
+  "releaseTime": "09:58",
   "bereich": "Wertguthaben",
   "timezone": "Europe/Vienna",
-  "note": "Das Transaktionsfenster von Wertguthaben zeigt jetzt zusätzlich eine schwarze ID-Box sowie eine sehr kompakte graue Infoleiste für Eigentümer, Unternehmen und Kategorie.",
+  "note": "Das Transaktionsfenster von Wertguthaben ordnet die schwarze ID-Box und die schwarze Namens-Box jetzt in derselben Zeile an, zuerst ID und danach Name.",
   "commitId": "59e5ff3",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.10.7",
+      "buildId": "20260417-3",
+      "releaseDate": "2026-04-17",
+      "releaseTime": "09:58",
+      "bereich": "Wertguthaben",
+      "note": "Das Transaktionsfenster von Wertguthaben ordnet die schwarze ID-Box und die schwarze Namens-Box jetzt in derselben Zeile an, zuerst ID und danach Name.",
+      "commitId": "59e5ff3",
+      "obligation": "false"
+    },
     {
       "version": "1.10.6",
       "buildId": "20260417-2",
