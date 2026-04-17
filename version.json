@@ -1,14 +1,24 @@
 {
-  "version": "1.10.7",
-  "buildId": "20260417-3",
+  "version": "1.10.8",
+  "buildId": "20260417-4",
   "releaseDate": "2026-04-17",
-  "releaseTime": "09:58",
+  "releaseTime": "10:05",
   "bereich": "Wertguthaben",
   "timezone": "Europe/Vienna",
-  "note": "Das Transaktionsfenster von Wertguthaben ordnet die schwarze ID-Box und die schwarze Namens-Box jetzt in derselben Zeile an, zuerst ID und danach Name.",
-  "commitId": "59e5ff3",
+  "note": "Das Transaktionsfenster von Wertguthaben bleibt auf Mobilgeräten jetzt mit sichtbarem Schließen-Button und Footer bedienbar, während nur der Inhalt scrollt.",
+  "commitId": "4bbf9cd",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.10.8",
+      "buildId": "20260417-4",
+      "releaseDate": "2026-04-17",
+      "releaseTime": "10:05",
+      "bereich": "Wertguthaben",
+      "note": "Das Transaktionsfenster von Wertguthaben bleibt auf Mobilgeräten jetzt mit sichtbarem Schließen-Button und Footer bedienbar, während nur der Inhalt scrollt.",
+      "commitId": "4bbf9cd",
+      "obligation": "false"
+    },
     {
       "version": "1.10.7",
       "buildId": "20260417-3",
