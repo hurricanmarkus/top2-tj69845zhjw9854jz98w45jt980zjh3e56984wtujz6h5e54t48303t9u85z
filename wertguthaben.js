@@ -721,21 +721,16 @@ function setupEventListeners() {
         betragInput.dataset.listenerAttached = 'true';
     }
 
+    const einloesungAnzahlInput = document.getElementById('transaktionEinloesungAnzahl');
+    if (einloesungAnzahlInput && !einloesungAnzahlInput.dataset.listenerAttached) {
+        einloesungAnzahlInput.addEventListener('input', updateTransaktionPreview);
+        einloesungAnzahlInput.dataset.listenerAttached = 'true';
+    }
+
     const typSelect = document.getElementById('transaktionTyp');
     if (typSelect && !typSelect.dataset.listenerAttached) {
         typSelect.addEventListener('change', handleTransaktionTypChange);
         typSelect.dataset.listenerAttached = 'true';
-    }
-
-    const allesEinloesenBtn = document.getElementById('transaktionAllesEinloesenBtn');
-    if (allesEinloesenBtn && !allesEinloesenBtn.dataset.listenerAttached) {
-        allesEinloesenBtn.addEventListener('click', () => {
-            const input = document.getElementById('transaktionBetrag');
-            if (!input) return;
-            input.value = transaktionModalState.originalRestwert.toFixed(2);
-            updateTransaktionPreview();
-        });
-        allesEinloesenBtn.dataset.listenerAttached = 'true';
     }
 }
 
@@ -2260,6 +2255,22 @@ function getWertguthabenTransaktionTypeMeta(transaktion) {
     return { icon: '📄', label: 'Transaktion' };
 }
 
+function getTransaktionEinloesungAnzahl(transaktion) {
+    if (transaktion?.typ !== 'einloesung') return 0;
+
+    const storedAnzahl = Number.parseInt(String(transaktion?.anzahl ?? ''), 10);
+    if (Number.isFinite(storedAnzahl) && storedAnzahl > 0) {
+        return storedAnzahl;
+    }
+
+    const legacyAnzahl = Number.parseInt(String(transaktion?.betrag ?? ''), 10);
+    if (Number.isFinite(legacyAnzahl) && legacyAnzahl > 0) {
+        return legacyAnzahl;
+    }
+
+    return 1;
+}
+
 function formatWertguthabenTransaktionSummary(transaktion) {
     const betrag = Number(transaktion?.betrag || 0);
     const isKorrektur = transaktion?.typ === 'korrektur';
@@ -2272,7 +2283,7 @@ function formatWertguthabenTransaktionSummary(transaktion) {
         : (transaktion?.typ === 'gutschrift'
             ? `+ ${Math.abs(betrag).toFixed(2)} €`
             : (transaktion?.typ === 'einloesung'
-                ? '1x Einlösung'
+                ? `${getTransaktionEinloesungAnzahl(transaktion)}x Einlösung`
                 : (isKorrektur
                     ? `${betrag >= 0 ? '+' : '-'} ${Math.abs(betrag).toFixed(2)} €`
                     : `${Math.abs(betrag).toFixed(2)} €`)));
@@ -3909,22 +3920,63 @@ function populateEigentuemerDropdowns() {
 
 function updateTransaktionPreview() {
     const betragInput = document.getElementById('transaktionBetrag');
+    const einloesungAnzahlInput = document.getElementById('transaktionEinloesungAnzahl');
     const typSelect = document.getElementById('transaktionTyp');
     const verfuegbar = document.getElementById('transaktionVerfuegbar');
     const urspruenglich = document.getElementById('transaktionUrspruenglich');
     if (!betragInput || !typSelect || !verfuegbar || !urspruenglich) return;
 
     if (typSelect.value === 'einloesung') {
-        betragInput.removeAttribute('max');
-        betragInput.classList.remove('border-red-500', 'focus:border-red-500');
-        setTransaktionSaveEnabled(true);
-        setTransaktionValidationHint('');
         const max = transaktionModalState.maxEinloesungen;
         const current = transaktionModalState.bereitsEingeloest;
+        const availableCount = max > 0 ? Math.max(0, max - current) : Number.POSITIVE_INFINITY;
+        const enteredRaw = Number.parseFloat(String(einloesungAnzahlInput?.value || '').replace(',', '.'));
+        const enteredCount = Number.isFinite(enteredRaw) ? enteredRaw : 0;
+        const isPositiveInteger = Number.isInteger(enteredCount) && enteredCount > 0;
+        const exceedsAvailableCount = max > 0 && enteredCount > availableCount;
+        const disableSave = !isPositiveInteger || exceedsAvailableCount;
+        let validationMessage = '';
+
+        betragInput.removeAttribute('max');
+        betragInput.classList.remove('border-red-500', 'focus:border-red-500');
+
+        if (einloesungAnzahlInput) {
+            einloesungAnzahlInput.min = '1';
+            einloesungAnzahlInput.step = '1';
+            if (max > 0) {
+                einloesungAnzahlInput.max = String(availableCount);
+            } else {
+                einloesungAnzahlInput.removeAttribute('max');
+            }
+        }
+
+        if (max > 0 && availableCount <= 0) {
+            validationMessage = 'Keine Einlösungen mehr verfügbar.';
+        } else if (exceedsAvailableCount) {
+            validationMessage = `Maximal verfügbar: ${availableCount}`;
+        } else if (!isPositiveInteger) {
+            validationMessage = 'Bitte eine ganze Einlösemenge größer als 0 eingeben.';
+        }
+
+        setTransaktionSaveEnabled(!disableSave);
+        setTransaktionValidationHint(validationMessage);
+
+        if (einloesungAnzahlInput) {
+            const hasError = !!validationMessage;
+            einloesungAnzahlInput.classList.toggle('border-red-500', hasError);
+            einloesungAnzahlInput.classList.toggle('focus:border-red-500', hasError);
+            einloesungAnzahlInput.classList.toggle('focus:border-pink-500', !hasError);
+        }
+
         const availableText = max > 0 ? `${Math.max(0, max - current)} verfügbar` : '∞ verfügbar';
         verfuegbar.textContent = `${current} / ${max > 0 ? max : '∞'} (${availableText})`;
         urspruenglich.textContent = 'Aktionscode';
         return;
+    }
+
+    if (einloesungAnzahlInput) {
+        einloesungAnzahlInput.classList.remove('border-red-500', 'focus:border-red-500');
+        einloesungAnzahlInput.classList.add('focus:border-pink-500');
     }
 
     const enteredRaw = Number.parseFloat(betragInput.value || '0');
@@ -3997,12 +4049,11 @@ function setTransaktionValidationHint(message) {
 function setTransaktionVerificationOnlyUi(enabled, source = 'dashboard') {
     const typSelect = document.getElementById('transaktionTyp');
     const betragInput = document.getElementById('transaktionBetrag');
-    const allesEinloesenBtn = document.getElementById('transaktionAllesEinloesenBtn');
-    const einloesungBtn = document.getElementById('einloesungVormerkenBtn');
+    const einloesungAnzahlInput = document.getElementById('transaktionEinloesungAnzahl');
     const datumInput = document.getElementById('transaktionDatum');
     const detailsToggle = document.getElementById('transaktionDetailsToggle');
 
-    const lockClassTargets = [betragInput, allesEinloesenBtn, einloesungBtn, detailsToggle];
+    const lockClassTargets = [betragInput, einloesungAnzahlInput, detailsToggle];
     lockClassTargets.forEach((target) => {
         if (!target) return;
         target.classList.toggle('opacity-60', !!enabled);
@@ -4011,8 +4062,7 @@ function setTransaktionVerificationOnlyUi(enabled, source = 'dashboard') {
 
     if (typSelect) typSelect.disabled = !!enabled || source === 'einloese';
     if (betragInput) betragInput.disabled = !!enabled;
-    if (allesEinloesenBtn) allesEinloesenBtn.disabled = !!enabled;
-    if (einloesungBtn) einloesungBtn.disabled = !!enabled;
+    if (einloesungAnzahlInput) einloesungAnzahlInput.disabled = !!enabled;
     if (datumInput) datumInput.disabled = !!enabled || source === 'einloese';
     if (detailsToggle) detailsToggle.disabled = !!enabled;
 
@@ -4032,7 +4082,7 @@ function handleTransaktionTypChange() {
     const wg = WERTGUTHABEN[wgId];
     const betragContainer = document.getElementById('transaktionBetragContainer');
     const einloesungContainer = document.getElementById('transaktionEinloesungContainer');
-    const allesEinloesenBtn = document.getElementById('transaktionAllesEinloesenBtn');
+    const einloesungAnzahlInput = document.getElementById('transaktionEinloesungAnzahl');
     const betragInput = document.getElementById('transaktionBetrag');
     const betragLabel = document.querySelector('label[for="transaktionBetrag"]') || document.querySelector('#transaktionBetragContainer label');
     const source = document.getElementById('transaktionOpenSource')?.value || 'dashboard';
@@ -4042,11 +4092,6 @@ function handleTransaktionTypChange() {
     if (einloesungContainer) {
         const showEinloesung = isEinloesungType && wg?.typ === 'aktionscode';
         einloesungContainer.classList.toggle('hidden', !showEinloesung);
-    }
-
-    if (allesEinloesenBtn) {
-        const showAlles = !transaktionModalState.isEditMode && !isEinloesungType && typ === 'verwendung';
-        allesEinloesenBtn.classList.toggle('hidden', !showAlles);
     }
 
     if (betragLabel) {
@@ -4072,6 +4117,15 @@ function handleTransaktionTypChange() {
             betragInput.inputMode = 'decimal';
             betragInput.placeholder = '0.00';
             betragInput.min = '0';
+        }
+    }
+
+    if (einloesungAnzahlInput) {
+        einloesungAnzahlInput.min = '1';
+        einloesungAnzahlInput.step = '1';
+        if (!isEinloesungType) {
+            einloesungAnzahlInput.classList.remove('border-red-500', 'focus:border-red-500');
+            einloesungAnzahlInput.classList.add('focus:border-pink-500');
         }
     }
 
@@ -4106,12 +4160,13 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
     const transaktionBetragInput = document.getElementById('transaktionBetrag');
     const transaktionBetragContainer = document.getElementById('transaktionBetragContainer');
     const transaktionEinloesungContainer = document.getElementById('transaktionEinloesungContainer');
+    const transaktionEinloesungAnzahlInput = document.getElementById('transaktionEinloesungAnzahl');
     const transaktionDatumInput = document.getElementById('transaktionDatum');
     const verifySection = document.getElementById('transaktionVerifySection');
     const verifyCheckbox = document.getElementById('transaktionVerifyCheckbox');
     const verifyInfo = document.getElementById('transaktionVerifyInfo');
     const restwertVerifiziertInfo = document.getElementById('transaktionRestwertVerifiziertInfo');
-    const allesEinloesenBtn = document.getElementById('transaktionAllesEinloesenBtn');
+    const bookedForLabel = document.getElementById('transaktionBookedForLabel');
     const verfuegbarElement = document.getElementById('transaktionVerfuegbar');
     const betragLabel = document.querySelector('label[for="transaktionBetrag"]') || document.querySelector('#transaktionBetragContainer label');
     const saveBtn = document.getElementById('saveTransaktionBtn');
@@ -4132,6 +4187,10 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
     transaktionModalState.maxEinloesungen = Number(wg.maxEinloesungen || 0);
     transaktionModalState.bereitsEingeloest = Number(wg.bereitsEingeloest || 0);
     transaktionModalState.isEinloesungMode = false;
+
+    if (bookedForLabel) {
+        bookedForLabel.textContent = String(wg.name || '').trim() || `#${getWertguthabenDisplayId({ ...wg, id: wertguthabenId })}`;
+    }
 
     const aktuellerRestwert = Number(wg.restwert !== undefined ? wg.restwert : wg.wert || 0);
     let originalRestwert = aktuellerRestwert;
@@ -4199,7 +4258,14 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
         transaktionModalState.isEinloesungMode = true;
     }
 
-    transaktionBetragInput.value = editTransaktion?.betrag !== undefined ? Number(editTransaktion.betrag || 0).toFixed(2) : '';
+    transaktionBetragInput.value = editTransaktion?.typ && editTransaktion.typ !== 'einloesung' && editTransaktion?.betrag !== undefined
+        ? Number(editTransaktion.betrag || 0).toFixed(2)
+        : '';
+    if (transaktionEinloesungAnzahlInput) {
+        transaktionEinloesungAnzahlInput.value = editTransaktion?.typ === 'einloesung'
+            ? String(getTransaktionEinloesungAnzahl(editTransaktion))
+            : '';
+    }
     if (betragLabel) betragLabel.textContent = source === 'einloese' ? 'Betrag einlösen (€) *' : 'Betrag (€) *';
 
     if (restwertVerifiziertInfo) {
@@ -4303,6 +4369,10 @@ function closeTransaktionModal() {
     document.getElementById('transaktionModal').style.display = 'none';
     document.getElementById('editTransaktionId').value = '';
     document.getElementById('transaktionOpenSource').value = 'dashboard';
+    const bookedForLabel = document.getElementById('transaktionBookedForLabel');
+    const einloesungAnzahlInput = document.getElementById('transaktionEinloesungAnzahl');
+    if (bookedForLabel) bookedForLabel.textContent = '-';
+    if (einloesungAnzahlInput) einloesungAnzahlInput.value = '';
     transaktionModalState.source = 'dashboard';
     transaktionModalState.editTransaktionId = '';
     transaktionModalState.isEditMode = false;
@@ -4314,6 +4384,7 @@ function closeTransaktionModal() {
     transaktionModalState.bereitsEingeloest = 0;
     setTransaktionVerificationOnlyUi(false, 'dashboard');
     setTransaktionDetailsExpanded(false);
+    setTransaktionValidationHint('');
 }
 
 async function clearTransaktionVerificationStatuses(wertguthabenId) {
@@ -4349,6 +4420,8 @@ async function saveTransaktion() {
     const source = document.getElementById('transaktionOpenSource').value || 'dashboard';
     const typ = document.getElementById('transaktionTyp').value;
     const betrag = Number.parseFloat(document.getElementById('transaktionBetrag').value || '0') || 0;
+    const einloesungAnzahlRaw = Number.parseFloat(String(document.getElementById('transaktionEinloesungAnzahl')?.value || '').replace(',', '.'));
+    const einloesungAnzahl = Number.isFinite(einloesungAnzahlRaw) ? einloesungAnzahlRaw : 0;
     const bestellnr = document.getElementById('transaktionBestellnr').value.trim();
     const rechnungsnr = document.getElementById('transaktionRechnungsnr').value.trim();
     const beschreibung = document.getElementById('transaktionBeschreibung').value.trim();
@@ -4423,26 +4496,36 @@ async function saveTransaktion() {
 
         const maxEinloesungen = transaktionModalState.maxEinloesungen;
         const bereitsEingeloest = transaktionModalState.bereitsEingeloest;
+        const availableEinloesungen = maxEinloesungen > 0 ? Math.max(0, maxEinloesungen - bereitsEingeloest) : Number.POSITIVE_INFINITY;
         if (maxEinloesungen > 0 && bereitsEingeloest >= maxEinloesungen) {
             return alertUser('Keine Einlösungen mehr verfügbar! Der Aktionscode ist bereits vollständig eingelöst.', 'error');
+        }
+
+        if (!Number.isInteger(einloesungAnzahl) || einloesungAnzahl <= 0) {
+            return alertUser('Bitte eine gültige Einlösemenge größer als 0 eingeben.', 'error');
+        }
+
+        if (maxEinloesungen > 0 && einloesungAnzahl > availableEinloesungen) {
+            return alertUser(`Nicht genug Einlösungen verfügbar! Maximal möglich: ${availableEinloesungen}`, 'error');
         }
 
         try {
             const transaktionenRef = collection(db, 'artifacts', appId, 'public', 'data', 'wertguthaben', wertguthabenId, 'transaktionen');
             await addDoc(transaktionenRef, {
                 typ: 'einloesung',
+                anzahl: einloesungAnzahl,
                 betrag: 0,
                 datum: serverTimestamp(),
                 bestellnr,
                 rechnungsnr,
-                beschreibung: beschreibung || 'Aktionscode eingelöst',
+                beschreibung: beschreibung || (einloesungAnzahl === 1 ? 'Aktionscode eingelöst' : `Aktionscode ${einloesungAnzahl}x eingelöst`),
                 createdAt: serverTimestamp(),
                 createdBy: currentUser.mode
             });
 
             await clearTransaktionVerificationStatuses(wertguthabenId);
 
-            const neueEinloesungen = bereitsEingeloest + 1;
+            const neueEinloesungen = bereitsEingeloest + einloesungAnzahl;
             const wertguthabenRef = doc(wertguthabenCollection, wertguthabenId);
             const updateData = {
                 bereitsEingeloest: neueEinloesungen,
@@ -4744,6 +4827,7 @@ window.openWertguthabenDetails = async function(id, options = {}) {
             const transaktionBetrag = Number(t.betrag || 0);
             const isKorrektur = t.typ === 'korrektur';
             const isStartguthaben = isStartguthabenTransaktion(t);
+            const einloesungAnzahl = getTransaktionEinloesungAnzahl(t);
             const icon = t.typ === 'verwendung' ? '📉' : (t.typ === 'einloesung' ? '🎟️' : (isKorrektur ? '🛠️' : '📈'));
             const colorClass = t.typ === 'verwendung'
                 ? 'text-red-600'
@@ -4751,7 +4835,7 @@ window.openWertguthabenDetails = async function(id, options = {}) {
             const betragText = t.typ === 'verwendung'
                 ? `- ${Math.abs(transaktionBetrag).toFixed(2)} €`
                 : (t.typ === 'einloesung'
-                    ? '1x Einlösung'
+                    ? `${einloesungAnzahl}x Einlösung`
                     : (isKorrektur
                         ? `${transaktionBetrag >= 0 ? '+' : '-'} ${Math.abs(transaktionBetrag).toFixed(2)} € (Korrektur)`
                         : `+ ${Math.abs(transaktionBetrag).toFixed(2)} €`));
@@ -5015,7 +5099,7 @@ window.deleteTransaktion = async function(wertguthabenId, transaktionId) {
         } else if (gelöschteTransaktion.typ === 'einloesung' && aktuelleDaten.typ === 'aktionscode') {
             // Einlösung wieder zurücknehmen
             const bereitsEingeloest = aktuelleDaten.bereitsEingeloest || 0;
-            updateData.bereitsEingeloest = Math.max(0, bereitsEingeloest - 1);
+            updateData.bereitsEingeloest = Math.max(0, bereitsEingeloest - getTransaktionEinloesungAnzahl(gelöschteTransaktion));
             
             // Status ggf. wieder auf "aktiv" setzen
             if (aktuelleDaten.status === 'eingeloest') {
