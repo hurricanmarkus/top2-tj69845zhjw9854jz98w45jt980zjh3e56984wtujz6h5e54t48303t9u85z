@@ -1,14 +1,24 @@
 {
-  "version": "1.10.5",
-  "buildId": "20260417-1",
+  "version": "1.10.6",
+  "buildId": "20260417-2",
   "releaseDate": "2026-04-17",
-  "releaseTime": "07:41",
+  "releaseTime": "09:53",
   "bereich": "Wertguthaben",
   "timezone": "Europe/Vienna",
-  "note": "Das Transaktionsfenster von Wertguthaben zeigt den Buchungsnamen deutlicher an, entfernt Alles-einlösen und bucht Aktionscodes jetzt über eine verpflichtende Mengen-Eingabe.",
-  "commitId": "9f61331",
+  "note": "Das Transaktionsfenster von Wertguthaben zeigt jetzt zusätzlich eine schwarze ID-Box sowie eine sehr kompakte graue Infoleiste für Eigentümer, Unternehmen und Kategorie.",
+  "commitId": "59e5ff3",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.10.6",
+      "buildId": "20260417-2",
+      "releaseDate": "2026-04-17",
+      "releaseTime": "09:53",
+      "bereich": "Wertguthaben",
+      "note": "Das Transaktionsfenster von Wertguthaben zeigt jetzt zusätzlich eine schwarze ID-Box sowie eine sehr kompakte graue Infoleiste für Eigentümer, Unternehmen und Kategorie.",
+      "commitId": "59e5ff3",
+      "obligation": "false"
+    },
     {
       "version": "1.10.5",
       "buildId": "20260417-1",

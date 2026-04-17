@@ -4166,7 +4166,9 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
     const verifyCheckbox = document.getElementById('transaktionVerifyCheckbox');
     const verifyInfo = document.getElementById('transaktionVerifyInfo');
     const restwertVerifiziertInfo = document.getElementById('transaktionRestwertVerifiziertInfo');
+    const bookedForIdLabel = document.getElementById('transaktionBookedForIdLabel');
     const bookedForLabel = document.getElementById('transaktionBookedForLabel');
+    const bookedForMeta = document.getElementById('transaktionBookedForMeta');
     const verfuegbarElement = document.getElementById('transaktionVerfuegbar');
     const betragLabel = document.querySelector('label[for="transaktionBetrag"]') || document.querySelector('#transaktionBetragContainer label');
     const saveBtn = document.getElementById('saveTransaktionBtn');
@@ -4188,8 +4190,21 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
     transaktionModalState.bereitsEingeloest = Number(wg.bereitsEingeloest || 0);
     transaktionModalState.isEinloesungMode = false;
 
+    const displayId = getWertguthabenDisplayId({ ...wg, id: wertguthabenId });
+    const eigentuemerName = String(USERS[wg.eigentuemer]?.name || wg.eigentuemer || '-').trim() || '-';
+    const unternehmenName = String(wg.unternehmen || '-').trim() || '-';
+    const kategorieName = String(normalizeWertguthabenKategorie(wg.kategorie) || '-').trim() || '-';
+
+    if (bookedForIdLabel) {
+        bookedForIdLabel.textContent = `ID: #${displayId || '-'}`;
+    }
+
     if (bookedForLabel) {
-        bookedForLabel.textContent = String(wg.name || '').trim() || `#${getWertguthabenDisplayId({ ...wg, id: wertguthabenId })}`;
+        bookedForLabel.textContent = String(wg.name || '').trim() || `#${displayId || '-'}`;
+    }
+
+    if (bookedForMeta) {
+        bookedForMeta.textContent = `Eigentümer: ${eigentuemerName} · Unternehmen: ${unternehmenName} · Kategorie: ${kategorieName}`;
     }
 
     const aktuellerRestwert = Number(wg.restwert !== undefined ? wg.restwert : wg.wert || 0);
@@ -4369,9 +4384,13 @@ function closeTransaktionModal() {
     document.getElementById('transaktionModal').style.display = 'none';
     document.getElementById('editTransaktionId').value = '';
     document.getElementById('transaktionOpenSource').value = 'dashboard';
+    const bookedForIdLabel = document.getElementById('transaktionBookedForIdLabel');
     const bookedForLabel = document.getElementById('transaktionBookedForLabel');
+    const bookedForMeta = document.getElementById('transaktionBookedForMeta');
     const einloesungAnzahlInput = document.getElementById('transaktionEinloesungAnzahl');
+    if (bookedForIdLabel) bookedForIdLabel.textContent = 'ID: #-';
     if (bookedForLabel) bookedForLabel.textContent = '-';
+    if (bookedForMeta) bookedForMeta.textContent = 'Eigentümer: -';
     if (einloesungAnzahlInput) einloesungAnzahlInput.value = '';
     transaktionModalState.source = 'dashboard';
     transaktionModalState.editTransaktionId = '';

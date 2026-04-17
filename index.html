@@ -24,15 +24,15 @@
     <meta name="application-name" content="TOP 2 App">
     <meta name="apple-mobile-web-app-title" content="TOP2">
     <meta name="theme-color" content="#4f46e5" />
-    <meta name="top2-app-version" content="1.10.5" />
-    <meta name="top2-build-id" content="20260417-1" />
+    <meta name="top2-app-version" content="1.10.6" />
+    <meta name="top2-build-id" content="20260417-2" />
     <meta name="msapplication-navbutton-color" content="#4f46e5">
     <meta name="apple-mobile-app-status-bar-style" content="black-translucent">
     <link rel="icon" type="image/png" sizes="192x192" href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
     <link rel="apple-touch-icon" type="image/png" sizes="192x192"
         href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
 
-    <link rel="manifest" href="manifest.json?v=20260417-1">
+    <link rel="manifest" href="manifest.json?v=20260417-2">
 
     <link rel="stylesheet" href="style.css">
     
@@ -8373,8 +8373,16 @@
 
                 <div class="mb-5 text-center">
                     <p class="text-base sm:text-lg font-black text-gray-900 tracking-wide">Es wird gebucht für:</p>
-                    <div id="transaktionBookedForLabel" class="mt-2 inline-flex max-w-full items-center justify-center rounded-lg bg-black px-4 py-2 text-center text-base sm:text-lg font-black text-white break-words">
-                        -
+                    <div class="mt-2 flex flex-col items-center gap-2">
+                        <div id="transaktionBookedForIdLabel" class="inline-flex max-w-full items-center justify-center rounded-lg bg-black px-4 py-2 text-center text-base sm:text-lg font-black text-white break-words">
+                            ID: #-
+                        </div>
+                        <div id="transaktionBookedForLabel" class="inline-flex max-w-full items-center justify-center rounded-lg bg-black px-4 py-2 text-center text-base sm:text-lg font-black text-white break-words">
+                            -
+                        </div>
+                        <div id="transaktionBookedForMeta" class="inline-flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-md bg-gray-100 px-3 py-1 text-[11px] sm:text-xs font-medium text-gray-600 border border-gray-200 leading-tight">
+                            Eigentümer: -
+                        </div>
                     </div>
                 </div>
 
