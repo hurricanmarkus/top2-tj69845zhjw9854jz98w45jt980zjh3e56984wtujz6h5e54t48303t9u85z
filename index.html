@@ -24,15 +24,15 @@
     <meta name="application-name" content="TOP 2 App">
     <meta name="apple-mobile-web-app-title" content="TOP2">
     <meta name="theme-color" content="#4f46e5" />
-    <meta name="top2-app-version" content="1.11.1" />
-    <meta name="top2-build-id" content="20260420-2" />
+    <meta name="top2-app-version" content="1.11.2" />
+    <meta name="top2-build-id" content="20260420-3" />
     <meta name="msapplication-navbutton-color" content="#4f46e5">
     <meta name="apple-mobile-app-status-bar-style" content="black-translucent">
     <link rel="icon" type="image/png" sizes="192x192" href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
     <link rel="apple-touch-icon" type="image/png" sizes="192x192"
         href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
 
-    <link rel="manifest" href="manifest.json?v=20260420-2">
+    <link rel="manifest" href="manifest.json?v=20260420-3">
 
     <link rel="stylesheet" href="style.css">
     
@@ -1918,6 +1918,10 @@
                         </div>
 
                         <div class="flex justify-center">
+                            <button id="btn-close-einloese-system"
+                                class="hidden shrink-0 py-1.5 px-3 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300 transition text-xs sm:text-sm whitespace-nowrap">
+                                Zurück zur Liste
+                            </button>
                             <button id="btn-open-einloese-system"
                                 class="shrink-0 py-1.5 px-3 bg-white border-2 border-emerald-300 text-emerald-700 font-bold rounded-lg hover:bg-emerald-50 hover:border-emerald-500 transition text-xs sm:text-sm whitespace-nowrap">
                                 Einlöse-System
@@ -2110,11 +2114,8 @@
 
                 <div id="wertguthabenEinloeseSection" class="hidden">
                     <div class="bg-white rounded-2xl border-2 border-emerald-200 shadow-md p-4 sm:p-8">
-                        <div class="flex items-center justify-between gap-2 mb-4">
+                        <div class="flex items-center justify-center gap-2 mb-4">
                             <h2 class="text-xl sm:text-2xl font-bold text-emerald-800">Einlöse-System</h2>
-                            <button id="btn-close-einloese-system" class="px-3 py-2 text-sm font-bold rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300">
-                                Zurück zur Liste
-                            </button>
                         </div>
 
                         <div class="max-w-3xl mx-auto relative">
@@ -8405,29 +8406,29 @@
             </div>
         </div>
 
-        <div id="wertguthabenListenDeleteModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-[95]">
-            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
-                <div class="bg-gradient-to-r from-red-600 to-red-700 px-5 py-4 text-white">
+        <div id="wertguthabenListenDeleteModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-[95] select-none">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden select-none">
+                <div class="bg-gradient-to-r from-red-600 to-red-700 px-5 py-4 text-white select-none">
                     <div class="flex items-center justify-between gap-3">
                         <h3 class="text-xl font-bold">⚠️ LISTE UNWIDERRUFLICH LÖSCHEN</h3>
                         <button id="closeWertguthabenListenDeleteModal" class="text-white/80 hover:text-white font-bold text-3xl leading-none">&times;</button>
                     </div>
                 </div>
-                <div class="p-5 space-y-4">
-                    <div class="rounded-xl border-2 border-red-300 bg-red-50 p-4 text-sm text-red-900">
+                <div class="p-5 space-y-4 select-none">
+                    <div class="rounded-xl border-2 border-red-300 bg-red-50 p-4 text-sm text-red-900 select-none">
                         <p class="font-black mb-2">⚠️ ACHTUNG: Diese Aktion ist unwiderruflich.</p>
                         <p id="wg-list-delete-warning-name" class="mb-2">Die Liste wird dauerhaft gelöscht.</p>
                         <p class="text-red-800">Alle enthaltenen Wertguthaben-Einträge dieser Liste werden ebenfalls endgültig gelöscht.</p>
                     </div>
 
-                    <label class="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-sm font-semibold text-gray-700">
+                    <label class="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-sm font-semibold text-gray-700 select-none">
                         <input type="checkbox" id="wg-list-delete-checkbox" class="mt-0.5 h-4 w-4 accent-red-600">
                         <span>Ich bestätige, dass auch alle Einträge dieser Liste gelöscht werden.</span>
                     </label>
 
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">Gib exakt ein: <span class="text-red-600">LISTE UNWIDERRUFLICH LÖSCHEN</span></label>
-                        <input type="text" id="wg-list-delete-confirm-text" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-red-500 bg-white" placeholder="LISTE UNWIDERRUFLICH LÖSCHEN">
+                    <div class="select-none">
+                        <label class="block text-sm font-bold text-gray-700 mb-2 select-none">Gib exakt ein: <span class="text-red-600">LISTE UNWIDERRUFLICH LÖSCHEN</span></label>
+                        <input type="text" id="wg-list-delete-confirm-text" autocomplete="off" spellcheck="false" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-red-500 bg-white select-none" placeholder="LISTE UNWIDERRUFLICH LÖSCHEN">
                     </div>
 
                     <div class="text-center">

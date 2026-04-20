@@ -28,7 +28,7 @@ import {
 } from './pushmail-notifications.js';
 import { initializePushmailSettingsUI } from './pushmail-settings-ui.js';
 import { initializeTicketSupport, listenForTickets, stopTicketsListener } from './ticket-support.js';
-import { initializeWertguthaben, listenForWertguthaben, stopWertguthabenListener } from './wertguthaben.js';
+import { initializeWertguthaben, listenForWertguthaben, prepareWertguthabenViewForEntry, stopWertguthabenListener } from './wertguthaben.js';
 import { initializeLizenzen, listenForLizenzen, stopLizenzenListener } from './lizenzen.js';
 import { initializeVertragsverwaltung, listenForVertraege, stopVertragsverwaltungListeners } from './vertragsverwaltung.js';
 import { initRezeptverwaltung } from './rezeptverwaltung.js';
@@ -3032,6 +3032,7 @@ export function navigate(targetViewName, options = {}) {
 
     if (targetViewName === 'wertguthaben') {
         initializeWertguthaben();
+        prepareWertguthabenViewForEntry();
     }
 
     if (targetViewName === 'lizenzen') {

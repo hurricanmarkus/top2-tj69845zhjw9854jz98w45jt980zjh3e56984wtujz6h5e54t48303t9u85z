@@ -379,7 +379,45 @@ function setupEventListeners() {
             listDeleteInput.value = String(listDeleteInput.value || '').toUpperCase();
             updateWertguthabenListDeleteConfirmState();
         });
+        listDeleteInput.addEventListener('copy', (event) => event.preventDefault());
+        listDeleteInput.addEventListener('cut', (event) => event.preventDefault());
+        listDeleteInput.addEventListener('select', () => {
+            window.setTimeout(() => {
+                const end = String(listDeleteInput.value || '').length;
+                listDeleteInput.setSelectionRange(end, end);
+            }, 0);
+        });
+        listDeleteInput.addEventListener('mouseup', () => {
+            window.setTimeout(() => {
+                const end = String(listDeleteInput.value || '').length;
+                listDeleteInput.setSelectionRange(end, end);
+            }, 0);
+        });
+        listDeleteInput.addEventListener('touchend', () => {
+            window.setTimeout(() => {
+                const end = String(listDeleteInput.value || '').length;
+                listDeleteInput.setSelectionRange(end, end);
+            }, 0);
+        });
+        listDeleteInput.addEventListener('keydown', (event) => {
+            if ((event.ctrlKey || event.metaKey) && ['a', 'c', 'x'].includes(String(event.key || '').toLowerCase())) {
+                event.preventDefault();
+            }
+        });
         listDeleteInput.dataset.listenerAttached = 'true';
+    }
+
+    const listDeleteModal = document.getElementById('wertguthabenListenDeleteModal');
+    if (listDeleteModal && !listDeleteModal.dataset.copyProtectionAttached) {
+        ['copy', 'cut', 'dragstart', 'contextmenu'].forEach((eventName) => {
+            listDeleteModal.addEventListener(eventName, (event) => {
+                event.preventDefault();
+            });
+        });
+        listDeleteModal.addEventListener('selectstart', (event) => {
+            event.preventDefault();
+        });
+        listDeleteModal.dataset.copyProtectionAttached = 'true';
     }
 
     const listDeleteConfirmBtn = document.getElementById('wg-list-delete-confirm-btn');
@@ -886,7 +924,15 @@ function addWertguthabenFilterFromUi(options = {}) {
     renderWertguthabenTable();
 }
 
+function setEinloeseHeaderNavigationState(isEinloeseOpen) {
+    const openButton = document.getElementById('btn-open-einloese-system');
+    const closeButton = document.getElementById('btn-close-einloese-system');
+    if (openButton) openButton.classList.toggle('hidden', !!isEinloeseOpen);
+    if (closeButton) closeButton.classList.toggle('hidden', !isEinloeseOpen);
+}
+
 function openEinloeseSystemView() {
+    setEinloeseHeaderNavigationState(true);
     document.getElementById('wertguthabenDashboardSection')?.classList.add('hidden');
     document.getElementById('wertguthabenEinloeseSection')?.classList.remove('hidden');
     stopEinloeseScanner({ hidePanel: true, clearStatus: true });
@@ -898,6 +944,15 @@ function closeEinloeseSystemView() {
     document.getElementById('wertguthabenEinloeseSection')?.classList.add('hidden');
     document.getElementById('wertguthabenDashboardSection')?.classList.remove('hidden');
     hideEinloeseSuggestions();
+    setEinloeseHeaderNavigationState(false);
+}
+
+export function prepareWertguthabenViewForEntry() {
+    ensureCurrentWertguthabenListSelection({ preferDefault: true });
+    closeEinloeseSystemView();
+    renderWertguthabenListSelector();
+    renderWertguthabenTable();
+    updateStatistics();
 }
 
 function resetEinloeseResult() {
@@ -1098,7 +1153,6 @@ function doesMaskedAwareTextMatch(storedValue, queryValue) {
 function isVerifiableHistoryTransaktionCandidate(transaktion, wgTyp = '') {
     return wgTyp !== 'aktionscode'
         && !!transaktion?.id
-        && !isStartguthabenTransaktion(transaktion)
         && WG_VERIFIABLE_TRANSACTION_TYPES.has(String(transaktion?.typ || '').trim());
 }
 
@@ -1264,12 +1318,27 @@ function renderEinloeseEntrySuggestions(entries, options = {}) {
 
     const emptyMessage = String(options.emptyMessage || 'Keine passende ID gefunden.');
     const headerText = String(options.headerText || '').trim();
+    const noticeText = String(options.noticeText || '').trim();
     const showCodeLabel = options.showCodeLabel !== false;
     const additionalForeignMatches = options.additionalForeignMatches === true;
     const candidates = uniqueEinloeseEntries(entries);
 
+    const noticeHtml = noticeText
+        ? `
+            <li>
+                <div class="w-full text-left px-4 py-3 bg-orange-50 border-b border-orange-200 last:border-0">
+                    <div class="flex items-center justify-between gap-3">
+                        <span class="font-mono font-bold text-orange-700">! </span>
+                        <span class="text-xs font-semibold uppercase tracking-wide text-orange-700">Andere Liste</span>
+                    </div>
+                    <div class="text-sm text-orange-900 mt-1 break-all font-bold">${escapeHtml(noticeText)}</div>
+                </div>
+            </li>
+        `
+        : '';
+
     if (candidates.length === 0) {
-        list.innerHTML = `<li class="px-4 py-3 text-sm text-gray-500">${escapeHtml(emptyMessage)}</li>`;
+        list.innerHTML = noticeHtml || `<li class="px-4 py-3 text-sm text-gray-500">${escapeHtml(emptyMessage)}</li>`;
         box.classList.remove('hidden');
         return;
     }
@@ -1301,7 +1370,7 @@ function renderEinloeseEntrySuggestions(entries, options = {}) {
         `;
     }).join('');
 
-    list.innerHTML = `${headerHtml}${itemsHtml}`;
+    list.innerHTML = `${headerHtml}${itemsHtml}${noticeHtml}`;
     box.classList.remove('hidden');
 }
 
@@ -1556,7 +1625,7 @@ function updateEinloeseSuggestions(term) {
     if (candidates.length === 0 && idMatches.foreignPartialMatches.length > 0 && normalized.length < WG_SHORT_ID_LENGTH) {
         const foreignListNames = Array.from(new Set(idMatches.foreignPartialMatches.map((entry) => getWertguthabenListNameById(entry.listId) || 'anderer Liste'))).filter(Boolean);
         renderEinloeseEntrySuggestions([], {
-            emptyMessage: `Treffer befindet sich auf ${foreignListNames.join(', ')}. Bitte die vollständige 4-stellige ID eingeben.`,
+            noticeText: `Treffer befindet sich auf ${foreignListNames.join(', ')}. Bitte die vollständige 4-stellige ID eingeben.`,
             showCodeLabel: false
         });
         return;
@@ -1565,7 +1634,7 @@ function updateEinloeseSuggestions(term) {
     renderEinloeseEntrySuggestions(candidates, {
         emptyMessage: 'Keine passende ID gefunden.',
         showCodeLabel: false,
-        headerText: idMatches.foreignPartialMatches.length > 0 ? 'Aktuelle Liste · weitere Treffer auf anderer Liste' : '',
+        noticeText: idMatches.foreignPartialMatches.length > 0 ? 'Weitere Treffer auf anderer Liste' : '',
         additionalForeignMatches: idMatches.foreignPartialMatches.length > 0
     });
 }
@@ -3048,10 +3117,14 @@ function setWertguthabenFormListAssignmentMode(enabled) {
     const keepEnabledIds = new Set(['wgListe', 'saveWertguthabenBtn', 'cancelWertguthabenBtn', 'closeWertguthabenModal']);
     modal.querySelectorAll('input, select, textarea, button').forEach((element) => {
         const elementId = String(element.id || '').trim();
-        if (!elementId || keepEnabledIds.has(elementId) || elementId === 'editWertguthabenId') return;
+        if (keepEnabledIds.has(elementId) || elementId === 'editWertguthabenId') return;
         element.disabled = !!enabled;
         if (element.matches('input, select, textarea')) {
             element.classList.toggle('bg-gray-100', !!enabled);
+            element.classList.toggle('cursor-not-allowed', !!enabled);
+        }
+        if (element.matches('button')) {
+            element.classList.toggle('opacity-60', !!enabled);
             element.classList.toggle('cursor-not-allowed', !!enabled);
         }
     });

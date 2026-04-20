@@ -1,14 +1,24 @@
 {
-  "version": "1.11.1",
-  "buildId": "20260420-2",
+  "version": "1.11.2",
+  "buildId": "20260420-3",
   "releaseDate": "2026-04-20",
-  "releaseTime": "09:03",
+  "releaseTime": "09:39",
   "bereich": "Wertguthaben",
   "timezone": "Europe/Vienna",
-  "note": "Wertguthaben lädt Live-Liste und Archiv jetzt indexfrei und sortiert lokal weiter nach Zeitstempeln, damit der wartende Firestore-Index den Bereich nicht blockiert.",
-  "commitId": "c076733",
+  "note": "Wertguthaben sperrt Speziallisten-Bearbeitung konsequenter, erlaubt Verifizierung von Systemeinträgen, setzt beim Wiedereinstieg wieder die Standardliste und verbessert Einlöse- sowie Löschmodal-UI.",
+  "commitId": "0b70f56",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.11.2",
+      "buildId": "20260420-3",
+      "releaseDate": "2026-04-20",
+      "releaseTime": "09:39",
+      "bereich": "Wertguthaben",
+      "note": "Wertguthaben sperrt Speziallisten-Bearbeitung konsequenter, erlaubt Verifizierung von Systemeinträgen, setzt beim Wiedereinstieg wieder die Standardliste und verbessert Einlöse- sowie Löschmodal-UI.",
+      "commitId": "0b70f56",
+      "obligation": "false"
+    },
     {
       "version": "1.11.1",
       "buildId": "20260420-2",
