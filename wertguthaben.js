@@ -753,6 +753,11 @@ function setupEventListeners() {
                     window.selectEinloeseWertguthaben(idMatches.localExact.id);
                     return;
                 }
+                if (idMatches.specialExact) {
+                    hideEinloeseSuggestions();
+                    alertUser('Einträge aus „Nicht zugeordnete Elemente“ können nicht über das Einlöse-System gebucht werden.', 'warning');
+                    return;
+                }
                 if (idMatches.foreignExact) {
                     window.selectEinloeseWertguthaben(idMatches.foreignExact.id);
                     return;
@@ -767,6 +772,11 @@ function setupEventListeners() {
             const idMatches = resolveEinloeseIdMatches(einloeseInput.value);
             if (idMatches.localExact) {
                 window.selectEinloeseWertguthaben(idMatches.localExact.id);
+                return;
+            }
+            if (idMatches.specialExact) {
+                hideEinloeseSuggestions();
+                alertUser('Einträge aus „Nicht zugeordnete Elemente“ können nicht über das Einlöse-System gebucht werden.', 'warning');
                 return;
             }
             if (idMatches.foreignExact) {
@@ -1016,20 +1026,21 @@ function normalizeEinloeseIdInput(rawValue) {
 }
 
 function getEinloeseLocalEntries() {
-    return getVisibleWertguthabenEntries().filter((entry) => entry.typ !== 'aktionscode');
+    return getVisibleWertguthabenEntries().filter((entry) => entry.typ !== 'aktionscode' && !isUnassignedWertguthabenEntry(entry));
 }
 
 function getEinloeseForeignEntries() {
-    return Object.values(WERTGUTHABEN).filter((entry) => entry.typ !== 'aktionscode' && !doesWertguthabenEntryMatchList(entry, currentWertguthabenListId));
+    return Object.values(WERTGUTHABEN).filter((entry) => entry.typ !== 'aktionscode' && !isUnassignedWertguthabenEntry(entry) && !doesWertguthabenEntryMatchList(entry, currentWertguthabenListId));
 }
 
 function resolveEinloeseIdMatches(rawValue) {
     const normalized = normalizeEinloeseIdInput(rawValue);
     if (!normalized) {
-        return { normalized: '', localExact: null, foreignExact: null, localPartialMatches: [], foreignPartialMatches: [] };
+        return { normalized: '', localExact: null, specialExact: null, foreignExact: null, localPartialMatches: [], foreignPartialMatches: [] };
     }
 
     const localEntries = getEinloeseLocalEntries();
+    const specialEntries = Object.values(WERTGUTHABEN).filter((entry) => entry.typ !== 'aktionscode' && isUnassignedWertguthabenEntry(entry));
     const foreignEntries = getEinloeseForeignEntries();
     const findById = (entries, exact = false) => entries.filter((entry) => {
         const displayId = getWertguthabenDisplayId(entry).toUpperCase();
@@ -1039,6 +1050,7 @@ function resolveEinloeseIdMatches(rawValue) {
     return {
         normalized,
         localExact: findById(localEntries, true)[0] || null,
+        specialExact: normalized.length >= WG_SHORT_ID_LENGTH ? (findById(specialEntries, true)[0] || null) : null,
         foreignExact: normalized.length >= WG_SHORT_ID_LENGTH ? (findById(foreignEntries, true)[0] || null) : null,
         localPartialMatches: uniqueEinloeseEntries(findById(localEntries, false)),
         foreignPartialMatches: uniqueEinloeseEntries(findById(foreignEntries, false))
@@ -1049,6 +1061,7 @@ function findEinloeseEntryByIdText(rawValue, options = {}) {
     const result = resolveEinloeseIdMatches(rawValue);
     const exactOnly = !!options.exactOnly;
     if (result.localExact) return result.localExact;
+    if (result.specialExact) return null;
     if (result.foreignExact) return result.foreignExact;
     if (exactOnly) return null;
     return result.localPartialMatches[0] || null;
@@ -1478,6 +1491,12 @@ async function scanEinloeseFrame() {
         const scannedId = extractEinloeseIdFromScannedText(rawValue);
         if (scannedId) {
             const idMatches = resolveEinloeseIdMatches(scannedId);
+            if (idMatches.specialExact) {
+                stopEinloeseScanner({ hidePanel: true, clearStatus: false });
+                setEinloeseScannerStatus('Eintrag liegt in „Nicht zugeordnete Elemente“ und kann nicht eingelöst werden.', true);
+                alertUser('Einträge aus „Nicht zugeordnete Elemente“ können nicht über das Einlöse-System gebucht werden.', 'warning');
+                return;
+            }
             const matchedEntry = idMatches.localExact || idMatches.foreignExact;
             if (matchedEntry) {
                 window.selectEinloeseWertguthaben(matchedEntry.id);
@@ -1708,6 +1727,13 @@ window.selectEinloeseWertguthaben = function(entryId, options = {}) {
     const entry = WERTGUTHABEN[entryId];
     if (!entry) {
         alertUser('Wertguthaben nicht gefunden.', 'error');
+        return;
+    }
+
+    if (isUnassignedWertguthabenEntry(entry)) {
+        alertUser('Einträge aus „Nicht zugeordnete Elemente“ können nicht über das Einlöse-System gebucht werden.', 'warning');
+        resetEinloeseResult();
+        hideEinloeseSuggestions();
         return;
     }
 
@@ -2211,6 +2237,10 @@ function renderWertguthabenTable() {
         const statusBadge = getStatusBadge(w, restzeit);
         const restwert = w.restwert !== undefined ? w.restwert : w.wert;
         const verificationBadge = renderWertguthabenVerificationBadge(w, 'text-emerald-700', 'icon');
+        const isUnassignedEntry = isUnassignedWertguthabenEntry(w);
+        const transactionButtonTitle = isUnassignedEntry
+            ? 'Für „Nicht zugeordnete Elemente“ nicht verfügbar'
+            : 'Transaktion buchen';
         
         return `
             <tr class="hover:bg-gray-50 cursor-pointer transition" onclick="window.openWertguthabenDetails('${w.id}')">
@@ -2235,17 +2265,19 @@ function renderWertguthabenTable() {
                 <td class="px-4 py-3">${statusBadge}</td>
                 <td class="px-4 py-3 text-center" onclick="event.stopPropagation()">
                     <div class="flex justify-center gap-2">
-                        <button onclick="window.openWertguthabenDetails('${w.id}')" 
-                            class="p-1 text-emerald-600 hover:text-emerald-800" title="Details ansehen">
-                            👁️
-                        </button>
                         <button onclick="window.openEditWertguthaben('${w.id}')" 
-                            class="p-1 text-blue-600 hover:text-blue-800" title="Bearbeiten">
-                            ✏️
+                            class="inline-flex h-9 w-9 items-center justify-center rounded-lg text-blue-600 transition hover:bg-blue-50 hover:text-blue-800" title="Bearbeiten" aria-label="Bearbeiten">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
+                                <path d="M5.433 13.917A4.5 4.5 0 0 1 6.5 11.028l6.586-6.586a2 2 0 1 1 2.828 2.828l-6.586 6.586a4.5 4.5 0 0 1-2.89 1.067H4.5a.5.5 0 0 1-.5-.5v-1.938Z" />
+                                <path d="M3.5 5a1.5 1.5 0 0 1 1.5-1.5h4a.75.75 0 0 0 0-1.5H5A3 3 0 0 0 2 5v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-4a.75.75 0 0 0-1.5 0v4a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 15V5Z" />
+                            </svg>
                         </button>
-                        <button onclick="window.openTransaktionModal('${w.id}')" 
-                            class="p-1 text-purple-600 hover:text-purple-800" title="Transaktion buchen">
-                            💳
+                        <button ${isUnassignedEntry ? 'disabled' : `onclick="window.openTransaktionModal('${w.id}')"`}
+                            class="inline-flex h-9 w-9 items-center justify-center rounded-lg transition ${isUnassignedEntry ? 'cursor-not-allowed text-gray-300 bg-gray-100' : 'text-violet-600 hover:bg-violet-50 hover:text-violet-800'}" title="${escapeHtml(transactionButtonTitle)}" aria-label="${escapeHtml(transactionButtonTitle)}">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
+                                <path d="M3.5 5A2.5 2.5 0 0 1 6 2.5h8A2.5 2.5 0 0 1 16.5 5v1.028c-.332-.063-.675-.095-1.028-.095H4.528c-.353 0-.696.032-1.028.095V5Z" />
+                                <path fill-rule="evenodd" d="M2 8.75A1.75 1.75 0 0 1 3.75 7h11.5A1.75 1.75 0 0 1 17 8.75v5.5A1.75 1.75 0 0 1 15.25 16H3.75A1.75 1.75 0 0 1 2 14.25v-5.5ZM13 11a.75.75 0 0 0 0 1.5h1.5A.75.75 0 0 0 14.5 11H13Z" clip-rule="evenodd" />
+                            </svg>
                         </button>
                     </div>
                 </td>
@@ -2722,8 +2754,12 @@ function getEntryAssignedWertguthabenListId(entry) {
     return isRealWertguthabenListId(normalized) ? normalized : '';
 }
 
+function isUnassignedWertguthabenEntry(entry) {
+    return !getEntryAssignedWertguthabenListId(entry);
+}
+
 function hasUnassignedWertguthabenEntries(entries = Object.values(WERTGUTHABEN)) {
-    return (Array.isArray(entries) ? entries : []).some((entry) => !getEntryAssignedWertguthabenListId(entry));
+    return (Array.isArray(entries) ? entries : []).some((entry) => isUnassignedWertguthabenEntry(entry));
 }
 
 function getWertguthabenListNameById(listId) {
@@ -3541,6 +3577,11 @@ function resetWertguthabenArchiveConfirmModal() {
 function openWertguthabenArchiveConfirmModal(entryId) {
     const modal = document.getElementById('wertguthabenArchiveConfirmModal');
     if (!modal) return;
+    const entry = WERTGUTHABEN[String(entryId || '').trim()];
+    if (entry && isUnassignedWertguthabenEntry(entry)) {
+        alertUser('Nicht zugeordnete Elemente können nicht archiviert werden.', 'warning');
+        return;
+    }
     resetWertguthabenArchiveConfirmModal();
     modal.dataset.entryId = String(entryId || '').trim();
     modal.style.display = 'flex';
@@ -3665,6 +3706,10 @@ async function confirmWertguthabenArchivierung() {
         alertUser('Bitte einen Archivierungsgrund wählen oder eingeben.', 'warning');
         return;
     }
+    if (isUnassignedWertguthabenEntry(entry)) {
+        alertUser('Nicht zugeordnete Elemente können nicht archiviert werden.', 'warning');
+        return;
+    }
     if (!await ensureWertguthabenArchivGrundStored(reason)) {
         return;
     }
@@ -3758,6 +3803,11 @@ async function permanentlyDeleteArchivedWertguthaben(entryId) {
 }
 
 window.archiveWertguthaben = async function(id) {
+    const entry = WERTGUTHABEN[String(id || '').trim()];
+    if (entry && isUnassignedWertguthabenEntry(entry)) {
+        alertUser('Nicht zugeordnete Elemente können nicht archiviert werden.', 'warning');
+        return;
+    }
     openWertguthabenArchiveConfirmModal(id);
 };
 
@@ -5080,6 +5130,17 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
     const source = options.source === 'einloese' ? 'einloese' : 'dashboard';
     const editTransaktion = options.editTransaktion || null;
     const isEditFromHistory = !!editTransaktion && !!options.openedFromHistory;
+    const isUnassignedEntry = isUnassignedWertguthabenEntry(wg);
+
+    if (isUnassignedEntry) {
+        alertUser(
+            isEditFromHistory
+                ? 'Betragsverifizierung ist für „Nicht zugeordnete Elemente“ nicht möglich.'
+                : 'Transaktion buchen ist für „Nicht zugeordnete Elemente“ nicht möglich. Bitte zuerst eine Liste zuweisen.',
+            'warning'
+        );
+        return;
+    }
 
     const transaktionTypSelect = document.getElementById('transaktionTyp');
     const transaktionBetragInput = document.getElementById('transaktionBetrag');
@@ -5378,6 +5439,15 @@ async function saveTransaktion() {
         return alertUser('Wertguthaben nicht gefunden!', 'error');
     }
 
+    if (isUnassignedWertguthabenEntry(wg)) {
+        return alertUser(
+            editTransaktionId
+                ? 'Betragsverifizierung ist für „Nicht zugeordnete Elemente“ nicht möglich.'
+                : 'Transaktion buchen ist für „Nicht zugeordnete Elemente“ nicht möglich.',
+            'warning'
+        );
+    }
+
     if (source === 'einloese' && einloeseSelectionState.requiresListConfirmation && !einloeseSelectionState.confirmationGranted) {
         return alertUser('Bitte zuerst den Fremdlisten-Hinweis bestätigen.', 'warning');
     }
@@ -5591,6 +5661,11 @@ window.openEditTransaktionFromHistory = async function(wertguthabenId, transakti
             return alertUser('Transaktion nicht gefunden!', 'error');
         }
 
+        const wgEntry = WERTGUTHABEN[wertguthabenId];
+        if (wgEntry && isUnassignedWertguthabenEntry(wgEntry)) {
+            return alertUser('Betragsverifizierung ist für „Nicht zugeordnete Elemente“ nicht möglich.', 'warning');
+        }
+
         const wgTyp = String(WERTGUTHABEN[wertguthabenId]?.typ || '').trim();
         const latestVerifiableTransaktionId = await getLatestVerifiableHistoryTransaktionId(wertguthabenId, wgTyp);
         if (!latestVerifiableTransaktionId || latestVerifiableTransaktionId !== transaktionId) {
@@ -5776,6 +5851,7 @@ window.openWertguthabenDetails = async function(id, options = {}) {
             const isKorrektur = t.typ === 'korrektur';
             const isStartguthaben = isStartguthabenTransaktion(t);
             const einloesungAnzahl = getTransaktionEinloesungAnzahl(t);
+            const isUnassignedEntry = isUnassignedWertguthabenEntry(wg);
             const icon = t.typ === 'verwendung' ? '📉' : (t.typ === 'einloesung' ? '🎟️' : (isKorrektur ? '🛠️' : '📈'));
             const colorClass = t.typ === 'verwendung'
                 ? 'text-red-600'
@@ -5788,6 +5864,7 @@ window.openWertguthabenDetails = async function(id, options = {}) {
                         ? `${transaktionBetrag >= 0 ? '+' : '-'} ${Math.abs(transaktionBetrag).toFixed(2)} € (Korrektur)`
                         : `+ ${Math.abs(transaktionBetrag).toFixed(2)} €`));
             const canEdit = !readOnly
+                && !isUnassignedEntry
                 && isVerifiableHistoryTransaktionCandidate(t, wg.typ)
                 && latestVerifiableTransaktionId === t.id
                 && !t.betragVerifiziert;
@@ -5813,8 +5890,8 @@ window.openWertguthabenDetails = async function(id, options = {}) {
                             </div>
                             ${verifyInfo ? `<div class="mt-1 text-xs font-semibold text-emerald-700">${escapeHtml(verifyInfo)}</div>` : ''}
                         </div>
-                        <div class="ml-2 flex gap-1">
-                            ${canEdit ? `<button onclick="window.openEditTransaktionFromHistory('${effectiveId}', '${t.id}')" class="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="Transaktion verifizieren">✅</button>` : ''}
+                        <div class="ml-2 flex items-center gap-1">
+                            ${canEdit ? `<span class="text-xs font-semibold text-blue-700">Verifizieren</span><button onclick="window.openEditTransaktionFromHistory('${effectiveId}', '${t.id}')" class="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="Transaktion verifizieren">✅</button>` : ''}
                             ${canDelete ? `<button onclick="deleteTransaktion('${effectiveId}', '${t.id}')" class="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Transaktion löschen">🗑️</button>` : ''}
                         </div>
                     </div>
@@ -5829,11 +5906,16 @@ window.openWertguthabenDetails = async function(id, options = {}) {
     const archiveBtn = document.getElementById('deleteWertguthabenBtn');
     const editBtn = document.getElementById('editWertguthabenDetailsBtn');
     const detailsFooter = addTransaktionBtn?.parentElement || null;
+    const isUnassignedEntry = isUnassignedWertguthabenEntry(wg);
 
     if (addTransaktionBtn) {
         addTransaktionBtn.dataset.wertguthabenId = effectiveId;
+        addTransaktionBtn.disabled = !!(readOnly || isUnassignedEntry);
+        addTransaktionBtn.classList.toggle('opacity-50', !!(readOnly || isUnassignedEntry));
+        addTransaktionBtn.classList.toggle('cursor-not-allowed', !!(readOnly || isUnassignedEntry));
+        addTransaktionBtn.title = isUnassignedEntry ? 'Für „Nicht zugeordnete Elemente“ nicht verfügbar' : 'Transaktion buchen';
         addTransaktionBtn.onclick = () => {
-            if (readOnly) return;
+            if (readOnly || isUnassignedEntry) return;
             detailsModal.style.display = 'none';
             window.openTransaktionModal(effectiveId, { source: 'dashboard' });
         };
@@ -5862,8 +5944,12 @@ window.openWertguthabenDetails = async function(id, options = {}) {
 
     if (archiveBtn) {
         archiveBtn.textContent = 'Archivieren';
+        archiveBtn.disabled = !!(readOnly || isUnassignedEntry);
+        archiveBtn.classList.toggle('opacity-50', !!(readOnly || isUnassignedEntry));
+        archiveBtn.classList.toggle('cursor-not-allowed', !!(readOnly || isUnassignedEntry));
+        archiveBtn.title = isUnassignedEntry ? 'Für „Nicht zugeordnete Elemente“ nicht verfügbar' : 'Archivieren';
         archiveBtn.onclick = async () => {
-            if (readOnly) return;
+            if (readOnly || isUnassignedEntry) return;
             await window.archiveWertguthaben(effectiveId);
         };
     }

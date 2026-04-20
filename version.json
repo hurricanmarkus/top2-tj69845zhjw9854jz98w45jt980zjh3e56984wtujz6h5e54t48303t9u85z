@@ -1,14 +1,24 @@
 {
-  "version": "1.11.2",
-  "buildId": "20260420-3",
+  "version": "1.11.3",
+  "buildId": "20260420-4",
   "releaseDate": "2026-04-20",
-  "releaseTime": "09:39",
+  "releaseTime": "10:03",
   "bereich": "Wertguthaben",
   "timezone": "Europe/Vienna",
-  "note": "Wertguthaben sperrt Speziallisten-Bearbeitung konsequenter, erlaubt Verifizierung von Systemeinträgen, setzt beim Wiedereinstieg wieder die Standardliste und verbessert Einlöse- sowie Löschmodal-UI.",
-  "commitId": "0b70f56",
+  "note": "Wertguthaben sperrt für Nicht-zugeordnete Elemente jetzt Transaktion, Archivierung und Verifizierung konsequent, blockiert Speziallisten-IDs im Einlösesystem und verwendet klarere Dashboard-Aktionsicons.",
+  "commitId": "0b80850",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.11.3",
+      "buildId": "20260420-4",
+      "releaseDate": "2026-04-20",
+      "releaseTime": "10:03",
+      "bereich": "Wertguthaben",
+      "note": "Wertguthaben sperrt für Nicht-zugeordnete Elemente jetzt Transaktion, Archivierung und Verifizierung konsequent, blockiert Speziallisten-IDs im Einlösesystem und verwendet klarere Dashboard-Aktionsicons.",
+      "commitId": "0b80850",
+      "obligation": "false"
+    },
     {
       "version": "1.11.2",
       "buildId": "20260420-3",
