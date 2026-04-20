@@ -43,6 +43,22 @@ service cloud.firestore {
       return hasAppUserIdClaim() && exists(sendungDocPath(sendungId)) && get(sendungDocPath(sendungId)).data.createdBy == appUserId();
     }
 
+    function wertguthabenDocPath(wertguthabenId) {
+      return /databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/public/data/wertguthaben/$(wertguthabenId);
+    }
+
+    function isWertguthabenOwnerByData(data) {
+      return hasAppUserIdClaim()
+        && data != null
+        && ((('ownerUserId' in data) && data.ownerUserId == appUserId()) || (('createdBy' in data) && data.createdBy == appUserId()));
+    }
+
+    function isWertguthabenOwner(wertguthabenId) {
+      return hasAppUserIdClaim()
+        && exists(wertguthabenDocPath(wertguthabenId))
+        && isWertguthabenOwnerByData(get(wertguthabenDocPath(wertguthabenId)).data);
+    }
+
     function isUserConfigKeyUnchanged() {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['key']);
     }
@@ -399,16 +415,24 @@ service cloud.firestore {
     // ═══════════════════════════════════════════════════════════════
     
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/wertguthaben/{wertguthabenId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
-      allow delete: if isAuthenticated();
+      allow read: if isWertguthabenOwnerByData(resource.data);
+      allow create: if hasAppUserIdClaim()
+        && request.resource.data.createdBy == appUserId()
+        && request.resource.data.ownerUserId == appUserId();
+      allow update: if isWertguthabenOwnerByData(resource.data)
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.ownerUserId == appUserId();
+      allow delete: if isWertguthabenOwnerByData(resource.data);
       
       match /transaktionen/{transaktionId} {
-        allow read: if isAuthenticated();
-        allow create: if isAuthenticated();
-        allow update: if isAuthenticated();
-        allow delete: if isAuthenticated();
+        allow read: if isWertguthabenOwner(wertguthabenId);
+        allow create: if isWertguthabenOwner(wertguthabenId)
+          && hasAppUserIdClaim()
+          && request.resource.data.createdBy == appUserId();
+        allow update: if isWertguthabenOwner(wertguthabenId)
+          && hasAppUserIdClaim()
+          && request.resource.data.createdBy == resource.data.createdBy;
+        allow delete: if isWertguthabenOwner(wertguthabenId);
       }
     }
 

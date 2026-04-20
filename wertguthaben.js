@@ -21,6 +21,7 @@ import {
     serverTimestamp,
     query,
     orderBy,
+    where,
     onSnapshot,
     doc,
     updateDoc,
@@ -45,12 +46,16 @@ let wertguthabenSearchJoinMode = 'and';
 let pendingKategorieNormalizations = new Set();
 let pendingFixedIdAssignments = new Set();
 let currentEinloeseWertguthabenId = '';
+let currentWertguthabenListId = '';
 let wgEinloeseScannerStream = null;
 let wgEinloeseScannerInterval = null;
 let wgEinloeseScannerBusy = false;
 let wgEinloeseBarcodeDetector = null;
 let wertguthabenMenuOpen = false;
 let wgTransaktionenRenderRequestId = 0;
+let wgListDeleteTimer = null;
+let wgListDeleteSecondsLeft = 0;
+let wgListDeleteTargetId = '';
 const WG_VERIFIABLE_TRANSACTION_TYPES = new Set(['verwendung', 'gutschrift', 'korrektur']);
 let ARCHIVED_WERTGUTHABEN = {};
 const wertguthabenDetailsState = {
@@ -65,6 +70,7 @@ const wertguthabenFormState = {
     statusManuallyChangedBeforeAktionscodeSwitch: false,
     isWertUnlocked: false,
     lockedEditEntryId: '',
+    isListAssignmentOnly: false,
     lastSelectedTyp: 'gutschein',
     wertBeforeAktionscodeSwitch: '',
     statusBeforeAktionscodeSwitch: ''
@@ -80,12 +86,23 @@ const transaktionModalState = {
     maxEinloesungen: 0,
     bereitsEingeloest: 0
 };
+const einloeseSelectionState = {
+    requiresListConfirmation: false,
+    confirmationGranted: false,
+    warningText: '',
+    isForeignListSelection: false,
+    hasAdditionalForeignMatches: false
+};
 const WG_WERT_UNLOCK_COUNTDOWN_SECONDS = 30;
 let wgWertUnlockSecondsLeft = 0;
 let wgWertUnlockTimer = null;
 let wertguthabenSettingsSyncUserId = '';
 
 const WG_UNASSIGNED_KATEGORIE = 'Nicht zugeordnet';
+const WG_UNASSIGNED_LIST_NAME = 'Nicht zugeordnete Elemente';
+const WG_SPECIAL_LIST_ID = '__unassigned__';
+const WG_LIST_DELETE_COUNTDOWN_SECONDS = 60;
+const WG_LIST_DELETE_CONFIRM_TEXT = 'LISTE UNWIDERRUFLICH LÖSCHEN';
 const WG_SHORT_ID_LENGTH = 4;
 const WG_SHORT_ID_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const WG_MAX_SHORT_ID_ATTEMPTS = 200;
@@ -123,6 +140,8 @@ const WG_SUGGESTION_ICONS = {
 let wertguthabenSettings = {
     kategorien: [],
     archivGruende: [],
+    listen: [],
+    defaultListId: '',
     defaultWarnings: {
         gutschein: 14,
         guthaben: 30,
@@ -199,6 +218,14 @@ function setupEventListeners() {
     if (createBtn && !createBtn.dataset.listenerAttached) {
         createBtn.addEventListener('click', openCreateModal);
         createBtn.dataset.listenerAttached = 'true';
+    }
+
+    const listSelector = document.getElementById('wg-list-selector');
+    if (listSelector && !listSelector.dataset.listenerAttached) {
+        listSelector.addEventListener('change', (event) => {
+            setCurrentWertguthabenList(event.target.value);
+        });
+        listSelector.dataset.listenerAttached = 'true';
     }
 
     const settingsBtn = document.getElementById('btn-wertguthaben-settings');
@@ -328,6 +355,39 @@ function setupEventListeners() {
         cancelArchiveBtn.dataset.listenerAttached = 'true';
     }
 
+    const closeListDeleteBtn = document.getElementById('closeWertguthabenListenDeleteModal');
+    if (closeListDeleteBtn && !closeListDeleteBtn.dataset.listenerAttached) {
+        closeListDeleteBtn.addEventListener('click', closeWertguthabenListDeleteModal);
+        closeListDeleteBtn.dataset.listenerAttached = 'true';
+    }
+
+    const cancelListDeleteBtn = document.getElementById('cancelWertguthabenListenDeleteBtn');
+    if (cancelListDeleteBtn && !cancelListDeleteBtn.dataset.listenerAttached) {
+        cancelListDeleteBtn.addEventListener('click', closeWertguthabenListDeleteModal);
+        cancelListDeleteBtn.dataset.listenerAttached = 'true';
+    }
+
+    const listDeleteCheckbox = document.getElementById('wg-list-delete-checkbox');
+    if (listDeleteCheckbox && !listDeleteCheckbox.dataset.listenerAttached) {
+        listDeleteCheckbox.addEventListener('change', updateWertguthabenListDeleteConfirmState);
+        listDeleteCheckbox.dataset.listenerAttached = 'true';
+    }
+
+    const listDeleteInput = document.getElementById('wg-list-delete-confirm-text');
+    if (listDeleteInput && !listDeleteInput.dataset.listenerAttached) {
+        listDeleteInput.addEventListener('input', () => {
+            listDeleteInput.value = String(listDeleteInput.value || '').toUpperCase();
+            updateWertguthabenListDeleteConfirmState();
+        });
+        listDeleteInput.dataset.listenerAttached = 'true';
+    }
+
+    const listDeleteConfirmBtn = document.getElementById('wg-list-delete-confirm-btn');
+    if (listDeleteConfirmBtn && !listDeleteConfirmBtn.dataset.listenerAttached) {
+        listDeleteConfirmBtn.addEventListener('click', confirmWertguthabenListDeletion);
+        listDeleteConfirmBtn.dataset.listenerAttached = 'true';
+    }
+
     const confirmArchiveBtn = document.getElementById('confirmWertguthabenArchiveBtn');
     if (confirmArchiveBtn && !confirmArchiveBtn.dataset.listenerAttached) {
         confirmArchiveBtn.addEventListener('click', confirmWertguthabenArchivierung);
@@ -408,6 +468,26 @@ function setupEventListeners() {
             kategorieSelect.dataset.selectedKategorie = String(kategorieSelect.value || '').trim();
         });
         kategorieSelect.dataset.categoryListenerAttached = 'true';
+    }
+
+    const listFieldSelect = document.getElementById('wgListe');
+    if (listFieldSelect && !listFieldSelect.dataset.listenerAttached) {
+        listFieldSelect.addEventListener('change', () => {
+            if (!hasRealWertguthabenListen()) {
+                updateWertguthabenListFieldHint('Bitte zuerst mindestens eine Liste anlegen.', 'error');
+                return;
+            }
+            if (isSpecialWertguthabenListId(listFieldSelect.value)) {
+                updateWertguthabenListFieldHint('Nicht zugeordnete Elemente können nur einer echten Liste zugewiesen werden.', 'warning');
+                return;
+            }
+            if (!listFieldSelect.value) {
+                updateWertguthabenListFieldHint('Neuanlage in „Nicht zugeordnete Elemente“ ist nicht möglich.', 'warning');
+                return;
+            }
+            updateWertguthabenListFieldHint('');
+        });
+        listFieldSelect.dataset.listenerAttached = 'true';
     }
 
     const statusSelect = document.getElementById('wgStatus');
@@ -630,9 +710,13 @@ function setupEventListeners() {
 
             const normalizedTerm = normalizeEinloeseIdInput(term);
             if (normalizedTerm.length >= WG_SHORT_ID_LENGTH) {
-                const exactEntry = findEinloeseEntryByIdText(normalizedTerm, { exactOnly: true });
-                if (exactEntry) {
-                    window.selectEinloeseWertguthaben(exactEntry.id);
+                const idMatches = resolveEinloeseIdMatches(normalizedTerm);
+                if (idMatches.localExact) {
+                    window.selectEinloeseWertguthaben(idMatches.localExact.id);
+                    return;
+                }
+                if (idMatches.foreignExact) {
+                    window.selectEinloeseWertguthaben(idMatches.foreignExact.id);
                     return;
                 }
             }
@@ -642,9 +726,17 @@ function setupEventListeners() {
         einloeseInput.addEventListener('keydown', (e) => {
             if (e.key !== 'Enter') return;
             e.preventDefault();
-            const firstSuggestion = findEinloeseEntryByIdText(einloeseInput.value, { exactOnly: false });
-            if (firstSuggestion) {
-                window.selectEinloeseWertguthaben(firstSuggestion.id);
+            const idMatches = resolveEinloeseIdMatches(einloeseInput.value);
+            if (idMatches.localExact) {
+                window.selectEinloeseWertguthaben(idMatches.localExact.id);
+                return;
+            }
+            if (idMatches.foreignExact) {
+                window.selectEinloeseWertguthaben(idMatches.foreignExact.id);
+                return;
+            }
+            if (idMatches.localPartialMatches[0]) {
+                window.selectEinloeseWertguthaben(idMatches.localPartialMatches[0].id);
             }
         });
         einloeseInput.addEventListener('focus', () => {
@@ -682,9 +774,21 @@ function setupEventListeners() {
                 alertUser('Bitte zuerst eine gültige ID auswählen.', 'warning');
                 return;
             }
+            if (einloeseSelectionState.requiresListConfirmation && !einloeseSelectionState.confirmationGranted) {
+                return;
+            }
             window.openTransaktionModal(currentEinloeseWertguthabenId, { source: 'einloese' });
         });
         einloeseBookingBtn.dataset.listenerAttached = 'true';
+    }
+
+    const einloeseWarningConfirmBtn = document.getElementById('wg-einloese-list-warning-confirm');
+    if (einloeseWarningConfirmBtn && !einloeseWarningConfirmBtn.dataset.listenerAttached) {
+        einloeseWarningConfirmBtn.addEventListener('click', () => {
+            einloeseSelectionState.confirmationGranted = true;
+            updateEinloeseListWarningUi();
+        });
+        einloeseWarningConfirmBtn.dataset.listenerAttached = 'true';
     }
 
     const detailsToggle = document.getElementById('transaktionDetailsToggle');
@@ -800,6 +904,41 @@ function resetEinloeseResult() {
     currentEinloeseWertguthabenId = '';
     document.getElementById('wg-einloese-result')?.classList.add('hidden');
     document.getElementById('wg-einloese-empty-state')?.classList.remove('hidden');
+    resetEinloeseListSelectionState();
+}
+
+function resetEinloeseListSelectionState() {
+    einloeseSelectionState.requiresListConfirmation = false;
+    einloeseSelectionState.confirmationGranted = false;
+    einloeseSelectionState.warningText = '';
+    einloeseSelectionState.isForeignListSelection = false;
+    einloeseSelectionState.hasAdditionalForeignMatches = false;
+    updateEinloeseListWarningUi();
+}
+
+function updateEinloeseListWarningUi() {
+    const warningBox = document.getElementById('wg-einloese-list-warning');
+    const warningText = document.getElementById('wg-einloese-list-warning-text');
+    const confirmButton = document.getElementById('wg-einloese-list-warning-confirm');
+    const bookingButton = document.getElementById('wg-einloese-open-booking');
+
+    if (warningBox && warningText) {
+        const shouldShow = !!einloeseSelectionState.warningText;
+        warningBox.classList.toggle('hidden', !shouldShow);
+        warningText.textContent = einloeseSelectionState.warningText || 'ACHTUNG - Befindet sich auf einer anderen Liste';
+    }
+
+    if (confirmButton) {
+        const requiresConfirmation = einloeseSelectionState.requiresListConfirmation === true;
+        confirmButton.classList.toggle('hidden', !requiresConfirmation || einloeseSelectionState.confirmationGranted === true);
+    }
+
+    if (bookingButton) {
+        const disabled = !currentEinloeseWertguthabenId || (einloeseSelectionState.requiresListConfirmation && !einloeseSelectionState.confirmationGranted);
+        bookingButton.disabled = disabled;
+        bookingButton.classList.toggle('opacity-50', disabled);
+        bookingButton.classList.toggle('cursor-not-allowed', disabled);
+    }
 }
 
 function resetEinloeseSystemForm(focusInput = false) {
@@ -821,17 +960,43 @@ function normalizeEinloeseIdInput(rawValue) {
         .toUpperCase();
 }
 
-function findEinloeseEntryByIdText(rawValue, options = {}) {
+function getEinloeseLocalEntries() {
+    return getVisibleWertguthabenEntries().filter((entry) => entry.typ !== 'aktionscode');
+}
+
+function getEinloeseForeignEntries() {
+    return Object.values(WERTGUTHABEN).filter((entry) => entry.typ !== 'aktionscode' && !doesWertguthabenEntryMatchList(entry, currentWertguthabenListId));
+}
+
+function resolveEinloeseIdMatches(rawValue) {
     const normalized = normalizeEinloeseIdInput(rawValue);
-    if (!normalized) return null;
+    if (!normalized) {
+        return { normalized: '', localExact: null, foreignExact: null, localPartialMatches: [], foreignPartialMatches: [] };
+    }
 
+    const localEntries = getEinloeseLocalEntries();
+    const foreignEntries = getEinloeseForeignEntries();
+    const findById = (entries, exact = false) => entries.filter((entry) => {
+        const displayId = getWertguthabenDisplayId(entry).toUpperCase();
+        return exact ? displayId === normalized : displayId.includes(normalized);
+    });
+
+    return {
+        normalized,
+        localExact: findById(localEntries, true)[0] || null,
+        foreignExact: normalized.length >= WG_SHORT_ID_LENGTH ? (findById(foreignEntries, true)[0] || null) : null,
+        localPartialMatches: uniqueEinloeseEntries(findById(localEntries, false)),
+        foreignPartialMatches: uniqueEinloeseEntries(findById(foreignEntries, false))
+    };
+}
+
+function findEinloeseEntryByIdText(rawValue, options = {}) {
+    const result = resolveEinloeseIdMatches(rawValue);
     const exactOnly = !!options.exactOnly;
-    const entries = Object.values(WERTGUTHABEN).filter((entry) => entry.typ !== 'aktionscode');
-
-    const exact = entries.find((entry) => getWertguthabenDisplayId(entry).toUpperCase() === normalized);
-    if (exact || exactOnly) return exact || null;
-
-    return entries.find((entry) => getWertguthabenDisplayId(entry).toUpperCase().includes(normalized)) || null;
+    if (result.localExact) return result.localExact;
+    if (result.foreignExact) return result.foreignExact;
+    if (exactOnly) return null;
+    return result.localPartialMatches[0] || null;
 }
 
 function selectEinloeseInputTextIfPresent(inputEl) {
@@ -1044,7 +1209,7 @@ function findEinloeseEntriesByScannedCode(rawValue) {
         return { scannedCode: '', exactMatches: [], maskedMatches: [], fuzzyMatches: [] };
     }
 
-    const codeEntries = Object.values(WERTGUTHABEN)
+    const codeEntries = getEinloeseLocalEntries()
         .filter((entry) => entry.typ !== 'aktionscode')
         .map((entry) => ({
             entry,
@@ -1100,6 +1265,7 @@ function renderEinloeseEntrySuggestions(entries, options = {}) {
     const emptyMessage = String(options.emptyMessage || 'Keine passende ID gefunden.');
     const headerText = String(options.headerText || '').trim();
     const showCodeLabel = options.showCodeLabel !== false;
+    const additionalForeignMatches = options.additionalForeignMatches === true;
     const candidates = uniqueEinloeseEntries(entries);
 
     if (candidates.length === 0) {
@@ -1124,7 +1290,7 @@ function renderEinloeseEntrySuggestions(entries, options = {}) {
 
         return `
             <li>
-                <button type="button" onclick="window.selectEinloeseWertguthaben('${entry.id}')" class="w-full text-left px-4 py-3 hover:bg-emerald-50 border-b border-gray-100 last:border-0">
+                <button type="button" onclick="window.selectEinloeseWertguthaben('${entry.id}', { additionalForeignMatches: ${additionalForeignMatches ? 'true' : 'false'} })" class="w-full text-left px-4 py-3 hover:bg-emerald-50 border-b border-gray-100 last:border-0">
                     <div class="flex items-center justify-between gap-3">
                         <span class="font-mono font-bold text-emerald-700">#${escapeHtml(displayId)}</span>
                         <span class="text-sm font-semibold text-gray-700">${restwert.toFixed(2)} €</span>
@@ -1242,10 +1408,11 @@ async function scanEinloeseFrame() {
 
         const scannedId = extractEinloeseIdFromScannedText(rawValue);
         if (scannedId) {
-            const idMatch = findEinloeseEntryByIdText(scannedId, { exactOnly: true });
-            if (idMatch) {
-                window.selectEinloeseWertguthaben(idMatch.id);
-                setEinloeseScannerStatus(`Treffer: #${getWertguthabenDisplayId(idMatch)}`);
+            const idMatches = resolveEinloeseIdMatches(scannedId);
+            const matchedEntry = idMatches.localExact || idMatches.foreignExact;
+            if (matchedEntry) {
+                window.selectEinloeseWertguthaben(matchedEntry.id);
+                setEinloeseScannerStatus(`Treffer: #${getWertguthabenDisplayId(matchedEntry)}`);
                 stopEinloeseScanner({ hidePanel: true, clearStatus: true });
                 return;
             }
@@ -1365,20 +1532,19 @@ function updateEinloeseSuggestions(term) {
     const list = document.getElementById('wg-einloese-suggestions-list');
     if (!box || !list) return;
 
-    const normalized = normalizeEinloeseIdInput(term).toLowerCase();
+    const idMatches = resolveEinloeseIdMatches(term);
+    const normalized = String(idMatches.normalized || '').toLowerCase();
     if (!normalized) {
         list.innerHTML = '';
         box.classList.add('hidden');
         return;
     }
 
-    const candidates = Object.values(WERTGUTHABEN)
-        .filter((entry) => entry.typ !== 'aktionscode')
+    const candidates = idMatches.localPartialMatches
         .map((entry) => ({
             entry,
             idText: getWertguthabenDisplayId(entry).toLowerCase()
         }))
-        .filter(({ idText }) => idText.includes(normalized))
         .sort((a, b) => {
             const aStarts = a.idText.startsWith(normalized) ? 0 : 1;
             const bStarts = b.idText.startsWith(normalized) ? 0 : 1;
@@ -1387,9 +1553,20 @@ function updateEinloeseSuggestions(term) {
         .slice(0, 12)
         .map(({ entry }) => entry);
 
+    if (candidates.length === 0 && idMatches.foreignPartialMatches.length > 0 && normalized.length < WG_SHORT_ID_LENGTH) {
+        const foreignListNames = Array.from(new Set(idMatches.foreignPartialMatches.map((entry) => getWertguthabenListNameById(entry.listId) || 'anderer Liste'))).filter(Boolean);
+        renderEinloeseEntrySuggestions([], {
+            emptyMessage: `Treffer befindet sich auf ${foreignListNames.join(', ')}. Bitte die vollständige 4-stellige ID eingeben.`,
+            showCodeLabel: false
+        });
+        return;
+    }
+
     renderEinloeseEntrySuggestions(candidates, {
         emptyMessage: 'Keine passende ID gefunden.',
-        showCodeLabel: false
+        showCodeLabel: false,
+        headerText: idMatches.foreignPartialMatches.length > 0 ? 'Aktuelle Liste · weitere Treffer auf anderer Liste' : '',
+        additionalForeignMatches: idMatches.foreignPartialMatches.length > 0
     });
 }
 
@@ -1400,7 +1577,11 @@ function refreshEinloeseSelection() {
         resetEinloeseResult();
         return;
     }
-    renderEinloeseEntry(entry);
+    window.selectEinloeseWertguthaben(entry.id, {
+        additionalForeignMatches: !doesWertguthabenEntryMatchList(entry, currentWertguthabenListId)
+            ? false
+            : einloeseSelectionState.hasAdditionalForeignMatches
+    });
 }
 
 function renderEinloeseEntry(entry) {
@@ -1408,8 +1589,10 @@ function renderEinloeseEntry(entry) {
     const status = STATUS_CONFIG[entry.status || 'aktiv'] || STATUS_CONFIG.aktiv;
     const eigentuemer = USERS[entry.eigentuemer]?.name || entry.eigentuemer || 'Unbekannt';
     const restzeit = entry.typ === 'aktionscode' ? calculateRestzeit(entry.gueltigBis) : calculateRestzeit(entry.einloesefrist);
+    const listName = getWertguthabenListNameById(entry.listId) || WG_UNASSIGNED_LIST_NAME;
 
     const detailItems = [
+        { label: 'Liste', valueHtml: escapeHtml(listName) },
         { label: 'Eigentümer', valueHtml: escapeHtml(eigentuemer) },
         { label: 'Status', valueHtml: escapeHtml(`${status.icon} ${status.label}`) },
         { label: 'Unternehmen', valueHtml: escapeHtml(entry.unternehmen || '-') },
@@ -1449,18 +1632,39 @@ function renderEinloeseEntry(entry) {
 
     document.getElementById('wg-einloese-empty-state')?.classList.add('hidden');
     document.getElementById('wg-einloese-result')?.classList.remove('hidden');
+    updateEinloeseListWarningUi();
 }
 
-window.selectEinloeseWertguthaben = function(entryId) {
+window.selectEinloeseWertguthaben = function(entryId, options = {}) {
     const entry = WERTGUTHABEN[entryId];
     if (!entry) {
         alertUser('Wertguthaben nicht gefunden.', 'error');
         return;
     }
 
+    const entryListName = getWertguthabenListNameById(entry.listId) || WG_UNASSIGNED_LIST_NAME;
+    const isForeignListSelection = !doesWertguthabenEntryMatchList(entry, currentWertguthabenListId);
+
     currentEinloeseWertguthabenId = entryId;
     const input = document.getElementById('wg-einloese-id-input');
     if (input) input.value = `#${getWertguthabenDisplayId(entry)}`;
+
+    if (isForeignListSelection) {
+        einloeseSelectionState.requiresListConfirmation = true;
+        einloeseSelectionState.confirmationGranted = false;
+        einloeseSelectionState.warningText = `ACHTUNG - Befindet sich auf Liste ${entryListName}`;
+        einloeseSelectionState.isForeignListSelection = true;
+        einloeseSelectionState.hasAdditionalForeignMatches = false;
+    } else {
+        einloeseSelectionState.requiresListConfirmation = false;
+        einloeseSelectionState.confirmationGranted = true;
+        einloeseSelectionState.warningText = options.additionalForeignMatches
+            ? 'Hinweis - Weitere mögliche Treffer befinden sich auf anderen Listen.'
+            : '';
+        einloeseSelectionState.isForeignListSelection = false;
+        einloeseSelectionState.hasAdditionalForeignMatches = !!options.additionalForeignMatches;
+    }
+
     hideEinloeseSuggestions();
     renderEinloeseEntry(entry);
 };
@@ -1787,6 +1991,7 @@ export function listenForWertguthaben() {
     if (!currentUser?.mode || currentUser.mode === 'Gast') {
         stopWertguthabenListener();
         WERTGUTHABEN = {};
+        currentWertguthabenListId = '';
         renderWertguthabenTable();
         updateStatistics();
         return;
@@ -1805,9 +2010,11 @@ export function listenForWertguthaben() {
             console.log("🛑 Wertguthaben-Listener gestoppt.");
         }
 
-        // DATENSCHUTZ-FIX: Nur Wertguthaben laden, die vom aktuellen User erstellt wurden
-        // ODER wo der User als Eigentümer eingetragen ist
-        const q = query(wertguthabenCollection, orderBy('createdAt', 'desc'));
+        const q = query(
+            wertguthabenCollection,
+            where('createdBy', '==', currentUser.mode),
+            orderBy('createdAt', 'desc')
+        );
         
         unsubscribeWertguthaben = onSnapshot(q, (snapshot) => {
             WERTGUTHABEN = {};
@@ -1815,15 +2022,15 @@ export function listenForWertguthaben() {
             snapshot.forEach((docSnap) => {
                 const data = docSnap.data();
                 
-                // DATENSCHUTZ: Nur eigene Einträge speichern
-                // (erstellt von mir ODER ich bin Eigentümer)
-                if ((data.createdBy === currentUser.mode || data.eigentuemer === currentUser.mode) && data.archiviert !== true) {
+                if (data.archiviert !== true) {
                     const normalizedCategory = normalizeWertguthabenKategorie(data.kategorie, { preserveUnknown: true });
                     const normalizedFixedId = normalizeFixedId(data.fixedId);
 
                     WERTGUTHABEN[docSnap.id] = {
                         id: docSnap.id,
                         ...data,
+                        ownerUserId: String(data.ownerUserId || data.createdBy || '').trim(),
+                        listId: normalizeWertguthabenListId(data.listId),
                         kategorie: normalizedCategory,
                         fixedId: normalizedFixedId || ''
                     };
@@ -1838,7 +2045,9 @@ export function listenForWertguthaben() {
                 }
             });
 
-            console.log(`✅ ${Object.keys(WERTGUTHABEN).length} Wertguthaben geladen (nur eigene)`);
+            ensureCurrentWertguthabenListSelection({ preferDefault: !normalizeWertguthabenListId(currentWertguthabenListId) });
+            renderWertguthabenListSelector();
+            renderWertguthabenListenSettingsList();
             renderWertguthabenTable();
             updateStatistics();
             checkWertguthabenForNotifications();
@@ -1859,7 +2068,8 @@ function renderWertguthabenTable() {
     const tbody = document.getElementById('wertguthaben-table-body');
     if (!tbody) return;
 
-    let wertguthaben = Object.values(WERTGUTHABEN);
+    ensureCurrentWertguthabenListSelection({ preferDefault: !normalizeWertguthabenListId(currentWertguthabenListId) });
+    let wertguthaben = getVisibleWertguthabenEntries();
 
     // Filter anwenden
     if (currentFilter.verifizierung !== 'ignore') {
@@ -1899,10 +2109,20 @@ function renderWertguthabenTable() {
     }
 
     if (wertguthaben.length === 0) {
+        const hasRealLists = hasRealWertguthabenListen();
+        const listName = getWertguthabenListNameById(currentWertguthabenListId);
+        let emptyMessage = 'Keine Wertguthaben gefunden.';
+        if (!hasRealLists) {
+            emptyMessage = 'Bitte zuerst eine Liste anlegen.';
+        } else if (isSpecialWertguthabenListId(currentWertguthabenListId)) {
+            emptyMessage = 'Keine nicht zugeordneten Elemente gefunden.';
+        } else if (listName) {
+            emptyMessage = `Keine Wertguthaben in „${listName}“ gefunden.`;
+        }
         tbody.innerHTML = `
             <tr>
                 <td colspan="10" class="px-4 py-8 text-center text-gray-400 italic">
-                    Keine Wertguthaben gefunden.
+                    ${escapeHtml(emptyMessage)}
                 </td>
             </tr>
         `;
@@ -1964,10 +2184,11 @@ function renderWertguthabenTable() {
 // STATISTIKEN AKTUALISIEREN
 // ========================================
 function updateStatistics() {
-    const gutscheine = Object.values(WERTGUTHABEN).filter(w => w.typ === 'gutschein').length;
-    const guthaben = Object.values(WERTGUTHABEN).filter(w => w.typ === 'guthaben').length;
-    const wertguthaben = Object.values(WERTGUTHABEN).filter(w => w.typ.startsWith('wertguthaben')).length;
-    const totalWert = Object.values(WERTGUTHABEN).reduce((sum, w) => sum + (w.wert || 0), 0);
+    const visibleEntries = getVisibleWertguthabenEntries();
+    const gutscheine = visibleEntries.filter(w => w.typ === 'gutschein').length;
+    const guthaben = visibleEntries.filter(w => w.typ === 'guthaben').length;
+    const wertguthaben = visibleEntries.filter(w => String(w.typ || '').startsWith('wertguthaben')).length;
+    const totalWert = visibleEntries.reduce((sum, w) => sum + (Number(w.wert) || 0), 0);
 
     document.getElementById('stat-gutscheine').textContent = gutscheine;
     document.getElementById('stat-guthaben').textContent = guthaben;
@@ -2335,6 +2556,218 @@ function getWertguthabenDisplayId(entry) {
     return String(entry?.id || '').slice(-WG_SHORT_ID_LENGTH).toUpperCase();
 }
 
+function normalizeWertguthabenListId(value) {
+    return String(value || '').trim();
+}
+
+function normalizeWertguthabenListName(value) {
+    return String(value || '').trim().replace(/\s+/g, ' ');
+}
+
+function isSpecialWertguthabenListId(listId) {
+    return normalizeWertguthabenListId(listId) === WG_SPECIAL_LIST_ID;
+}
+
+function createWertguthabenListId() {
+    return `wglist_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function sortWertguthabenListen(rawLists, defaultListId = '') {
+    const normalizedDefaultId = normalizeWertguthabenListId(defaultListId);
+    return [...(Array.isArray(rawLists) ? rawLists : [])].sort((a, b) => {
+        const aIsDefault = normalizeWertguthabenListId(a?.id) === normalizedDefaultId;
+        const bIsDefault = normalizeWertguthabenListId(b?.id) === normalizedDefaultId;
+        if (aIsDefault !== bIsDefault) return aIsDefault ? -1 : 1;
+        return String(a?.name || '').localeCompare(String(b?.name || ''), 'de');
+    });
+}
+
+function sanitizeWertguthabenListen(rawLists, rawDefaultListId = '') {
+    const byId = new Map();
+    const usedNames = new Set();
+
+    (Array.isArray(rawLists) ? rawLists : []).forEach((item) => {
+        const name = normalizeWertguthabenListName(item?.name);
+        if (!name) return;
+        if (name.toLowerCase() === WG_UNASSIGNED_LIST_NAME.toLowerCase()) return;
+
+        const nameKey = name.toLowerCase();
+        if (usedNames.has(nameKey)) return;
+
+        let id = normalizeWertguthabenListId(item?.id);
+        if (!id || id === WG_SPECIAL_LIST_ID || byId.has(id)) {
+            id = createWertguthabenListId();
+        }
+
+        usedNames.add(nameKey);
+        byId.set(id, { id, name });
+    });
+
+    const provisional = sortWertguthabenListen(Array.from(byId.values()), rawDefaultListId);
+    const normalizedDefaultId = normalizeWertguthabenListId(rawDefaultListId);
+    const defaultListId = provisional.some((list) => list.id === normalizedDefaultId)
+        ? normalizedDefaultId
+        : (provisional[0]?.id || '');
+
+    return {
+        listen: sortWertguthabenListen(provisional, defaultListId),
+        defaultListId
+    };
+}
+
+function getRealWertguthabenListen() {
+    return sortWertguthabenListen(wertguthabenSettings.listen, wertguthabenSettings.defaultListId);
+}
+
+function hasRealWertguthabenListen() {
+    return getRealWertguthabenListen().length > 0;
+}
+
+function getDefaultWertguthabenListId() {
+    const realLists = getRealWertguthabenListen();
+    const configuredId = normalizeWertguthabenListId(wertguthabenSettings.defaultListId);
+    if (realLists.some((list) => list.id === configuredId)) {
+        return configuredId;
+    }
+    return realLists[0]?.id || '';
+}
+
+function isRealWertguthabenListId(listId) {
+    const normalized = normalizeWertguthabenListId(listId);
+    return !!normalized && getRealWertguthabenListen().some((list) => list.id === normalized);
+}
+
+function getEntryAssignedWertguthabenListId(entry) {
+    const normalized = normalizeWertguthabenListId(entry?.listId);
+    if (!normalized) return '';
+    return isRealWertguthabenListId(normalized) ? normalized : '';
+}
+
+function hasUnassignedWertguthabenEntries(entries = Object.values(WERTGUTHABEN)) {
+    return (Array.isArray(entries) ? entries : []).some((entry) => !getEntryAssignedWertguthabenListId(entry));
+}
+
+function getWertguthabenListNameById(listId) {
+    const normalized = normalizeWertguthabenListId(listId);
+    if (isSpecialWertguthabenListId(normalized)) {
+        return WG_UNASSIGNED_LIST_NAME;
+    }
+    return getRealWertguthabenListen().find((list) => list.id === normalized)?.name || '';
+}
+
+function doesWertguthabenEntryMatchList(entry, listId = currentWertguthabenListId) {
+    const normalizedListId = normalizeWertguthabenListId(listId);
+    if (!normalizedListId) return false;
+
+    const entryListId = getEntryAssignedWertguthabenListId(entry);
+    if (isSpecialWertguthabenListId(normalizedListId)) {
+        return !entryListId;
+    }
+
+    return entryListId === normalizedListId;
+}
+
+function getVisibleWertguthabenEntries(entries = Object.values(WERTGUTHABEN), listId = currentWertguthabenListId) {
+    const normalizedListId = normalizeWertguthabenListId(listId);
+    if (!normalizedListId) return [];
+    return (Array.isArray(entries) ? entries : []).filter((entry) => doesWertguthabenEntryMatchList(entry, normalizedListId));
+}
+
+function getPreferredCreateListId() {
+    if (isRealWertguthabenListId(currentWertguthabenListId)) {
+        return currentWertguthabenListId;
+    }
+    return getDefaultWertguthabenListId();
+}
+
+function ensureCurrentWertguthabenListSelection(options = {}) {
+    const preferDefault = options.preferDefault === true;
+    const realLists = getRealWertguthabenListen();
+    const hasUnassigned = hasUnassignedWertguthabenEntries();
+    const currentIsValid = isSpecialWertguthabenListId(currentWertguthabenListId)
+        ? hasUnassigned
+        : realLists.some((list) => list.id === currentWertguthabenListId);
+
+    if (currentIsValid && !preferDefault) {
+        return currentWertguthabenListId;
+    }
+
+    if (realLists.length > 0) {
+        currentWertguthabenListId = getDefaultWertguthabenListId() || realLists[0].id;
+        return currentWertguthabenListId;
+    }
+
+    currentWertguthabenListId = hasUnassigned ? WG_SPECIAL_LIST_ID : '';
+    return currentWertguthabenListId;
+}
+
+function updateWertguthabenCreateButtonState() {
+    const createBtn = document.getElementById('btn-create-wertguthaben');
+    if (!createBtn) return;
+
+    const hasRealLists = hasRealWertguthabenListen();
+    createBtn.disabled = !hasRealLists;
+    createBtn.classList.toggle('opacity-50', !hasRealLists);
+    createBtn.classList.toggle('cursor-not-allowed', !hasRealLists);
+    createBtn.title = hasRealLists
+        ? 'Neues Wertguthaben anlegen'
+        : 'Bitte zuerst eine Liste anlegen';
+    createBtn.setAttribute('aria-disabled', hasRealLists ? 'false' : 'true');
+}
+
+function renderWertguthabenListSelector() {
+    const select = document.getElementById('wg-list-selector');
+    if (!select) return;
+
+    const realLists = getRealWertguthabenListen();
+    const hasUnassigned = hasUnassignedWertguthabenEntries();
+    ensureCurrentWertguthabenListSelection();
+
+    if (realLists.length === 0 && !hasUnassigned) {
+        select.innerHTML = '<option value="">Bitte zuerst Liste anlegen...</option>';
+        select.value = '';
+        select.disabled = true;
+        updateWertguthabenCreateButtonState();
+        return;
+    }
+
+    const options = realLists.map((list) => {
+        const prefix = list.id === getDefaultWertguthabenListId() ? '★ ' : '';
+        return `<option value="${escapeHtml(list.id)}">${escapeHtml(prefix + list.name)}</option>`;
+    });
+
+    if (hasUnassigned) {
+        options.push(`<option value="${escapeHtml(WG_SPECIAL_LIST_ID)}">${escapeHtml(WG_UNASSIGNED_LIST_NAME)}</option>`);
+    }
+
+    select.innerHTML = options.join('');
+    select.disabled = false;
+    select.value = currentWertguthabenListId || realLists[0]?.id || (hasUnassigned ? WG_SPECIAL_LIST_ID : '');
+    updateWertguthabenCreateButtonState();
+}
+
+function setCurrentWertguthabenList(listId, options = {}) {
+    const normalized = normalizeWertguthabenListId(listId);
+    const fallback = ensureCurrentWertguthabenListSelection();
+    const nextListId = isSpecialWertguthabenListId(normalized)
+        ? (hasUnassignedWertguthabenEntries() ? WG_SPECIAL_LIST_ID : fallback)
+        : (isRealWertguthabenListId(normalized) ? normalized : fallback);
+
+    currentWertguthabenListId = nextListId || '';
+    renderWertguthabenListSelector();
+    renderWertguthabenTable();
+    updateStatistics();
+    refreshEinloeseSelection();
+
+    if (options.skipArchiveRefresh !== true && document.getElementById('wertguthabenArchivModal')?.style.display === 'flex') {
+        renderWertguthabenArchivOverview();
+    }
+
+    if (options.skipTransactionsRefresh !== true && document.getElementById('wertguthabenTransaktionenModal')?.style.display === 'flex') {
+        renderWertguthabenTransaktionenOverview();
+    }
+}
+
 function sanitizeWertguthabenKategorien(rawCategories) {
     const unique = new Set();
     (Array.isArray(rawCategories) ? rawCategories : []).forEach((item) => {
@@ -2413,10 +2846,13 @@ function normalizeWertguthabenDefaultWarnings(rawWarnings) {
 
 function buildNormalizedWertguthabenSettingsPayload(rawSettings) {
     const parsed = rawSettings && typeof rawSettings === 'object' ? rawSettings : {};
+    const normalizedListenPayload = sanitizeWertguthabenListen(parsed.listen, parsed.defaultListId);
     return {
         ...parsed,
         kategorien: sanitizeWertguthabenKategorien(parsed.kategorien),
         archivGruende: sanitizeWertguthabenArchivGruende(parsed.archivGruende),
+        listen: normalizedListenPayload.listen,
+        defaultListId: normalizedListenPayload.defaultListId,
         defaultWarnings: normalizeWertguthabenDefaultWarnings(parsed.defaultWarnings)
     };
 }
@@ -2426,10 +2862,19 @@ function applyWertguthabenSettings(rawSettings) {
     wertguthabenSettings = {
         kategorien: parsed.kategorien,
         archivGruende: parsed.archivGruende,
+        listen: parsed.listen,
+        defaultListId: parsed.defaultListId,
         defaultWarnings: parsed.defaultWarnings
     };
 
+    ensureCurrentWertguthabenListSelection({ preferDefault: !normalizeWertguthabenListId(currentWertguthabenListId) });
+    renderWertguthabenListSelector();
+    renderWertguthabenListenSettingsList();
     populateKategorieDropdowns();
+    populateWertguthabenListFormDropdown(document.getElementById('wgListe')?.value || getPreferredCreateListId(), {
+        includeSpecialOption: document.getElementById('editWertguthabenId')?.value ? isSpecialWertguthabenListId(document.getElementById('wgListe')?.value || '') : false,
+        allowEmptySelection: true
+    });
     renderWertguthabenKategorieSettingsList();
     renderWertguthabenArchiveReasonOptions();
 }
@@ -2514,6 +2959,362 @@ function populateKategorieDropdowns() {
         `;
         filterSelect.value = allCategories.includes(previous) ? previous : '';
         currentFilter.kategorie = filterSelect.value;
+    }
+}
+
+function updateWertguthabenListFieldHint(message = '', tone = 'default') {
+    const hint = document.getElementById('wgListeHint');
+    if (!hint) return;
+
+    const text = String(message || '').trim();
+    hint.textContent = text;
+    hint.classList.toggle('hidden', !text);
+    hint.classList.toggle('text-red-600', tone === 'error');
+    hint.classList.toggle('text-amber-700', tone === 'warning');
+    hint.classList.toggle('text-gray-500', tone === 'default');
+}
+
+function populateWertguthabenListFormDropdown(selectedId = '', options = {}) {
+    const select = document.getElementById('wgListe');
+    if (!select) return;
+
+    const realLists = getRealWertguthabenListen();
+    const normalizedSelected = normalizeWertguthabenListId(selectedId);
+    const includeSpecialOption = options.includeSpecialOption === true && hasUnassignedWertguthabenEntries();
+    const allowEmptySelection = options.allowEmptySelection !== false;
+
+    const optionParts = [];
+    if (allowEmptySelection) {
+        optionParts.push('<option value="">Liste auswählen...</option>');
+    }
+
+    realLists.forEach((list) => {
+        const prefix = list.id === getDefaultWertguthabenListId() ? '★ ' : '';
+        optionParts.push(`<option value="${escapeHtml(list.id)}">${escapeHtml(prefix + list.name)}</option>`);
+    });
+
+    if (includeSpecialOption) {
+        optionParts.push(`<option value="${escapeHtml(WG_SPECIAL_LIST_ID)}">${escapeHtml(WG_UNASSIGNED_LIST_NAME)}</option>`);
+    }
+
+    if (optionParts.length === 0) {
+        optionParts.push('<option value="">Bitte zuerst Liste anlegen...</option>');
+    }
+
+    select.innerHTML = optionParts.join('');
+
+    let nextValue = '';
+    if (normalizedSelected && Array.from(select.options).some((option) => option.value === normalizedSelected)) {
+        nextValue = normalizedSelected;
+    } else if (!allowEmptySelection && realLists.length > 0) {
+        nextValue = realLists[0].id;
+    }
+
+    select.value = nextValue;
+    select.disabled = optionParts.length === 1 && optionParts[0].includes('Bitte zuerst Liste anlegen');
+
+    if (!hasRealWertguthabenListen()) {
+        updateWertguthabenListFieldHint('Bitte zuerst mindestens eine Liste anlegen.', 'error');
+    } else if (isSpecialWertguthabenListId(select.value)) {
+        updateWertguthabenListFieldHint('Nicht zugeordnete Elemente können nur einer echten Liste zugewiesen werden.', 'warning');
+    } else if (!select.value && allowEmptySelection) {
+        updateWertguthabenListFieldHint('Neuanlage in „Nicht zugeordnete Elemente“ ist nicht möglich.', 'warning');
+    } else {
+        updateWertguthabenListFieldHint('');
+    }
+}
+
+function setWertguthabenFormListAssignmentMode(enabled) {
+    wertguthabenFormState.isListAssignmentOnly = !!enabled;
+
+    const notice = document.getElementById('wgListAssignmentNotice');
+    if (notice) {
+        notice.classList.toggle('hidden', !enabled);
+    }
+
+    const modal = document.getElementById('wertguthabenModal');
+    if (!modal) return;
+
+    const keepEnabledIds = new Set(['wgListe', 'saveWertguthabenBtn', 'cancelWertguthabenBtn', 'closeWertguthabenModal']);
+    modal.querySelectorAll('input, select, textarea, button').forEach((element) => {
+        const elementId = String(element.id || '').trim();
+        if (!elementId || keepEnabledIds.has(elementId) || elementId === 'editWertguthabenId') return;
+        element.disabled = !!enabled;
+        if (element.matches('input, select, textarea')) {
+            element.classList.toggle('bg-gray-100', !!enabled);
+            element.classList.toggle('cursor-not-allowed', !!enabled);
+        }
+    });
+
+    if (!enabled) {
+        handleEigentuemerChange();
+        handleTypChange();
+        updateSensitiveMaskHints();
+    }
+}
+
+function renderWertguthabenListenSettingsList() {
+    const container = document.getElementById('wg-settings-listen-list');
+    if (!container) return;
+
+    const realLists = getRealWertguthabenListen();
+    const defaultListId = getDefaultWertguthabenListId();
+    const hasUnassigned = hasUnassignedWertguthabenEntries();
+
+    if (realLists.length === 0 && !hasUnassigned) {
+        container.innerHTML = '<p class="text-sm text-gray-500 italic">Keine Listen vorhanden.</p>';
+        return;
+    }
+
+    const rows = realLists.map((list) => `
+        <div class="flex items-center justify-between gap-2 p-2 rounded-lg border border-gray-200 bg-white">
+            <div class="min-w-0">
+                <div class="text-sm font-semibold text-gray-800 truncate">${escapeHtml(list.name)}</div>
+                <div class="text-[11px] font-semibold ${list.id === defaultListId ? 'text-blue-700' : 'text-gray-500'}">${list.id === defaultListId ? 'Standardliste' : 'Private Liste'}</div>
+            </div>
+            <div class="flex flex-wrap justify-end gap-1">
+                <button onclick="window.setDefaultWertguthabenListe('${escapeHtml(list.id)}')" class="px-2 py-1 text-xs ${list.id === defaultListId ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-800 hover:bg-blue-200'} rounded transition">Standard</button>
+                <button onclick="window.renameWertguthabenListe('${escapeHtml(list.id)}')" class="px-2 py-1 text-xs bg-amber-100 text-amber-800 rounded hover:bg-amber-200 transition">Bearbeiten</button>
+                <button onclick="window.deleteWertguthabenListe('${escapeHtml(list.id)}')" class="px-2 py-1 text-xs bg-red-100 text-red-800 rounded hover:bg-red-200 transition">Löschen</button>
+            </div>
+        </div>
+    `);
+
+    if (hasUnassigned) {
+        rows.push(`
+            <div class="flex items-center justify-between gap-2 p-2 rounded-lg border border-orange-200 bg-orange-50">
+                <div class="min-w-0">
+                    <div class="text-sm font-semibold text-orange-900 truncate">${escapeHtml(WG_UNASSIGNED_LIST_NAME)}</div>
+                    <div class="text-[11px] font-semibold text-orange-700">Automatische Spezialliste</div>
+                </div>
+                <div class="text-[11px] font-semibold text-orange-700">Nicht bearbeitbar</div>
+            </div>
+        `);
+    }
+
+    container.innerHTML = rows.join('');
+}
+
+function resetWertguthabenListDeleteModal() {
+    const modal = document.getElementById('wertguthabenListenDeleteModal');
+    const checkbox = document.getElementById('wg-list-delete-checkbox');
+    const input = document.getElementById('wg-list-delete-confirm-text');
+    const button = document.getElementById('wg-list-delete-confirm-btn');
+
+    if (wgListDeleteTimer) {
+        window.clearInterval(wgListDeleteTimer);
+        wgListDeleteTimer = null;
+    }
+
+    wgListDeleteSecondsLeft = WG_LIST_DELETE_COUNTDOWN_SECONDS;
+    wgListDeleteTargetId = '';
+    if (modal) modal.dataset.listId = '';
+    if (checkbox) checkbox.checked = false;
+    if (input) input.value = '';
+    if (button) {
+        button.disabled = true;
+        button.className = 'w-full py-3 bg-gray-300 text-gray-500 font-bold rounded-lg cursor-not-allowed transition';
+        button.innerHTML = `<span id="wg-list-delete-countdown-text">Warte ${WG_LIST_DELETE_COUNTDOWN_SECONDS} Sekunden...</span>`;
+    }
+}
+
+function updateWertguthabenListDeleteConfirmState() {
+    const checkbox = document.getElementById('wg-list-delete-checkbox');
+    const input = document.getElementById('wg-list-delete-confirm-text');
+    const button = document.getElementById('wg-list-delete-confirm-btn');
+    if (!checkbox || !input || !button) return;
+
+    const isCountdownFinished = wgListDeleteSecondsLeft <= 0;
+    const hasCheckbox = checkbox.checked === true;
+    const hasText = String(input.value || '').trim() === WG_LIST_DELETE_CONFIRM_TEXT;
+
+    if (isCountdownFinished && hasCheckbox && hasText) {
+        button.disabled = false;
+        button.className = 'w-full py-3 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition';
+        button.innerHTML = '🗑️ JETZT UNWIDERRUFLICH LÖSCHEN';
+        return;
+    }
+
+    button.disabled = true;
+    button.className = 'w-full py-3 bg-gray-300 text-gray-500 font-bold rounded-lg cursor-not-allowed transition';
+    if (!isCountdownFinished) {
+        button.innerHTML = `<span id="wg-list-delete-countdown-text">Warte ${wgListDeleteSecondsLeft} Sekunden...</span>`;
+    } else if (!hasCheckbox) {
+        button.innerHTML = 'Bitte Löschbestätigung aktivieren';
+    } else {
+        button.innerHTML = 'Bitte Text korrekt eingeben';
+    }
+}
+
+function closeWertguthabenListDeleteModal() {
+    const modal = document.getElementById('wertguthabenListenDeleteModal');
+    if (modal) modal.style.display = 'none';
+    resetWertguthabenListDeleteModal();
+}
+
+function openWertguthabenListDeleteModal(listId) {
+    const listName = getWertguthabenListNameById(listId);
+    const modal = document.getElementById('wertguthabenListenDeleteModal');
+    const warningName = document.getElementById('wg-list-delete-warning-name');
+    const countdownText = document.getElementById('wg-list-delete-countdown-text');
+    if (!modal || !listName || isSpecialWertguthabenListId(listId)) return;
+
+    resetWertguthabenListDeleteModal();
+    wgListDeleteTargetId = normalizeWertguthabenListId(listId);
+    modal.dataset.listId = wgListDeleteTargetId;
+    if (warningName) {
+        warningName.innerHTML = `Die Liste <strong>${escapeHtml(listName)}</strong> wird dauerhaft gelöscht.`;
+    }
+    if (countdownText) {
+        countdownText.textContent = `Warte ${WG_LIST_DELETE_COUNTDOWN_SECONDS} Sekunden...`;
+    }
+
+    wgListDeleteTimer = window.setInterval(() => {
+        wgListDeleteSecondsLeft -= 1;
+        updateWertguthabenListDeleteConfirmState();
+        if (wgListDeleteSecondsLeft <= 0 && wgListDeleteTimer) {
+            window.clearInterval(wgListDeleteTimer);
+            wgListDeleteTimer = null;
+        }
+    }, 1000);
+
+    modal.style.display = 'flex';
+}
+
+async function addWertguthabenListeFromSettings() {
+    const input = document.getElementById('new-wg-liste-input');
+    const rawName = normalizeWertguthabenListName(input?.value || '');
+    if (!rawName) {
+        alertUser('Bitte einen Listennamen eingeben.', 'warning');
+        return;
+    }
+    if (rawName.toLowerCase() === WG_UNASSIGNED_LIST_NAME.toLowerCase()) {
+        alertUser(`"${WG_UNASSIGNED_LIST_NAME}" ist reserviert.`, 'warning');
+        return;
+    }
+    if (getRealWertguthabenListen().some((list) => list.name.toLowerCase() === rawName.toLowerCase())) {
+        alertUser('Listenname existiert bereits.', 'warning');
+        return;
+    }
+
+    const nextListen = [...getRealWertguthabenListen(), { id: createWertguthabenListId(), name: rawName }];
+    const normalized = sanitizeWertguthabenListen(nextListen, getDefaultWertguthabenListId() || nextListen[0]?.id || '');
+    wertguthabenSettings.listen = normalized.listen;
+    wertguthabenSettings.defaultListId = normalized.defaultListId;
+
+    if (!await persistWertguthabenSettings()) {
+        return;
+    }
+
+    if (input) input.value = '';
+    ensureCurrentWertguthabenListSelection({ preferDefault: !normalizeWertguthabenListId(currentWertguthabenListId) });
+    renderWertguthabenListenSettingsList();
+    renderWertguthabenListSelector();
+    populateWertguthabenListFormDropdown(getPreferredCreateListId(), { allowEmptySelection: true });
+    updateWertguthabenCreateButtonState();
+    alertUser('Liste angelegt.', 'success');
+}
+
+window.renameWertguthabenListe = async function(listId) {
+    const targetId = normalizeWertguthabenListId(listId);
+    const currentList = getRealWertguthabenListen().find((list) => list.id === targetId);
+    if (!currentList) return;
+
+    const nextName = prompt('Liste umbenennen:', currentList.name);
+    const normalizedName = normalizeWertguthabenListName(nextName);
+    if (!normalizedName || normalizedName === currentList.name) return;
+    if (normalizedName.toLowerCase() === WG_UNASSIGNED_LIST_NAME.toLowerCase()) {
+        alertUser(`"${WG_UNASSIGNED_LIST_NAME}" ist reserviert.`, 'warning');
+        return;
+    }
+    if (getRealWertguthabenListen().some((list) => list.id !== targetId && list.name.toLowerCase() === normalizedName.toLowerCase())) {
+        alertUser('Listenname existiert bereits.', 'warning');
+        return;
+    }
+
+    wertguthabenSettings.listen = getRealWertguthabenListen().map((list) => (
+        list.id === targetId ? { ...list, name: normalizedName } : list
+    ));
+    wertguthabenSettings.listen = sanitizeWertguthabenListen(wertguthabenSettings.listen, getDefaultWertguthabenListId()).listen;
+
+    if (!await persistWertguthabenSettings()) {
+        return;
+    }
+
+    renderWertguthabenListenSettingsList();
+    renderWertguthabenListSelector();
+    populateWertguthabenListFormDropdown(document.getElementById('wgListe')?.value || getPreferredCreateListId(), { allowEmptySelection: true, includeSpecialOption: isSpecialWertguthabenListId(document.getElementById('wgListe')?.value || '') });
+    alertUser('Liste umbenannt.', 'success');
+};
+
+window.setDefaultWertguthabenListe = async function(listId) {
+    const targetId = normalizeWertguthabenListId(listId);
+    if (!isRealWertguthabenListId(targetId)) return;
+
+    wertguthabenSettings.defaultListId = targetId;
+    wertguthabenSettings.listen = sortWertguthabenListen(getRealWertguthabenListen(), targetId);
+    if (!await persistWertguthabenSettings()) {
+        return;
+    }
+
+    renderWertguthabenListenSettingsList();
+    renderWertguthabenListSelector();
+    alertUser('Standardliste gespeichert.', 'success');
+};
+
+window.deleteWertguthabenListe = function(listId) {
+    const targetId = normalizeWertguthabenListId(listId);
+    if (!isRealWertguthabenListId(targetId)) return;
+    openWertguthabenListDeleteModal(targetId);
+};
+
+async function confirmWertguthabenListDeletion() {
+    const targetId = normalizeWertguthabenListId(wgListDeleteTargetId || document.getElementById('wertguthabenListenDeleteModal')?.dataset.listId || '');
+    if (!isRealWertguthabenListId(targetId)) {
+        closeWertguthabenListDeleteModal();
+        return;
+    }
+
+    try {
+        const snapshot = await getDocs(query(wertguthabenCollection, where('createdBy', '==', currentUser.mode)));
+        const deleteTasks = [];
+        snapshot.forEach((docSnap) => {
+            const data = docSnap.data() || {};
+            if (normalizeWertguthabenListId(data.listId) !== targetId) return;
+            deleteTasks.push((async () => {
+                await deleteAllWertguthabenTransaktionen(docSnap.id);
+                await deleteDoc(docSnap.ref);
+            })());
+        });
+        await Promise.all(deleteTasks);
+
+        const remainingListen = getRealWertguthabenListen().filter((list) => list.id !== targetId);
+        const nextDefaultId = remainingListen.some((list) => list.id === getDefaultWertguthabenListId())
+            ? getDefaultWertguthabenListId()
+            : (remainingListen[0]?.id || '');
+        const normalized = sanitizeWertguthabenListen(remainingListen, nextDefaultId);
+        wertguthabenSettings.listen = normalized.listen;
+        wertguthabenSettings.defaultListId = normalized.defaultListId;
+
+        if (!await persistWertguthabenSettings()) {
+            return;
+        }
+
+        if (wertguthabenDetailsState.entry && normalizeWertguthabenListId(wertguthabenDetailsState.entry.listId) === targetId) {
+            document.getElementById('wertguthabenDetailsModal').style.display = 'none';
+        }
+
+        closeWertguthabenListDeleteModal();
+        ensureCurrentWertguthabenListSelection({ preferDefault: !normalizeWertguthabenListId(currentWertguthabenListId) || currentWertguthabenListId === targetId });
+        renderWertguthabenListenSettingsList();
+        renderWertguthabenListSelector();
+        renderWertguthabenTable();
+        updateStatistics();
+        refreshEinloeseSelection();
+        alertUser('Liste und zugehörige Einträge wurden unwiderruflich gelöscht.', 'success');
+    } catch (error) {
+        console.error('Fehler beim Löschen der Liste:', error);
+        alertUser('Liste konnte nicht gelöscht werden: ' + error.message, 'error');
     }
 }
 
@@ -2688,15 +3489,16 @@ async function loadArchivedWertguthabenEntries() {
     if (!wertguthabenCollection) return [];
 
     try {
-        const snapshot = await getDocs(query(wertguthabenCollection, orderBy('archiviertAm', 'desc')));
+        const snapshot = await getDocs(query(wertguthabenCollection, where('createdBy', '==', currentUser.mode), orderBy('archiviertAm', 'desc')));
         const entries = [];
         snapshot.forEach((docSnap) => {
             const data = docSnap.data() || {};
             if (data.archiviert !== true) return;
-            if (data.createdBy !== currentUser.mode && data.eigentuemer !== currentUser.mode) return;
             entries.push({
                 id: docSnap.id,
                 ...data,
+                ownerUserId: String(data.ownerUserId || data.createdBy || '').trim(),
+                listId: normalizeWertguthabenListId(data.listId),
                 kategorie: normalizeWertguthabenKategorie(data.kategorie, { preserveUnknown: true }),
                 fixedId: normalizeFixedId(data.fixedId) || ''
             });
@@ -2721,7 +3523,7 @@ async function renderWertguthabenArchivOverview() {
     setWertguthabenArchivSummary('Archiv wird geladen...');
     tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-400 italic">Archiv wird geladen...</td></tr>';
 
-    const entries = await loadArchivedWertguthabenEntries();
+    const entries = getVisibleWertguthabenEntries(await loadArchivedWertguthabenEntries());
     if (entries.length === 0) {
         setWertguthabenArchivSummary('0 archivierte Einträge');
         tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-400 italic">Keine archivierten Einträge gefunden.</td></tr>';
@@ -2888,7 +3690,7 @@ window.openArchivedWertguthabenDetails = async function(id) {
 };
 
 async function loadAllWertguthabenTransaktionen() {
-    const entries = Object.values(WERTGUTHABEN);
+    const entries = getVisibleWertguthabenEntries();
     const transaktionsPakete = await Promise.all(entries.map(async (entry) => {
         const transaktionen = await loadTransaktionen(entry.id);
         return transaktionen.map((transaktion) => ({
@@ -3292,6 +4094,10 @@ function resetForm() {
     document.getElementById('wgTyp').value = 'gutschein';
     document.getElementById('wgStatus').value = 'aktiv';
     document.getElementById('wgWert').value = '';
+    populateWertguthabenListFormDropdown(isSpecialWertguthabenListId(currentWertguthabenListId) ? '' : getPreferredCreateListId(), {
+        allowEmptySelection: true,
+        includeSpecialOption: false
+    });
     setWertguthabenFormKategorieValue(getDefaultFormKategorie());
     document.getElementById('wgName').value = '';
     document.getElementById('wgUnternehmen').value = '';
@@ -3327,11 +4133,13 @@ function resetForm() {
 
     wertguthabenFormState.isWertUnlocked = false;
     wertguthabenFormState.lockedEditEntryId = '';
+    wertguthabenFormState.isListAssignmentOnly = false;
     wertguthabenFormState.lastSelectedTyp = 'gutschein';
     wertguthabenFormState.statusManuallyChangedBeforeAktionscodeSwitch = false;
     wertguthabenFormState.wertBeforeAktionscodeSwitch = '';
     wertguthabenFormState.statusBeforeAktionscodeSwitch = '';
 
+    setWertguthabenFormListAssignmentMode(false);
     handleTypChange();
 
     document.getElementById('wertguthabenModal').style.display = 'flex';
@@ -3349,6 +4157,21 @@ function setWertguthabenCopyMode(enabled, sourceId = '') {
 function populateWertguthabenFormFromEntry(wg, options = {}) {
     if (!wg) return;
     const isCopy = !!options.isCopy;
+    const isUnassignedEntry = !getEntryAssignedWertguthabenListId(wg);
+
+    if (isCopy) {
+        populateWertguthabenListFormDropdown(isSpecialWertguthabenListId(currentWertguthabenListId) ? '' : getPreferredCreateListId(), {
+            allowEmptySelection: true,
+            includeSpecialOption: false
+        });
+        setWertguthabenFormListAssignmentMode(false);
+    } else {
+        populateWertguthabenListFormDropdown(isUnassignedEntry ? WG_SPECIAL_LIST_ID : getEntryAssignedWertguthabenListId(wg), {
+            allowEmptySelection: false,
+            includeSpecialOption: isUnassignedEntry
+        });
+        setWertguthabenFormListAssignmentMode(isUnassignedEntry);
+    }
 
     if (Object.keys(USERS).includes(wg.eigentuemer)) {
         document.getElementById('wgEigentuemer').value = wg.eigentuemer;
@@ -3420,6 +4243,12 @@ function populateWertguthabenFormFromEntry(wg, options = {}) {
 
 function openCreateModal(options = {}) {
     const opts = options instanceof Event ? {} : options;
+    if (!hasRealWertguthabenListen()) {
+        alertUser('Bitte zuerst eine Liste anlegen.', 'warning');
+        openSettingsModal();
+        return;
+    }
+
     document.getElementById('wertguthabenModalTitle').textContent = 'Neues Wertguthaben';
     document.getElementById('editWertguthabenId').value = '';
     resetForm();
@@ -3436,6 +4265,7 @@ function openCreateModal(options = {}) {
 function closeWertguthabenModal() {
     document.getElementById('wertguthabenModal').style.display = 'none';
     setWertguthabenCopyMode(false);
+    setWertguthabenFormListAssignmentMode(false);
     wertguthabenFormState.statusManuallyChanged = false;
     setWertBetragLockedState(false);
     wertguthabenFormState.lastSelectedTyp = 'gutschein';
@@ -3591,6 +4421,9 @@ function handleTypChange() {
     }
 
     wertguthabenFormState.lastSelectedTyp = typ;
+    if (wertguthabenFormState.isListAssignmentOnly) {
+        setWertguthabenFormListAssignmentMode(true);
+    }
 }
 
 function handleEigentuemerChange() {
@@ -3691,12 +4524,17 @@ window.validateEinloesungen = function() {
 };
 
 // ========================================
-// SPEICHERN
 // ========================================
 async function saveWertguthaben() {
     const editId = document.getElementById('editWertguthabenId').value;
     const existingEntry = editId ? WERTGUTHABEN[editId] : null;
-    
+    const selectedListId = normalizeWertguthabenListId(document.getElementById('wgListe')?.value || '');
+
+    if (!isRealWertguthabenListId(selectedListId)) {
+        updateWertguthabenListFieldHint('Bitte eine echte Liste auswählen.', 'error');
+        return alertUser('Bitte eine echte Liste auswählen.', 'error');
+    }
+
     // Validierung
     const name = document.getElementById('wgName').value.trim();
     if (!name) {
@@ -3757,6 +4595,8 @@ async function saveWertguthaben() {
     }
 
     const data = {
+        ownerUserId: currentUser.mode,
+        listId: selectedListId,
         eigentuemer,
         typ,
         status,
@@ -4453,6 +5293,10 @@ async function saveTransaktion() {
         return alertUser('Wertguthaben nicht gefunden!', 'error');
     }
 
+    if (source === 'einloese' && einloeseSelectionState.requiresListConfirmation && !einloeseSelectionState.confirmationGranted) {
+        return alertUser('Bitte zuerst den Fremdlisten-Hinweis bestätigen.', 'warning');
+    }
+
     if (editTransaktionId) {
         try {
             if (wg.typ === 'aktionscode') {
@@ -4957,7 +5801,10 @@ function openSettingsModal() {
     document.getElementById('settings-warning-wertguthaben').value = wertguthabenSettings.defaultWarnings.wertguthaben;
     document.getElementById('settings-warning-wertguthaben_gesetzlich').value = wertguthabenSettings.defaultWarnings.wertguthaben_gesetzlich;
     const newCategoryInput = document.getElementById('new-wg-kategorie-input');
+    const newListInput = document.getElementById('new-wg-liste-input');
     if (newCategoryInput) newCategoryInput.value = '';
+    if (newListInput) newListInput.value = '';
+    renderWertguthabenListenSettingsList();
     renderWertguthabenKategorieSettingsList();
 
     // Event-Listener (nur einmal)
@@ -4985,6 +5832,12 @@ function openSettingsModal() {
         addKategorieBtn.dataset.listenerAttached = 'true';
     }
 
+    const addListeBtn = document.getElementById('btn-add-wg-liste');
+    if (addListeBtn && !addListeBtn.dataset.listenerAttached) {
+        addListeBtn.addEventListener('click', addWertguthabenListeFromSettings);
+        addListeBtn.dataset.listenerAttached = 'true';
+    }
+
     if (newCategoryInput && !newCategoryInput.dataset.enterListenerAttached) {
         newCategoryInput.addEventListener('keydown', (event) => {
             if (event.key !== 'Enter') return;
@@ -4992,6 +5845,15 @@ function openSettingsModal() {
             addWertguthabenKategorieFromSettings();
         });
         newCategoryInput.dataset.enterListenerAttached = 'true';
+    }
+
+    if (newListInput && !newListInput.dataset.enterListenerAttached) {
+        newListInput.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            addWertguthabenListeFromSettings();
+        });
+        newListInput.dataset.enterListenerAttached = 'true';
     }
 
     document.getElementById('wertguthabenSettingsModal').style.display = 'flex';
@@ -5020,12 +5882,17 @@ async function saveSettings() {
         aktionscode
     };
     wertguthabenSettings.kategorien = sanitizeWertguthabenKategorien(wertguthabenSettings.kategorien);
+    const normalizedListen = sanitizeWertguthabenListen(wertguthabenSettings.listen, wertguthabenSettings.defaultListId);
+    wertguthabenSettings.listen = normalizedListen.listen;
+    wertguthabenSettings.defaultListId = normalizedListen.defaultListId;
 
     // In Firebase speichern (geräteübergreifend)
     try {
         if (!await persistWertguthabenSettings()) {
             return;
         }
+        renderWertguthabenListenSettingsList();
+        renderWertguthabenListSelector();
         populateKategorieDropdowns();
         await ensureAllEntriesHaveValidKategorie();
         alertUser('Einstellungen gespeichert!', 'success');

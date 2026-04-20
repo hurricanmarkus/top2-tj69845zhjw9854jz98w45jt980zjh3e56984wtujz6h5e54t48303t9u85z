@@ -1,14 +1,24 @@
 {
-  "version": "1.10.8",
-  "buildId": "20260417-4",
-  "releaseDate": "2026-04-17",
-  "releaseTime": "10:05",
+  "version": "1.11.0",
+  "buildId": "20260420-1",
+  "releaseDate": "2026-04-20",
+  "releaseTime": "08:47",
   "bereich": "Wertguthaben",
   "timezone": "Europe/Vienna",
-  "note": "Das Transaktionsfenster von Wertguthaben bleibt auf Mobilgeräten jetzt mit sichtbarem Schließen-Button und Footer bedienbar, während nur der Inhalt scrollt.",
-  "commitId": "4bbf9cd",
+  "note": "Wertguthaben unterstützt jetzt private Listen mit Standardliste, Spezialliste für nicht zugeordnete Elemente, sicherem Listenlöschen und listenbewusstem Einlösesystem.",
+  "commitId": "39df8f7",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.11.0",
+      "buildId": "20260420-1",
+      "releaseDate": "2026-04-20",
+      "releaseTime": "08:47",
+      "bereich": "Wertguthaben",
+      "note": "Wertguthaben unterstützt jetzt private Listen mit Standardliste, Spezialliste für nicht zugeordnete Elemente, sicherem Listenlöschen und listenbewusstem Einlösesystem.",
+      "commitId": "39df8f7",
+      "obligation": "false"
+    },
     {
       "version": "1.10.8",
       "buildId": "20260417-4",
