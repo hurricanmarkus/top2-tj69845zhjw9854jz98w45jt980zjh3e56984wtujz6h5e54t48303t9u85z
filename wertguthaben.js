@@ -2012,12 +2012,11 @@ export function listenForWertguthaben() {
 
         const q = query(
             wertguthabenCollection,
-            where('createdBy', '==', currentUser.mode),
-            orderBy('createdAt', 'desc')
+            where('createdBy', '==', currentUser.mode)
         );
         
         unsubscribeWertguthaben = onSnapshot(q, (snapshot) => {
-            WERTGUTHABEN = {};
+            const entries = [];
             
             snapshot.forEach((docSnap) => {
                 const data = docSnap.data();
@@ -2026,14 +2025,14 @@ export function listenForWertguthaben() {
                     const normalizedCategory = normalizeWertguthabenKategorie(data.kategorie, { preserveUnknown: true });
                     const normalizedFixedId = normalizeFixedId(data.fixedId);
 
-                    WERTGUTHABEN[docSnap.id] = {
+                    entries.push({
                         id: docSnap.id,
                         ...data,
                         ownerUserId: String(data.ownerUserId || data.createdBy || '').trim(),
                         listId: normalizeWertguthabenListId(data.listId),
                         kategorie: normalizedCategory,
                         fixedId: normalizedFixedId || ''
-                    };
+                    });
 
                     if (shouldNormalizeWertguthabenKategorieInFirestore(data.kategorie)) {
                         normalizeKategorieInFirestore(docSnap.id, normalizedCategory);
@@ -2044,6 +2043,12 @@ export function listenForWertguthaben() {
                     }
                 }
             });
+
+            entries.sort((a, b) => getWertguthabenSortTimestamp(b, 'createdAt') - getWertguthabenSortTimestamp(a, 'createdAt'));
+            WERTGUTHABEN = entries.reduce((accumulator, entry) => {
+                accumulator[entry.id] = entry;
+                return accumulator;
+            }, {});
 
             ensureCurrentWertguthabenListSelection({ preferDefault: !normalizeWertguthabenListId(currentWertguthabenListId) });
             renderWertguthabenListSelector();
@@ -2464,6 +2469,11 @@ function parseLocalDateInputValue(value, endOfDay = false) {
 
 function getTransaktionSortTimestamp(transaktion) {
     const date = toDateValue(transaktion?.datum || transaktion?.createdAt || transaktion?.updatedAt);
+    return date ? date.getTime() : 0;
+}
+
+function getWertguthabenSortTimestamp(entry, primaryField = 'createdAt') {
+    const date = toDateValue(entry?.[primaryField] || entry?.updatedAt || entry?.createdAt);
     return date ? date.getTime() : 0;
 }
 
@@ -3489,7 +3499,7 @@ async function loadArchivedWertguthabenEntries() {
     if (!wertguthabenCollection) return [];
 
     try {
-        const snapshot = await getDocs(query(wertguthabenCollection, where('createdBy', '==', currentUser.mode), orderBy('archiviertAm', 'desc')));
+        const snapshot = await getDocs(query(wertguthabenCollection, where('createdBy', '==', currentUser.mode)));
         const entries = [];
         snapshot.forEach((docSnap) => {
             const data = docSnap.data() || {};
@@ -3503,6 +3513,8 @@ async function loadArchivedWertguthabenEntries() {
                 fixedId: normalizeFixedId(data.fixedId) || ''
             });
         });
+
+        entries.sort((a, b) => getWertguthabenSortTimestamp(b, 'archiviertAm') - getWertguthabenSortTimestamp(a, 'archiviertAm'));
 
         ARCHIVED_WERTGUTHABEN = entries.reduce((accumulator, entry) => {
             accumulator[entry.id] = entry;

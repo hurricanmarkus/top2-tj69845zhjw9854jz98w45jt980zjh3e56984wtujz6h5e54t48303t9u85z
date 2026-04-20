@@ -1,14 +1,24 @@
 {
-  "version": "1.11.0",
-  "buildId": "20260420-1",
+  "version": "1.11.1",
+  "buildId": "20260420-2",
   "releaseDate": "2026-04-20",
-  "releaseTime": "08:47",
+  "releaseTime": "09:03",
   "bereich": "Wertguthaben",
   "timezone": "Europe/Vienna",
-  "note": "Wertguthaben unterstützt jetzt private Listen mit Standardliste, Spezialliste für nicht zugeordnete Elemente, sicherem Listenlöschen und listenbewusstem Einlösesystem.",
-  "commitId": "39df8f7",
+  "note": "Wertguthaben lädt Live-Liste und Archiv jetzt indexfrei und sortiert lokal weiter nach Zeitstempeln, damit der wartende Firestore-Index den Bereich nicht blockiert.",
+  "commitId": "c076733",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.11.1",
+      "buildId": "20260420-2",
+      "releaseDate": "2026-04-20",
+      "releaseTime": "09:03",
+      "bereich": "Wertguthaben",
+      "note": "Wertguthaben lädt Live-Liste und Archiv jetzt indexfrei und sortiert lokal weiter nach Zeitstempeln, damit der wartende Firestore-Index den Bereich nicht blockiert.",
+      "commitId": "c076733",
+      "obligation": "false"
+    },
     {
       "version": "1.11.0",
       "buildId": "20260420-1",
