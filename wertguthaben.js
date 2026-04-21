@@ -175,12 +175,12 @@ const TYP_CONFIG = {
         color: 'bg-purple-100 text-purple-800' 
     },
     wertguthaben: { 
-        label: 'Wertguthaben', 
+        label: 'Credit Wallet', 
         icon: '🏦', 
         color: 'bg-emerald-100 text-emerald-800' 
     },
     wertguthaben_gesetzlich: { 
-        label: 'Wertguthaben (gesetzlich)', 
+        label: 'Credit Wallet (gesetzlich)', 
         icon: '⚖️', 
         color: 'bg-yellow-100 text-yellow-800' 
     },
@@ -195,7 +195,7 @@ const TYP_CONFIG = {
 // INITIALISIERUNG
 // ========================================
 export function initializeWertguthaben() {
-    console.log("💰 Wertguthaben-System wird initialisiert...");
+    console.log("💰 Credit-Wallet-System wird initialisiert...");
 
     // Einstellungen aus Firebase laden (NACH loadUserSettings)
     loadSettings();
@@ -1740,7 +1740,7 @@ function renderEinloeseEntry(entry) {
 window.selectEinloeseWertguthaben = function(entryId, options = {}) {
     const entry = WERTGUTHABEN[entryId];
     if (!entry) {
-        alertUser('Wertguthaben nicht gefunden.', 'error');
+        alertUser('Credit Wallet nicht gefunden.', 'error');
         return;
     }
 
@@ -2078,13 +2078,13 @@ export function stopWertguthabenListener() {
         unsubscribeWertguthabenSettings();
         unsubscribeWertguthabenSettings = null;
         wertguthabenSettingsSyncUserId = '';
-        console.log("🛑 Wertguthaben-Settings-Listener gestoppt.");
+        console.log("🛑 Credit-Wallet-Settings-Listener gestoppt.");
     }
 
     if (unsubscribeWertguthaben) {
         unsubscribeWertguthaben();
         unsubscribeWertguthaben = null;
-        console.log("🛑 Wertguthaben-Listener gestoppt.");
+        console.log("🛑 Credit-Wallet-Listener gestoppt.");
     }
 
     WERTGUTHABEN = {};
@@ -2092,7 +2092,7 @@ export function stopWertguthabenListener() {
         renderWertguthabenTable();
         updateStatistics();
     } catch (e) {
-        console.warn("Wertguthaben: UI konnte nach stopWertguthabenListener nicht aktualisiert werden:", e);
+        console.warn("Credit Wallet: UI konnte nach stopWertguthabenListener nicht aktualisiert werden:", e);
     }
 }
 
@@ -2107,7 +2107,7 @@ export function listenForWertguthaben() {
     }
 
     if (!wertguthabenCollection) {
-        console.warn("⚠️ Wertguthaben-Collection noch nicht initialisiert. Warte...");
+        console.warn("⚠️ Credit-Wallet-Collection noch nicht initialisiert. Warte...");
         setTimeout(listenForWertguthaben, 500);
         return;
     }
@@ -2116,7 +2116,7 @@ export function listenForWertguthaben() {
         if (unsubscribeWertguthaben) {
             unsubscribeWertguthaben();
             unsubscribeWertguthaben = null;
-            console.log("🛑 Wertguthaben-Listener gestoppt.");
+            console.log("🛑 Credit-Wallet-Listener gestoppt.");
         }
 
         const q = query(
@@ -2167,8 +2167,8 @@ export function listenForWertguthaben() {
             checkWertguthabenForNotifications();
             refreshEinloeseSelection();
         }, (error) => {
-            console.error("Fehler beim Laden der Wertguthaben:", error);
-            alertUser("Fehler beim Laden der Wertguthaben. Bitte Firestore-Regeln prüfen.", 'error');
+            console.error("Fehler beim Laden der Credit Wallets:", error);
+            alertUser("Fehler beim Laden der Credit Wallets. Bitte Firestore-Regeln prüfen.", 'error');
         });
     } catch (error) {
         console.error("Fehler beim Setup des Listeners:", error);
@@ -2225,13 +2225,13 @@ function renderWertguthabenTable() {
     if (wertguthaben.length === 0) {
         const hasRealLists = hasRealWertguthabenListen();
         const listName = getWertguthabenListNameById(currentWertguthabenListId);
-        let emptyMessage = 'Keine Wertguthaben gefunden.';
+        let emptyMessage = 'Keine Credit Wallets gefunden.';
         if (!hasRealLists) {
             emptyMessage = 'Bitte zuerst eine Liste anlegen.';
         } else if (isSpecialWertguthabenListId(currentWertguthabenListId)) {
             emptyMessage = 'Keine nicht zugeordneten Elemente gefunden.';
         } else if (listName) {
-            emptyMessage = `Keine Wertguthaben in „${listName}“ gefunden.`;
+            emptyMessage = `Keine Credit Wallets in „${listName}“ gefunden.`;
         }
         tbody.innerHTML = `
             <tr>
@@ -2843,7 +2843,7 @@ function updateWertguthabenCreateButtonState() {
     createBtn.classList.toggle('opacity-50', !hasRealLists);
     createBtn.classList.toggle('cursor-not-allowed', !hasRealLists);
     createBtn.title = hasRealLists
-        ? 'Neues Wertguthaben anlegen'
+        ? 'Neues Credit Wallet anlegen'
         : 'Bitte zuerst eine Liste anlegen';
     createBtn.setAttribute('aria-disabled', hasRealLists ? 'false' : 'true');
 }
@@ -3039,7 +3039,7 @@ function startWertguthabenSettingsSync() {
             : null;
         applyWertguthabenSettings(rawSettings);
     }, (error) => {
-        console.warn('Wertguthaben-Settings-Sync fehlgeschlagen:', error);
+        console.warn('Credit-Wallet-Settings-Sync fehlgeschlagen:', error);
     });
 }
 
@@ -3496,12 +3496,12 @@ async function persistWertguthabenSettings() {
         const persistedSerialized = JSON.stringify(buildNormalizedWertguthabenSettingsPayload(persisted));
 
         if (persistedSerialized !== expectedSerialized) {
-            throw new Error('Die Wertguthaben-Einstellungen konnten nicht in Firebase bestätigt werden.');
+            throw new Error('Die Credit-Wallet-Einstellungen konnten nicht in Firebase bestätigt werden.');
         }
 
         return true;
     } catch (error) {
-        console.error('Konnte Wertguthaben-Einstellungen nicht speichern:', error);
+        console.error('Konnte Credit-Wallet-Einstellungen nicht speichern:', error);
         alertUser('Einstellungen konnten nicht gespeichert werden.', 'error');
         return false;
     }
@@ -3672,7 +3672,7 @@ async function loadArchivedWertguthabenEntries() {
         }, {});
         return entries;
     } catch (error) {
-        console.error('Fehler beim Laden des Wertguthaben-Archivs:', error);
+        console.error('Fehler beim Laden des Credit-Wallet-Archivs:', error);
         alertUser('Archiv konnte nicht geladen werden.', 'error');
         return [];
     }
@@ -3735,11 +3735,11 @@ async function confirmWertguthabenArchivierung() {
     const reason = getSelectedWertguthabenArchiveReason();
     const entry = WERTGUTHABEN[entryId];
     if (!entry) {
-        alertUser('Wertguthaben nicht gefunden.', 'error');
+        alertUser('Credit Wallet nicht gefunden.', 'error');
         return;
     }
     if (!reason) {
-        alertUser('Bitte einen Archivierungsgrund wählen oder eingeben.', 'warning');
+        alertUser('Bitte einen Archivierungsgrund auswählen.', 'warning');
         return;
     }
     if (isUnassignedWertguthabenEntry(entry)) {
@@ -3762,12 +3762,12 @@ async function confirmWertguthabenArchivierung() {
         closeWertguthabenArchiveConfirmModal();
         const detailsModal = document.getElementById('wertguthabenDetailsModal');
         if (detailsModal) detailsModal.style.display = 'none';
-        alertUser('Wertguthaben archiviert.', 'success');
+        alertUser('Credit Wallet archiviert.', 'success');
         if (document.getElementById('wertguthabenArchivModal')?.style.display === 'flex') {
             await renderWertguthabenArchivOverview();
         }
     } catch (error) {
-        console.error('Fehler beim Archivieren des Wertguthabens:', error);
+        console.error('Fehler beim Archivieren des Credit Wallets:', error);
         alertUser('Fehler beim Archivieren: ' + error.message, 'error');
     }
 }
@@ -3794,10 +3794,10 @@ async function restoreArchivedWertguthaben(entryId) {
         if (wertguthabenDetailsState.readOnly && wertguthabenDetailsState.entryId === entryId) {
             document.getElementById('wertguthabenDetailsModal').style.display = 'none';
         }
-        alertUser('Wertguthaben wiederhergestellt.', 'success');
+        alertUser('Credit Wallet wiederhergestellt.', 'success');
         await renderWertguthabenArchivOverview();
     } catch (error) {
-        console.error('Fehler beim Wiederherstellen des Wertguthabens:', error);
+        console.error('Fehler beim Wiederherstellen des Credit Wallets:', error);
         alertUser('Fehler beim Wiederherstellen: ' + error.message, 'error');
     }
 }
@@ -3828,12 +3828,12 @@ async function permanentlyDeleteArchivedWertguthaben(entryId) {
         if (wertguthabenDetailsState.entryId === entryId) {
             document.getElementById('wertguthabenDetailsModal').style.display = 'none';
         }
-        alertUser('Wertguthaben endgültig gelöscht.', 'success');
+        alertUser('Credit Wallet endgültig gelöscht.', 'success');
         if (document.getElementById('wertguthabenArchivModal')?.style.display === 'flex') {
             await renderWertguthabenArchivOverview();
         }
     } catch (error) {
-        console.error('Fehler beim endgültigen Löschen des Wertguthabens:', error);
+        console.error('Fehler beim endgültigen Löschen des Credit Wallets:', error);
         alertUser('Fehler beim Löschen: ' + error.message, 'error');
     }
 }
@@ -4420,7 +4420,7 @@ function openCreateModal(options = {}) {
         return;
     }
 
-    document.getElementById('wertguthabenModalTitle').textContent = 'Neues Wertguthaben';
+    document.getElementById('wertguthabenModalTitle').textContent = 'Neues Credit Wallet';
     document.getElementById('editWertguthabenId').value = '';
     resetForm();
     wertguthabenFormState.statusManuallyChanged = false;
@@ -4837,7 +4837,7 @@ async function saveWertguthaben() {
             // Update
             const docRef = doc(wertguthabenCollection, editId);
             await updateDoc(docRef, data);
-            alertUser('Wertguthaben aktualisiert!', 'success');
+            alertUser('Credit Wallet aktualisiert!', 'success');
         } else {
             // Create
             data.fixedId = await generateUniqueGlobalShortId();
@@ -4857,7 +4857,7 @@ async function saveWertguthaben() {
                 createdAt: serverTimestamp(),
                 createdBy: currentUser.mode
             });
-            alertUser('Wertguthaben erstellt!', 'success');
+            alertUser('Credit Wallet erstellt!', 'success');
         }
 
         closeWertguthabenModal();
@@ -4878,7 +4878,7 @@ window.openEditWertguthaben = function(id) {
     const wg = WERTGUTHABEN[id];
     if (!wg) return;
 
-    document.getElementById('wertguthabenModalTitle').textContent = 'Wertguthaben bearbeiten';
+    document.getElementById('wertguthabenModalTitle').textContent = 'Credit Wallet bearbeiten';
     document.getElementById('editWertguthabenId').value = id;
     populateWertguthabenFormFromEntry(wg, { isCopy: false });
     setWertguthabenCopyMode(false);
@@ -5157,7 +5157,7 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
     const wertguthabenDoc = await getDoc(wertguthabenRef);
 
     if (!wertguthabenDoc.exists()) {
-        return alertUser('Wertguthaben nicht gefunden!', 'error');
+        return alertUser('Credit Wallet nicht gefunden!', 'error');
     }
 
     const wg = wertguthabenDoc.data();
@@ -5472,7 +5472,7 @@ async function saveTransaktion() {
 
     const wg = WERTGUTHABEN[wertguthabenId];
     if (!wg) {
-        return alertUser('Wertguthaben nicht gefunden!', 'error');
+        return alertUser('Credit Wallet nicht gefunden!', 'error');
     }
 
     if (isUnassignedWertguthabenEntry(wg)) {
@@ -6136,7 +6136,7 @@ async function saveSettings() {
 function loadSettings() {
     try {
         applyWertguthabenSettings(getUserSetting('wertguthabenSettings', null));
-        console.log('✅ Wertguthaben-Einstellungen geladen:', wertguthabenSettings);
+        console.log('✅ Credit-Wallet-Einstellungen geladen:', wertguthabenSettings);
     } catch (error) {
         console.warn('Konnte Einstellungen nicht laden:', error);
     }
@@ -6154,13 +6154,13 @@ async function ensureAllEntriesHaveValidKategorie() {
 window.deleteTransaktion = async function(wertguthabenId, transaktionId) {
     const wg = WERTGUTHABEN[wertguthabenId];
     if (!wg) {
-        return alertUser('Wertguthaben nicht gefunden!', 'error');
+        return alertUser('Credit Wallet nicht gefunden!', 'error');
     }
 
     // Sicherheitsabfrage
     const confirmDelete = confirm(
         `Möchten Sie diese Transaktion wirklich löschen?\n\n` +
-        `Dadurch wird die Buchung rückgängig gemacht und der Status des Wertguthabens angepasst.\n\n` +
+        `Dadurch wird die Buchung rückgängig gemacht und der Status des Credit Wallets angepasst.\n\n` +
         `Diese Aktion kann nicht rückgängig gemacht werden!`
     );
 

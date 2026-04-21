@@ -71,7 +71,7 @@ export const PERMISSIONS_CONFIG = {
     'TICKET_SUPPORT': { label: 'Ticket Support', indent: false },
     'NOTIZEN': { label: 'Notizen', indent: false },
     'NOTIZEN_CREATE': { label: '-> Notiz/Kategorie anlegen', indent: true },
-    'WERTGUTHABEN': { label: 'Wertguthaben', indent: false },
+    'WERTGUTHABEN': { label: 'Credit Wallet', indent: false },
     'LIZENZEN': { label: 'Lizenzen', indent: false },
     'VERTRAGSVERWALTUNG': { label: 'Vertragsverwaltung', indent: false },
     'SENDUNGSVERWALTUNG': { label: 'Sendungsverwaltung', indent: false },
@@ -2249,7 +2249,7 @@ function getPushmailCenterProgramDefinitions() {
         { id: 'ESSENSBERECHNUNG', title: 'Essensberechnung', permission: 'ESSENSBERECHNUNG', border: 'border-orange-500', text: 'text-orange-600' },
         { id: 'ZAHLUNGSVERWALTUNG', title: 'Zahlungsverwaltung', permission: 'ZAHLUNGSVERWALTUNG', border: 'border-emerald-600', text: 'text-emerald-700' },
         { id: 'TICKET_SUPPORT', title: 'Ticket-Support', permission: 'TICKET_SUPPORT', border: 'border-purple-600', text: 'text-purple-700' },
-        { id: 'WERTGUTHABEN', title: 'Wertguthaben', permission: 'WERTGUTHABEN', border: 'border-emerald-600', text: 'text-emerald-700' },
+        { id: 'WERTGUTHABEN', title: 'Credit Wallet', permission: 'WERTGUTHABEN', border: 'border-emerald-600', text: 'text-emerald-700' },
         { id: 'LIZENZEN', title: 'Lizenzen', permission: 'LIZENZEN', border: 'border-yellow-600', text: 'text-yellow-700' },
         { id: 'VERTRAGSVERWALTUNG', title: 'Vertragsverwaltung', permission: 'VERTRAGSVERWALTUNG', border: 'border-indigo-600', text: 'text-indigo-700' },
         { id: 'REZEPTE', title: 'Rezepte', permission: 'REZEPTE', border: 'border-orange-500', text: 'text-orange-600' },
@@ -2923,7 +2923,7 @@ export function navigate(targetViewName, options = {}) {
 
         // Zugriffsschutz für Wertguthaben
         if ((targetViewName === 'wertguthaben' || targetViewName === 'wertguthabenSettings') && !userPermissions.includes('WERTGUTHABEN')) {
-            return alertUser("Zugriff verweigert (Wertguthaben).", 'error');
+            return alertUser("Zugriff verweigert (Credit Wallet).", 'error');
         }
 
         // Zugriffsschutz für Lizenzen

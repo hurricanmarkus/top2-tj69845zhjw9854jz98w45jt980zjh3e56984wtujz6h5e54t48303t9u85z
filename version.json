@@ -1,14 +1,24 @@
 {
-  "version": "1.11.5",
-  "buildId": "20260421-2",
+  "version": "1.11.6",
+  "buildId": "20260421-3",
   "releaseDate": "2026-04-21",
-  "releaseTime": "12:10",
-  "bereich": "Wertguthaben",
+  "releaseTime": "12:30",
+  "bereich": "Credit Wallet",
   "timezone": "Europe/Vienna",
-  "note": "Das Wertguthaben-Dashboard wurde auf schmale Buchung- und Edit-Spalten umgebaut, Eigentümer kompakter dargestellt und die Detailaktionen in ein 3-Punkte-Menü verschoben.",
-  "commitId": "abf6b1c",
+  "note": "Sichtbare App-Texte des Moduls wurden appweit auf Credit Wallet umgestellt, ohne technische Datenpfade und Kompatibilitätsanker zu verändern.",
+  "commitId": "6944182",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.11.6",
+      "buildId": "20260421-3",
+      "releaseDate": "2026-04-21",
+      "releaseTime": "12:30",
+      "bereich": "Credit Wallet",
+      "note": "Sichtbare App-Texte des Moduls wurden appweit auf Credit Wallet umgestellt, ohne technische Datenpfade und Kompatibilitätsanker zu verändern.",
+      "commitId": "6944182",
+      "obligation": "false"
+    },
     {
       "version": "1.11.5",
       "buildId": "20260421-2",

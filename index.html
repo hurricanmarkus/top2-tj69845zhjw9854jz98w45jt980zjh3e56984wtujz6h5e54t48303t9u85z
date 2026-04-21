@@ -24,15 +24,15 @@
     <meta name="application-name" content="TOP 2 App">
     <meta name="apple-mobile-web-app-title" content="TOP2">
     <meta name="theme-color" content="#4f46e5" />
-    <meta name="top2-app-version" content="1.11.5" />
-    <meta name="top2-build-id" content="20260421-2" />
+    <meta name="top2-app-version" content="1.11.6" />
+    <meta name="top2-build-id" content="20260421-3" />
     <meta name="msapplication-navbutton-color" content="#4f46e5">
     <meta name="apple-mobile-app-status-bar-style" content="black-translucent">
     <link rel="icon" type="image/png" sizes="192x192" href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
     <link rel="apple-touch-icon" type="image/png" sizes="192x192"
         href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
 
-    <link rel="manifest" href="manifest.json?v=20260421-2">
+    <link rel="manifest" href="manifest.json?v=20260421-3">
 
     <link rel="stylesheet" href="style.css">
     
@@ -262,7 +262,7 @@
                         <path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM12.75 6a.75.75 0 0 0-1.5 0v.816a3.836 3.836 0 0 0-1.72.756c-.712.566-1.112 1.35-1.112 2.178 0 .829.4 1.612 1.113 2.178.502.4 1.102.647 1.719.756v2.978a2.536 2.536 0 0 1-.921-.421l-.879-.66a.75.75 0 0 0-.9 1.2l.879.66c.533.4 1.169.645 1.821.75V18a.75.75 0 0 0 1.5 0v-.81a4.124 4.124 0 0 0 1.821-.749c.745-.559 1.179-1.344 1.179-2.191 0-.847-.434-1.632-1.179-2.191a4.122 4.122 0 0 0-1.821-.75V8.354c.29.082.559.213.786.393l.415.33a.75.75 0 0 0 .933-1.175l-.415-.33a3.836 3.836 0 0 0-1.719-.755V6Z" clip-rule="evenodd" />
                     </svg>
                     <div>
-                        <span class="text-xl font-bold text-emerald-600 block">Wertguthaben</span>
+                        <span class="text-xl font-bold text-emerald-600 block">Credit Wallet</span>
                         <span class="text-sm text-gray-500">Gutscheine & Guthaben verwalten.</span>
                     </div>
                 </div>
@@ -1932,8 +1932,8 @@
                             <div class="relative">
                                 <button id="btn-wertguthaben-menu"
                                     class="shrink-0 px-2 py-2 text-gray-500 hover:text-gray-800 transition rounded-full hover:bg-gray-200"
-                                    title="Wertguthaben-Menü"
-                                    aria-label="Wertguthaben-Menü öffnen"
+                                    title="Credit-Wallet-Menü"
+                                    aria-label="Credit-Wallet-Menü öffnen"
                                     aria-haspopup="true"
                                     aria-expanded="false">
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 sm:w-5 sm:h-5">
@@ -1969,7 +1969,7 @@
                 <!-- Header mit Statistiken -->
                 <div class="bg-gradient-to-r from-emerald-600 to-teal-500 text-white p-4 rounded-xl shadow-md mb-3">
                     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
-                        <h2 class="text-xl font-bold">💰 Wertguthaben</h2>
+                        <h2 class="text-xl font-bold">💰 Credit Wallet</h2>
                         <div class="w-full sm:w-auto sm:min-w-[220px] sm:max-w-[320px]">
                             <select id="wg-list-selector" class="w-full rounded-lg border-2 border-white/60 bg-white/95 px-3 py-2 text-sm font-bold text-emerald-800 shadow-sm focus:border-white focus:outline-none focus:ring-2 focus:ring-white/40">
                                 <option value="">Liste wählen...</option>
@@ -1987,7 +1987,7 @@
                         </div>
                         <div class="bg-white/20 px-2 py-2 rounded-lg">
                             <p class="text-xl font-bold" id="stat-wertguthaben">0</p>
-                            <p class="text-[10px] font-semibold leading-tight">🏦 Wertguthaben</p>
+                            <p class="text-[10px] font-semibold leading-tight">🏦 Credit Wallet</p>
                         </div>
                         <div class="bg-white/20 px-2 py-2 rounded-lg">
                             <p class="text-xl font-bold" id="stat-total-wert">0€</p>
@@ -2041,8 +2041,8 @@
                                 <option value="">Alle Typen</option>
                                 <option value="gutschein">🎁 Gutschein</option>
                                 <option value="guthaben">💳 Guthaben</option>
-                                <option value="wertguthaben">🏦 Wertguthaben</option>
-                                <option value="wertguthaben_gesetzlich">⚖️ Wertguthaben (gesetzlich)</option>
+                                <option value="wertguthaben">🏦 Credit Wallet</option>
+                                <option value="wertguthaben_gesetzlich">⚖️ Credit Wallet (gesetzlich)</option>
                                 <option value="aktionscode">🏷️ Aktionscode</option>
                             </select>
                             
@@ -2074,7 +2074,7 @@
                     </div>
                 </div>
 
-                <!-- Wertguthaben-Tabelle -->
+                <!-- Credit-Wallet-Tabelle -->
                 <div class="bg-white rounded-lg shadow overflow-hidden">
                     <div class="overflow-x-auto">
                         <table class="min-w-full">
@@ -2087,8 +2087,8 @@
                                         <div class="flex flex-col items-start gap-1">
                                             <button id="btn-create-wertguthaben" type="button"
                                                 class="h-6 w-6 rounded-full bg-emerald-600 text-white leading-none text-base font-black hover:bg-emerald-700 transition"
-                                                title="Neues Wertguthaben anlegen"
-                                                aria-label="Neues Wertguthaben anlegen">+</button>
+                                                title="Neues Credit Wallet anlegen"
+                                                aria-label="Neues Credit Wallet anlegen">+</button>
                                             <span class="normal-case text-[10px] sm:text-[11px] leading-tight">Eigen-<br>tümer</span>
                                         </div>
                                     </th>
@@ -2108,7 +2108,7 @@
                             <tbody id="wertguthaben-table-body" class="divide-y divide-gray-200">
                                 <tr>
                                     <td colspan="11" class="px-4 py-8 text-center text-gray-400 italic">
-                                        Keine Wertguthaben vorhanden. Erstelle dein erstes Guthaben!
+                                        Keine Credit Wallets vorhanden. Erstelle deinen ersten Eintrag!
                                     </td>
                                 </tr>
                             </tbody>
@@ -2157,7 +2157,7 @@
                         </div>
 
                         <div id="wg-einloese-empty-state" class="text-center text-gray-400 italic py-10">
-                            Gib eine ID ein, um ein Wertguthaben direkt einzulösen.
+                            Gib eine ID ein, um ein Credit Wallet direkt einzulösen.
                         </div>
 
                         <div id="wg-einloese-result" class="hidden mt-6">
@@ -5878,7 +5878,7 @@
 
                     <div id="btn-action-value-credit"
                         class="p-1 bg-gray-50 border border-gray-200 rounded-lg shadow-sm flex flex-col justify-center text-center min-h-[45px] opacity-60 cursor-not-allowed">
-                        <p class="text-[9px] font-bold text-gray-500 uppercase leading-none">Wertguthaben</p>
+                        <p class="text-[9px] font-bold text-gray-500 uppercase leading-none">Credit Wallet</p>
                         <p class="text-[9px] text-gray-400 italic leading-none mt-0.5">Folgt...</p>
                     </div>
                 </div>
@@ -7773,13 +7773,13 @@
             </div>
         </div>
 
-        <!-- ========== WERTGUTHABEN MODALS ========== -->
+        <!-- ========== CREDIT WALLET MODALS ========== -->
         
-        <!-- Modal: Wertguthaben erstellen/bearbeiten -->
+        <!-- Modal: Credit Wallet erstellen/bearbeiten -->
         <div id="wertguthabenModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-[70]">
             <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
                 <div class="flex justify-between items-center mb-4">
-                    <h3 id="wertguthabenModalTitle" class="text-2xl font-bold text-emerald-800">Neues Wertguthaben</h3>
+                    <h3 id="wertguthabenModalTitle" class="text-2xl font-bold text-emerald-800">Neues Credit Wallet</h3>
                     <button id="closeWertguthabenModal" class="text-gray-400 hover:text-red-600 font-bold text-3xl leading-none">&times;</button>
                 </div>
 
@@ -7822,8 +7822,8 @@
                             <select id="wgTyp" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-emerald-500 bg-white">
                                 <option value="gutschein">🎁 Gutschein</option>
                                 <option value="guthaben">💳 Guthaben</option>
-                                <option value="wertguthaben">🏦 Wertguthaben</option>
-                                <option value="wertguthaben_gesetzlich">⚖️ Wertguthaben (gesetzlich)</option>
+                                <option value="wertguthaben">🏦 Credit Wallet</option>
+                                <option value="wertguthaben_gesetzlich">⚖️ Credit Wallet (gesetzlich)</option>
                                 <option value="aktionscode">🏷️ Aktionscode</option>
                             </select>
                         </div>
@@ -7912,9 +7912,9 @@
                         </div>
                     </div>
 
-                    <!-- Spezielle Felder für Typ: Wertguthaben / Wertguthaben (gesetzlich) -->
+                    <!-- Spezielle Felder für Typ: Credit Wallet / Credit Wallet (gesetzlich) -->
                     <div id="wertguthaben-felder" class="hidden space-y-4 p-4 bg-emerald-50 rounded-lg border-2 border-emerald-200">
-                        <h4 class="font-bold text-emerald-800">🏦 Wertguthaben-spezifische Felder</h4>
+                        <h4 class="font-bold text-emerald-800">🏦 Credit-Wallet-spezifische Felder</h4>
                         
                         <div>
                             <label class="block text-sm font-bold text-gray-700 mb-2">Ablaufdatum</label>
@@ -8123,11 +8123,11 @@
             </div>
         </div>
 
-        <!-- Modal: Wertguthaben Details -->
+        <!-- Modal: Credit Wallet Details -->
         <div id="wertguthabenDetailsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-[80]">
             <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
                 <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-2xl font-bold text-emerald-800">Wertguthaben Details</h3>
+                    <h3 class="text-2xl font-bold text-emerald-800">Credit Wallet Details</h3>
                     <button id="closeWertguthabenDetailsModal" class="text-gray-400 hover:text-red-600 font-bold text-3xl leading-none">&times;</button>
                 </div>
 
@@ -8273,7 +8273,7 @@
                     <button id="closeWertguthabenArchiveConfirmModal" class="text-gray-400 hover:text-red-600 font-bold text-3xl leading-none">&times;</button>
                 </div>
 
-                <p class="text-sm text-gray-700 leading-relaxed mb-4">Dieser Eintrag wird archiviert und danach im Dashboard sowie in den aktiven Wertguthaben-Systemen nicht mehr angezeigt. Zur Bestätigung musst du <strong>OK</strong> eingeben.</p>
+                <p class="text-sm text-gray-700 leading-relaxed mb-4">Dieser Eintrag wird archiviert und danach im Dashboard sowie in den aktiven Credit-Wallet-Systemen nicht mehr angezeigt. Zur Bestätigung musst du <strong>OK</strong> eingeben.</p>
 
                 <div class="space-y-4">
                     <div>
@@ -8305,16 +8305,16 @@
             </div>
         </div>
 
-        <!-- Modal: Wertguthaben Einstellungen -->
+        <!-- Modal: Credit Wallet Einstellungen -->
         <div id="wertguthabenSettingsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-[90]">
             <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
                 <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-2xl font-bold text-emerald-800">⚙️ Wertguthaben-Einstellungen</h3>
+                    <h3 class="text-2xl font-bold text-emerald-800">⚙️ Credit-Wallet-Einstellungen</h3>
                     <button id="closeWertguthabenSettingsModal" class="text-gray-400 hover:text-red-600 font-bold text-3xl leading-none">&times;</button>
                 </div>
 
                 <p class="text-sm text-gray-600 mb-4">
-                    Lege fest, wie viele Tage vor Ablauf eine Warnung angezeigt werden soll, wenn bei einem Wertguthaben keine individuelle Warnung eingestellt ist.
+                    Lege fest, wie viele Tage vor Ablauf eine Warnung angezeigt werden soll, wenn bei einem Credit Wallet keine individuelle Warnung eingestellt ist.
                 </p>
 
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -8345,11 +8345,11 @@
                             </div>
                         </div>
 
-                        <!-- Wertguthaben -->
+                        <!-- Credit Wallet -->
                         <div class="p-4 bg-emerald-50 rounded-lg border-2 border-emerald-200">
                             <div class="flex items-center gap-2 mb-2">
                                 <span class="text-2xl">🏦</span>
-                                <label class="block text-sm font-bold text-emerald-800">Wertguthaben</label>
+                                <label class="block text-sm font-bold text-emerald-800">Credit Wallet</label>
                             </div>
                             <div class="flex items-center gap-2">
                                 <input type="number" id="settings-warning-wertguthaben" min="0" value="90"
@@ -8358,11 +8358,11 @@
                             </div>
                         </div>
 
-                        <!-- Wertguthaben (gesetzlich) -->
+                        <!-- Credit Wallet (gesetzlich) -->
                         <div class="p-4 bg-yellow-50 rounded-lg border-2 border-yellow-200">
                             <div class="flex items-center gap-2 mb-2">
                                 <span class="text-2xl">⚖️</span>
-                                <label class="block text-sm font-bold text-yellow-800">Wertguthaben (gesetzlich)</label>
+                                <label class="block text-sm font-bold text-yellow-800">Credit Wallet (gesetzlich)</label>
                             </div>
                             <div class="flex items-center gap-2">
                                 <input type="number" id="settings-warning-wertguthaben_gesetzlich" min="0" value="180"
@@ -8376,7 +8376,7 @@
                         <div class="p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
                             <h4 class="font-bold text-blue-900 mb-3">📂 Listen verwalten</h4>
                             <p class="text-xs text-blue-800 mb-3">
-                                Lege private Listen für deine Wertguthaben an, setze eine Standardliste und verwalte bestehende Listen.
+                                Lege private Listen für deine Credit Wallets an, setze eine Standardliste und verwalte bestehende Listen.
                             </p>
                             <div class="flex gap-2 mb-3">
                                 <input type="text" id="new-wg-liste-input" placeholder="Neue Liste..."
@@ -8432,7 +8432,7 @@
                     <div class="rounded-xl border-2 border-red-300 bg-red-50 p-4 text-sm text-red-900 select-none">
                         <p class="font-black mb-2">⚠️ ACHTUNG: Diese Aktion ist unwiderruflich.</p>
                         <p id="wg-list-delete-warning-name" class="mb-2">Die Liste wird dauerhaft gelöscht.</p>
-                        <p class="text-red-800">Alle enthaltenen Wertguthaben-Einträge dieser Liste werden ebenfalls endgültig gelöscht.</p>
+                        <p class="text-red-800">Alle enthaltenen Credit-Wallet-Einträge dieser Liste werden ebenfalls endgültig gelöscht.</p>
                     </div>
 
                     <label class="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-sm font-semibold text-gray-700 select-none">

@@ -172,7 +172,7 @@ export const NOTIFICATION_DEFINITIONS = {
     },
 
     WERTGUTHABEN: {
-        title: "Wertguthaben",
+        title: "Credit Wallet",
         color: "emerald",
         borderClass: "border-emerald-600",
         textClass: "text-emerald-700",
