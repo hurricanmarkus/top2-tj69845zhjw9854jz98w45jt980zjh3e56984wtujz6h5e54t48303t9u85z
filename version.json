@@ -1,14 +1,34 @@
 {
-  "version": "1.11.3",
-  "buildId": "20260420-4",
-  "releaseDate": "2026-04-20",
-  "releaseTime": "10:03",
+  "version": "1.11.5",
+  "buildId": "20260421-2",
+  "releaseDate": "2026-04-21",
+  "releaseTime": "12:10",
   "bereich": "Wertguthaben",
   "timezone": "Europe/Vienna",
-  "note": "Wertguthaben sperrt für Nicht-zugeordnete Elemente jetzt Transaktion, Archivierung und Verifizierung konsequent, blockiert Speziallisten-IDs im Einlösesystem und verwendet klarere Dashboard-Aktionsicons.",
-  "commitId": "0b80850",
+  "note": "Das Wertguthaben-Dashboard wurde auf schmale Buchung- und Edit-Spalten umgebaut, Eigentümer kompakter dargestellt und die Detailaktionen in ein 3-Punkte-Menü verschoben.",
+  "commitId": "abf6b1c",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.11.5",
+      "buildId": "20260421-2",
+      "releaseDate": "2026-04-21",
+      "releaseTime": "12:10",
+      "bereich": "Wertguthaben",
+      "note": "Das Wertguthaben-Dashboard wurde auf schmale Buchung- und Edit-Spalten umgebaut, Eigentümer kompakter dargestellt und die Detailaktionen in ein 3-Punkte-Menü verschoben.",
+      "commitId": "abf6b1c",
+      "obligation": "false"
+    },
+    {
+      "version": "1.11.4",
+      "buildId": "20260421-1",
+      "releaseDate": "2026-04-21",
+      "releaseTime": "12:08",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Zukünftige geplante Zahlungen zählen im Dashboard erst ab ihrem Startdatum zu Ich schulde und Mir geschuldet und bleiben bis dahin nur in Zukunft sichtbar.",
+      "commitId": "abf6b1c",
+      "obligation": "false"
+    },
     {
       "version": "1.11.3",
       "buildId": "20260420-4",

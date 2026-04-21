@@ -4409,6 +4409,9 @@ function updateDashboard(payments) {
     let myCreditAtOthers = 0; // Guthaben, das ICH bei anderen habe
     let othersCreditAtMe = 0; // Guthaben, das ANDERE bei mir haben
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     payments.forEach(p => {
         // Nur offene Einträge zählen
         if (p.status !== 'open' && p.status !== 'pending_approval') return;
@@ -4419,6 +4422,12 @@ function updateDashboard(payments) {
             if (!myAccess || myAccess.status !== 'accepted') {
                 return; // Ignorieren für die Berechnung
             }
+        }
+
+        if (p.startDate) {
+            const start = new Date(p.startDate);
+            start.setHours(0, 0, 0, 0);
+            if (start > today) return;
         }
 
         const amount = p.isTBD ? 0 : parseFloat(p.remainingAmount);

@@ -52,6 +52,7 @@ let wgEinloeseScannerInterval = null;
 let wgEinloeseScannerBusy = false;
 let wgEinloeseBarcodeDetector = null;
 let wertguthabenMenuOpen = false;
+let wertguthabenDetailsMoreMenuOpen = false;
 let wgTransaktionenRenderRequestId = 0;
 let wgListDeleteTimer = null;
 let wgListDeleteSecondsLeft = 0;
@@ -481,9 +482,19 @@ function setupEventListeners() {
     const closeDetails = document.getElementById('closeWertguthabenDetailsModal');
     if (closeDetails && !closeDetails.dataset.listenerAttached) {
         closeDetails.addEventListener('click', () => {
+            closeWertguthabenDetailsMoreMenu();
             document.getElementById('wertguthabenDetailsModal').style.display = 'none';
         });
         closeDetails.dataset.listenerAttached = 'true';
+    }
+
+    const detailsMoreBtn = document.getElementById('wertguthabenDetailsMoreBtn');
+    if (detailsMoreBtn && !detailsMoreBtn.dataset.listenerAttached) {
+        detailsMoreBtn.addEventListener('click', (event) => {
+            event.stopPropagation();
+            toggleWertguthabenDetailsMoreMenu();
+        });
+        detailsMoreBtn.dataset.listenerAttached = 'true';
     }
 
     // Typ-Change Event
@@ -642,6 +653,9 @@ function setupEventListeners() {
             }
             if (!e.target.closest('#btn-wertguthaben-menu') && !e.target.closest('#wertguthabenMenuDropdown')) {
                 closeWertguthabenMenuDropdown();
+            }
+            if (!e.target.closest('#wertguthabenDetailsMoreBtn') && !e.target.closest('#wertguthabenDetailsMoreMenu')) {
+                closeWertguthabenDetailsMoreMenu();
             }
         });
         document.body.dataset.wgSuggestionsListenerAttached = 'true';
@@ -2221,7 +2235,7 @@ function renderWertguthabenTable() {
         }
         tbody.innerHTML = `
             <tr>
-                <td colspan="10" class="px-4 py-8 text-center text-gray-400 italic">
+                <td colspan="11" class="px-4 py-8 text-center text-gray-400 italic">
                     ${escapeHtml(emptyMessage)}
                 </td>
             </tr>
@@ -2241,19 +2255,32 @@ function renderWertguthabenTable() {
         const transactionButtonTitle = isUnassignedEntry
             ? 'Für „Nicht zugeordnete Elemente“ nicht verfügbar'
             : 'Transaktion buchen';
+        const eigentuemerCell = renderCompactDashboardCell(eigentuemerName, 'max-w-[5.25rem] text-[13px] font-semibold');
+        const categoryCell = renderCompactDashboardCell(normalizeWertguthabenKategorie(w.kategorie), 'max-w-[6.5rem] text-sm');
+        const nameCell = renderCompactDashboardCell(w.name || '-', 'max-w-[7.5rem] text-sm font-semibold');
+        const unternehmenCell = renderCompactDashboardCell(w.unternehmen || '-', 'max-w-[7.5rem] text-sm text-gray-600');
         
         return `
             <tr class="hover:bg-gray-50 cursor-pointer transition" onclick="window.openWertguthabenDetails('${w.id}')">
-                <td class="px-4 py-3 text-sm">${eigentuemerName}</td>
+                <td class="px-2 py-3 text-center align-top" onclick="event.stopPropagation()">
+                    <button ${isUnassignedEntry ? 'disabled' : `onclick="window.openTransaktionModal('${w.id}')"`}
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg transition ${isUnassignedEntry ? 'cursor-not-allowed text-gray-300 bg-gray-100' : 'text-violet-600 hover:bg-violet-50 hover:text-violet-800'}" title="${escapeHtml(transactionButtonTitle)}" aria-label="${escapeHtml(transactionButtonTitle)}">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
+                            <path d="M3.5 5A2.5 2.5 0 0 1 6 2.5h8A2.5 2.5 0 0 1 16.5 5v1.028c-.332-.063-.675-.095-1.028-.095H4.528c-.353 0-.696.032-1.028.095V5Z" />
+                            <path fill-rule="evenodd" d="M2 8.75A1.75 1.75 0 0 1 3.75 7h11.5A1.75 1.75 0 0 1 17 8.75v5.5A1.75 1.75 0 0 1 15.25 16H3.75A1.75 1.75 0 0 1 2 14.25v-5.5ZM13 11a.75.75 0 0 0 0 1.5h1.5A.75.75 0 0 0 14.5 11H13Z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </td>
+                <td class="px-3 py-3 align-top">${eigentuemerCell}</td>
                 <td class="px-4 py-3">
                     <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold ${typConfig.color}">
                         ${typConfig.icon} ${typConfig.label}
                     </span>
                 </td>
                 <td class="px-4 py-3 text-sm font-mono font-bold text-gray-700">#${escapeHtml(getWertguthabenDisplayId(w))}</td>
-                <td class="px-4 py-3 text-sm">${escapeHtml(normalizeWertguthabenKategorie(w.kategorie))}</td>
-                <td class="px-4 py-3 text-sm font-semibold">${w.name || '-'}</td>
-                <td class="px-4 py-3 text-sm text-gray-600">${w.unternehmen || '-'}</td>
+                <td class="px-4 py-3 align-top">${categoryCell}</td>
+                <td class="px-4 py-3 align-top">${nameCell}</td>
+                <td class="px-4 py-3 align-top">${unternehmenCell}</td>
                 <td class="px-4 py-3 text-sm">
                     <div class="flex flex-col">
                         <span class="font-bold text-emerald-700">${restwert !== undefined ? restwert.toFixed(2) + ' €' : '-'}</span>
@@ -2263,23 +2290,14 @@ function renderWertguthabenTable() {
                 </td>
                 <td class="px-4 py-3 text-sm">${restzeit}</td>
                 <td class="px-4 py-3">${statusBadge}</td>
-                <td class="px-4 py-3 text-center" onclick="event.stopPropagation()">
-                    <div class="flex justify-center gap-2">
-                        <button onclick="window.openEditWertguthaben('${w.id}')" 
-                            class="inline-flex h-9 w-9 items-center justify-center rounded-lg text-blue-600 transition hover:bg-blue-50 hover:text-blue-800" title="Bearbeiten" aria-label="Bearbeiten">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
-                                <path d="M5.433 13.917A4.5 4.5 0 0 1 6.5 11.028l6.586-6.586a2 2 0 1 1 2.828 2.828l-6.586 6.586a4.5 4.5 0 0 1-2.89 1.067H4.5a.5.5 0 0 1-.5-.5v-1.938Z" />
-                                <path d="M3.5 5a1.5 1.5 0 0 1 1.5-1.5h4a.75.75 0 0 0 0-1.5H5A3 3 0 0 0 2 5v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-4a.75.75 0 0 0-1.5 0v4a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 15V5Z" />
-                            </svg>
-                        </button>
-                        <button ${isUnassignedEntry ? 'disabled' : `onclick="window.openTransaktionModal('${w.id}')"`}
-                            class="inline-flex h-9 w-9 items-center justify-center rounded-lg transition ${isUnassignedEntry ? 'cursor-not-allowed text-gray-300 bg-gray-100' : 'text-violet-600 hover:bg-violet-50 hover:text-violet-800'}" title="${escapeHtml(transactionButtonTitle)}" aria-label="${escapeHtml(transactionButtonTitle)}">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
-                                <path d="M3.5 5A2.5 2.5 0 0 1 6 2.5h8A2.5 2.5 0 0 1 16.5 5v1.028c-.332-.063-.675-.095-1.028-.095H4.528c-.353 0-.696.032-1.028.095V5Z" />
-                                <path fill-rule="evenodd" d="M2 8.75A1.75 1.75 0 0 1 3.75 7h11.5A1.75 1.75 0 0 1 17 8.75v5.5A1.75 1.75 0 0 1 15.25 16H3.75A1.75 1.75 0 0 1 2 14.25v-5.5ZM13 11a.75.75 0 0 0 0 1.5h1.5A.75.75 0 0 0 14.5 11H13Z" clip-rule="evenodd" />
-                            </svg>
-                        </button>
-                    </div>
+                <td class="px-2 py-3 text-center align-top" onclick="event.stopPropagation()">
+                    <button onclick="window.openEditWertguthaben('${w.id}')" 
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg text-blue-600 transition hover:bg-blue-50 hover:text-blue-800" title="Bearbeiten" aria-label="Bearbeiten">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
+                            <path d="M5.433 13.917A4.5 4.5 0 0 1 6.5 11.028l6.586-6.586a2 2 0 1 1 2.828 2.828l-6.586 6.586a4.5 4.5 0 0 1-2.89 1.067H4.5a.5.5 0 0 1-.5-.5v-1.938Z" />
+                            <path d="M3.5 5a1.5 1.5 0 0 1 1.5-1.5h4a.75.75 0 0 0 0-1.5H5A3 3 0 0 0 2 5v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-4a.75.75 0 0 0-1.5 0v4a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 15V5Z" />
+                        </svg>
+                    </button>
                 </td>
             </tr>
         `;
@@ -3503,6 +3521,24 @@ function closeWertguthabenMenuDropdown() {
     const menuBtn = document.getElementById('btn-wertguthaben-menu');
     const dropdown = document.getElementById('wertguthabenMenuDropdown');
     wertguthabenMenuOpen = false;
+    if (dropdown) dropdown.classList.add('hidden');
+    if (menuBtn) menuBtn.setAttribute('aria-expanded', 'false');
+}
+
+function toggleWertguthabenDetailsMoreMenu() {
+    const menuBtn = document.getElementById('wertguthabenDetailsMoreBtn');
+    const dropdown = document.getElementById('wertguthabenDetailsMoreMenu');
+    if (!menuBtn || !dropdown) return;
+
+    wertguthabenDetailsMoreMenuOpen = !wertguthabenDetailsMoreMenuOpen;
+    dropdown.classList.toggle('hidden', !wertguthabenDetailsMoreMenuOpen);
+    menuBtn.setAttribute('aria-expanded', wertguthabenDetailsMoreMenuOpen ? 'true' : 'false');
+}
+
+function closeWertguthabenDetailsMoreMenu() {
+    const menuBtn = document.getElementById('wertguthabenDetailsMoreBtn');
+    const dropdown = document.getElementById('wertguthabenDetailsMoreMenu');
+    wertguthabenDetailsMoreMenuOpen = false;
     if (dropdown) dropdown.classList.add('hidden');
     if (menuBtn) menuBtn.setAttribute('aria-expanded', 'false');
 }
@@ -5905,8 +5941,10 @@ window.openWertguthabenDetails = async function(id, options = {}) {
     const copyBtn = document.getElementById('copyWertguthabenBtn');
     const archiveBtn = document.getElementById('deleteWertguthabenBtn');
     const editBtn = document.getElementById('editWertguthabenDetailsBtn');
+    const moreBtn = document.getElementById('wertguthabenDetailsMoreBtn');
     const detailsFooter = addTransaktionBtn?.parentElement || null;
     const isUnassignedEntry = isUnassignedWertguthabenEntry(wg);
+    closeWertguthabenDetailsMoreMenu();
 
     if (addTransaktionBtn) {
         addTransaktionBtn.dataset.wertguthabenId = effectiveId;
@@ -5916,6 +5954,7 @@ window.openWertguthabenDetails = async function(id, options = {}) {
         addTransaktionBtn.title = isUnassignedEntry ? 'Für „Nicht zugeordnete Elemente“ nicht verfügbar' : 'Transaktion buchen';
         addTransaktionBtn.onclick = () => {
             if (readOnly || isUnassignedEntry) return;
+            closeWertguthabenDetailsMoreMenu();
             detailsModal.style.display = 'none';
             window.openTransaktionModal(effectiveId, { source: 'dashboard' });
         };
@@ -5924,14 +5963,20 @@ window.openWertguthabenDetails = async function(id, options = {}) {
     if (editBtn) {
         editBtn.onclick = () => {
             if (readOnly) return;
+            closeWertguthabenDetailsMoreMenu();
             detailsModal.style.display = 'none';
             window.openEditWertguthaben(effectiveId);
         };
     }
 
     if (copyBtn) {
+        copyBtn.disabled = !!readOnly;
+        copyBtn.classList.toggle('opacity-50', !!readOnly);
+        copyBtn.classList.toggle('cursor-not-allowed', !!readOnly);
+        copyBtn.title = 'Kopieren';
         copyBtn.onclick = () => {
             if (readOnly) return;
+            closeWertguthabenDetailsMoreMenu();
             detailsModal.style.display = 'none';
             openCreateModal({
                 copyFromEntry: {
@@ -5950,8 +5995,16 @@ window.openWertguthabenDetails = async function(id, options = {}) {
         archiveBtn.title = isUnassignedEntry ? 'Für „Nicht zugeordnete Elemente“ nicht verfügbar' : 'Archivieren';
         archiveBtn.onclick = async () => {
             if (readOnly || isUnassignedEntry) return;
+            closeWertguthabenDetailsMoreMenu();
             await window.archiveWertguthaben(effectiveId);
         };
+    }
+
+    if (moreBtn) {
+        moreBtn.disabled = !!readOnly;
+        moreBtn.classList.toggle('opacity-50', !!readOnly);
+        moreBtn.classList.toggle('cursor-not-allowed', !!readOnly);
+        moreBtn.title = 'Weitere Aktionen';
     }
 
     if (detailsFooter) {
@@ -5960,6 +6013,11 @@ window.openWertguthabenDetails = async function(id, options = {}) {
 
     detailsModal.style.display = 'flex';
 };
+
+function renderCompactDashboardCell(value, className = '') {
+    const text = String(value ?? '-').trim() || '-';
+    return `<div class="overflow-hidden break-words leading-tight ${className}" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${escapeHtml(text)}</div>`;
+}
 
 // ========================================
 // EINSTELLUNGEN
