@@ -24,15 +24,15 @@
     <meta name="application-name" content="TOP 2 App">
     <meta name="apple-mobile-web-app-title" content="TOP2">
     <meta name="theme-color" content="#4f46e5" />
-    <meta name="top2-app-version" content="1.11.6" />
-    <meta name="top2-build-id" content="20260421-3" />
+    <meta name="top2-app-version" content="1.11.7" />
+    <meta name="top2-build-id" content="20260421-4" />
     <meta name="msapplication-navbutton-color" content="#4f46e5">
     <meta name="apple-mobile-app-status-bar-style" content="black-translucent">
     <link rel="icon" type="image/png" sizes="192x192" href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
     <link rel="apple-touch-icon" type="image/png" sizes="192x192"
         href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
 
-    <link rel="manifest" href="manifest.json?v=20260421-3">
+    <link rel="manifest" href="manifest.json?v=20260421-4">
 
     <link rel="stylesheet" href="style.css">
     
@@ -2083,13 +2083,13 @@
                                     <th class="w-14 px-2 py-3 text-center text-xs font-bold text-emerald-800 uppercase">
                                         <span class="normal-case text-[10px] sm:text-[11px] leading-tight">Bu-<br>chung</span>
                                     </th>
-                                    <th class="px-3 py-3 text-left text-xs font-bold text-emerald-800 uppercase">
+                                    <th class="w-[6.5rem] max-w-[6.5rem] px-2 py-3 text-left text-xs font-bold text-emerald-800 uppercase">
                                         <div class="flex flex-col items-start gap-1">
                                             <button id="btn-create-wertguthaben" type="button"
                                                 class="h-6 w-6 rounded-full bg-emerald-600 text-white leading-none text-base font-black hover:bg-emerald-700 transition"
                                                 title="Neues Credit Wallet anlegen"
                                                 aria-label="Neues Credit Wallet anlegen">+</button>
-                                            <span class="normal-case text-[10px] sm:text-[11px] leading-tight">Eigen-<br>tümer</span>
+                                            <span class="normal-case whitespace-nowrap text-[10px] sm:text-[11px] leading-tight">Eigentümer</span>
                                         </div>
                                     </th>
                                     <th class="px-4 py-3 text-left text-xs font-bold text-emerald-800 uppercase">Typ</th>
@@ -8482,7 +8482,7 @@
                                     </div>
                                 </div>
                                 <div id="transaktionBookedForMeta" class="inline-flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-md bg-gray-100 px-3 py-1 text-[11px] sm:text-xs font-medium text-gray-600 border border-gray-200 leading-tight">
-                                    Eigentümer: -
+                                    Eigentümer: - · Unternehmen: - · Kategorie: - · Liste: -
                                 </div>
                             </div>
                         </div>
@@ -8509,6 +8509,7 @@
                             <label class="block text-sm font-bold text-gray-700 mb-2">Betrag (€) *</label>
                             <input type="number" id="transaktionBetrag" step="0.01" min="0" placeholder="0.00"
                                 class="min-w-0 w-full p-3 border-2 border-gray-300 rounded-lg focus:border-blue-500">
+                            <p id="transaktionBetragHint" class="hidden mt-2 text-xs font-semibold text-red-600"></p>
                         </div>
 
                         <!-- Einlösung (für Aktionscode) -->
@@ -8529,12 +8530,12 @@
                     <div class="p-4 bg-emerald-50 rounded-lg border-2 border-emerald-200">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
-                                <p class="text-sm font-bold text-emerald-800">Verfügbares Guthaben</p>
+                                <p class="text-sm font-bold text-emerald-800">Neues Guthaben</p>
                                 <p class="text-2xl font-black text-emerald-700" id="transaktionVerfuegbar">0,00 €</p>
                                 <p id="transaktionRestwertVerifiziertInfo" class="hidden text-xs font-semibold text-emerald-700 mt-1"></p>
                             </div>
                             <div class="sm:text-right">
-                                <p class="text-sm font-bold text-gray-700">Ursprünglich</p>
+                                <p class="text-sm font-bold text-gray-700">Aktuelles Guthaben</p>
                                 <p class="text-xl font-bold text-gray-700" id="transaktionUrspruenglich">0,00 €</p>
                             </div>
                         </div>

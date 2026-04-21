@@ -2255,7 +2255,7 @@ function renderWertguthabenTable() {
         const transactionButtonTitle = isUnassignedEntry
             ? 'Für „Nicht zugeordnete Elemente“ nicht verfügbar'
             : 'Transaktion buchen';
-        const eigentuemerCell = renderCompactDashboardCell(eigentuemerName, 'max-w-[5.25rem] text-[13px] font-semibold');
+        const eigentuemerCell = renderCompactDashboardCell(eigentuemerName, 'max-w-[6.5rem] text-[13px] font-semibold');
         const categoryCell = renderCompactDashboardCell(normalizeWertguthabenKategorie(w.kategorie), 'max-w-[6.5rem] text-sm');
         const nameCell = renderCompactDashboardCell(w.name || '-', 'max-w-[7.5rem] text-sm font-semibold');
         const unternehmenCell = renderCompactDashboardCell(w.unternehmen || '-', 'max-w-[7.5rem] text-sm text-gray-600');
@@ -2271,7 +2271,7 @@ function renderWertguthabenTable() {
                         </svg>
                     </button>
                 </td>
-                <td class="px-3 py-3 align-top">${eigentuemerCell}</td>
+                <td class="w-[6.5rem] max-w-[6.5rem] px-2 py-3 align-top">${eigentuemerCell}</td>
                 <td class="px-4 py-3">
                     <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold ${typConfig.color}">
                         ${typConfig.icon} ${typConfig.label}
@@ -5032,7 +5032,7 @@ function updateTransaktionPreview() {
             ? 'Bitte einen Korrekturwert ungleich 0 eingeben.'
             : 'Bitte einen Betrag größer als 0 eingeben.';
     }
-    setTransaktionValidationHint(validationMessage);
+    setTransaktionBetragHint(validationMessage);
     const hasError = !!validationMessage;
     betragInput.classList.toggle('border-red-500', hasError);
     betragInput.classList.toggle('focus:border-red-500', hasError);
@@ -5047,6 +5047,14 @@ function setTransaktionSaveEnabled(enabled) {
     saveBtn.disabled = !enabled;
     saveBtn.classList.toggle('opacity-50', !enabled);
     saveBtn.classList.toggle('cursor-not-allowed', !enabled);
+}
+
+function setTransaktionBetragHint(message) {
+    const hint = document.getElementById('transaktionBetragHint');
+    if (!hint) return;
+    const text = String(message || '').trim();
+    hint.textContent = text;
+    hint.classList.toggle('hidden', !text);
 }
 
 function setTransaktionValidationHint(message) {
@@ -5100,6 +5108,7 @@ function handleTransaktionTypChange() {
 
     const isEinloesungType = typ === 'einloesung';
     if (betragContainer) betragContainer.classList.toggle('hidden', isEinloesungType);
+    if (isEinloesungType) setTransaktionBetragHint('');
     if (einloesungContainer) {
         const showEinloesung = isEinloesungType && wg?.typ === 'aktionscode';
         einloesungContainer.classList.toggle('hidden', !showEinloesung);
@@ -5216,6 +5225,7 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
     const eigentuemerName = String(USERS[wg.eigentuemer]?.name || wg.eigentuemer || '-').trim() || '-';
     const unternehmenName = String(wg.unternehmen || '-').trim() || '-';
     const kategorieName = String(normalizeWertguthabenKategorie(wg.kategorie) || '-').trim() || '-';
+    const listenName = String(getWertguthabenListNameById(normalizeWertguthabenListId(wg.listId)) || '-').trim() || '-';
 
     if (bookedForIdLabel) {
         bookedForIdLabel.textContent = `ID: #${displayId || '-'}`;
@@ -5226,7 +5236,7 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
     }
 
     if (bookedForMeta) {
-        bookedForMeta.textContent = `Eigentümer: ${eigentuemerName} · Unternehmen: ${unternehmenName} · Kategorie: ${kategorieName}`;
+        bookedForMeta.textContent = `Eigentümer: ${eigentuemerName} · Unternehmen: ${unternehmenName} · Kategorie: ${kategorieName} · Liste: ${listenName}`;
     }
 
     const aktuellerRestwert = Number(wg.restwert !== undefined ? wg.restwert : wg.wert || 0);
@@ -5412,7 +5422,7 @@ function closeTransaktionModal() {
     const einloesungAnzahlInput = document.getElementById('transaktionEinloesungAnzahl');
     if (bookedForIdLabel) bookedForIdLabel.textContent = 'ID: #-';
     if (bookedForLabel) bookedForLabel.textContent = '-';
-    if (bookedForMeta) bookedForMeta.textContent = 'Eigentümer: -';
+    if (bookedForMeta) bookedForMeta.textContent = 'Eigentümer: - · Unternehmen: - · Kategorie: - · Liste: -';
     if (einloesungAnzahlInput) einloesungAnzahlInput.value = '';
     transaktionModalState.source = 'dashboard';
     transaktionModalState.editTransaktionId = '';
@@ -5425,6 +5435,7 @@ function closeTransaktionModal() {
     transaktionModalState.bereitsEingeloest = 0;
     setTransaktionVerificationOnlyUi(false, 'dashboard');
     setTransaktionDetailsExpanded(false);
+    setTransaktionBetragHint('');
     setTransaktionValidationHint('');
 }
 

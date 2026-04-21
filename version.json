@@ -1,14 +1,24 @@
 {
-  "version": "1.11.6",
-  "buildId": "20260421-3",
+  "version": "1.11.7",
+  "buildId": "20260421-4",
   "releaseDate": "2026-04-21",
-  "releaseTime": "12:30",
+  "releaseTime": "12:43",
   "bereich": "Credit Wallet",
   "timezone": "Europe/Vienna",
-  "note": "Sichtbare App-Texte des Moduls wurden appweit auf Credit Wallet umgestellt, ohne technische Datenpfade und Kompatibilitätsanker zu verändern.",
-  "commitId": "6944182",
+  "note": "Die Credit-Wallet-Eigentümer-Spalte wurde einzeilig verdichtet und das Transaktionsfenster zeigt jetzt Liste, neue Guthaben-Beschriftungen und den Betrag-Fehler direkt unter dem Eingabefeld.",
+  "commitId": "ab71385",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.11.7",
+      "buildId": "20260421-4",
+      "releaseDate": "2026-04-21",
+      "releaseTime": "12:43",
+      "bereich": "Credit Wallet",
+      "note": "Die Credit-Wallet-Eigentümer-Spalte wurde einzeilig verdichtet und das Transaktionsfenster zeigt jetzt Liste, neue Guthaben-Beschriftungen und den Betrag-Fehler direkt unter dem Eingabefeld.",
+      "commitId": "ab71385",
+      "obligation": "false"
+    },
     {
       "version": "1.11.6",
       "buildId": "20260421-3",
