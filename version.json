@@ -1,14 +1,24 @@
 {
-  "version": "1.11.7",
-  "buildId": "20260421-4",
-  "releaseDate": "2026-04-21",
-  "releaseTime": "12:43",
+  "version": "1.11.8",
+  "buildId": "20260422-1",
+  "releaseDate": "2026-04-22",
+  "releaseTime": "07:30",
   "bereich": "Credit Wallet",
   "timezone": "Europe/Vienna",
-  "note": "Die Credit-Wallet-Eigentümer-Spalte wurde einzeilig verdichtet und das Transaktionsfenster zeigt jetzt Liste, neue Guthaben-Beschriftungen und den Betrag-Fehler direkt unter dem Eingabefeld.",
-  "commitId": "ab71385",
+  "note": "Das Erfassungsformular zeigt die beiden Typen wieder als Wertguthaben und die Transaktions-Historie nutzt jetzt ein eigenes Verifizierungs-Modal statt des Buchungsfensters.",
+  "commitId": "e4a361c",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.11.8",
+      "buildId": "20260422-1",
+      "releaseDate": "2026-04-22",
+      "releaseTime": "07:30",
+      "bereich": "Credit Wallet",
+      "note": "Das Erfassungsformular zeigt die beiden Typen wieder als Wertguthaben und die Transaktions-Historie nutzt jetzt ein eigenes Verifizierungs-Modal statt des Buchungsfensters.",
+      "commitId": "e4a361c",
+      "obligation": "false"
+    },
     {
       "version": "1.11.7",
       "buildId": "20260421-4",
