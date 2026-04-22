@@ -1,14 +1,24 @@
 {
-  "version": "1.11.8",
-  "buildId": "20260422-1",
+  "version": "1.11.9",
+  "buildId": "20260422-2",
   "releaseDate": "2026-04-22",
-  "releaseTime": "07:30",
-  "bereich": "Credit Wallet",
+  "releaseTime": "07:54",
+  "bereich": "Wertguthaben",
   "timezone": "Europe/Vienna",
-  "note": "Das Erfassungsformular zeigt die beiden Typen wieder als Wertguthaben und die Transaktions-Historie nutzt jetzt ein eigenes Verifizierungs-Modal statt des Buchungsfensters.",
-  "commitId": "e4a361c",
+  "note": "Das Verifizierungs-Modal hebt jetzt den aktuellen Restwert in einer grünen Box hervor und das Dashboard zeigt Wertguthaben wieder als sichtbaren Typ.",
+  "commitId": "e4100f2",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.11.9",
+      "buildId": "20260422-2",
+      "releaseDate": "2026-04-22",
+      "releaseTime": "07:54",
+      "bereich": "Wertguthaben",
+      "note": "Das Verifizierungs-Modal hebt jetzt den aktuellen Restwert in einer grünen Box hervor und das Dashboard zeigt Wertguthaben wieder als sichtbaren Typ.",
+      "commitId": "e4100f2",
+      "obligation": "false"
+    },
     {
       "version": "1.11.8",
       "buildId": "20260422-1",

@@ -24,15 +24,15 @@
     <meta name="application-name" content="TOP 2 App">
     <meta name="apple-mobile-web-app-title" content="TOP2">
     <meta name="theme-color" content="#4f46e5" />
-    <meta name="top2-app-version" content="1.11.8" />
-    <meta name="top2-build-id" content="20260422-1" />
+    <meta name="top2-app-version" content="1.11.9" />
+    <meta name="top2-build-id" content="20260422-2" />
     <meta name="msapplication-navbutton-color" content="#4f46e5">
     <meta name="apple-mobile-app-status-bar-style" content="black-translucent">
     <link rel="icon" type="image/png" sizes="192x192" href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
     <link rel="apple-touch-icon" type="image/png" sizes="192x192"
         href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
 
-    <link rel="manifest" href="manifest.json?v=20260422-1">
+    <link rel="manifest" href="manifest.json?v=20260422-2">
 
     <link rel="stylesheet" href="style.css">
     
@@ -1969,7 +1969,7 @@
                 <!-- Header mit Statistiken -->
                 <div class="bg-gradient-to-r from-emerald-600 to-teal-500 text-white p-4 rounded-xl shadow-md mb-3">
                     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
-                        <h2 class="text-xl font-bold">💰 Credit Wallet</h2>
+                        <h2 class="text-xl font-bold">💰 Wertguthaben</h2>
                         <div class="w-full sm:w-auto sm:min-w-[220px] sm:max-w-[320px]">
                             <select id="wg-list-selector" class="w-full rounded-lg border-2 border-white/60 bg-white/95 px-3 py-2 text-sm font-bold text-emerald-800 shadow-sm focus:border-white focus:outline-none focus:ring-2 focus:ring-white/40">
                                 <option value="">Liste wählen...</option>
@@ -1987,11 +1987,11 @@
                         </div>
                         <div class="bg-white/20 px-2 py-2 rounded-lg">
                             <p class="text-xl font-bold" id="stat-wertguthaben">0</p>
-                            <p class="text-[10px] font-semibold leading-tight">🏦 Credit Wallet</p>
+                            <p class="text-[10px] font-semibold leading-tight">🏦 Wertguthaben</p>
                         </div>
                         <div class="bg-white/20 px-2 py-2 rounded-lg">
                             <p class="text-xl font-bold" id="stat-total-wert">0€</p>
-                            <p class="text-[10px] font-semibold leading-tight">💎 Gesamt</p>
+                            <p class="text-[10px] font-semibold leading-tight">💎 Gesamtwert</p>
                         </div>
                     </div>
                 </div>
@@ -2041,8 +2041,8 @@
                                 <option value="">Alle Typen</option>
                                 <option value="gutschein">🎁 Gutschein</option>
                                 <option value="guthaben">💳 Guthaben</option>
-                                <option value="wertguthaben">🏦 Credit Wallet</option>
-                                <option value="wertguthaben_gesetzlich">⚖️ Credit Wallet (gesetzlich)</option>
+                                <option value="wertguthaben">🏦 Wertguthaben</option>
+                                <option value="wertguthaben_gesetzlich">⚖️ Wertguthaben (gesetzlich)</option>
                                 <option value="aktionscode">🏷️ Aktionscode</option>
                             </select>
                             
@@ -2087,8 +2087,8 @@
                                         <div class="flex flex-col items-start gap-1">
                                             <button id="btn-create-wertguthaben" type="button"
                                                 class="h-6 w-6 rounded-full bg-emerald-600 text-white leading-none text-base font-black hover:bg-emerald-700 transition"
-                                                title="Neues Credit Wallet anlegen"
-                                                aria-label="Neues Credit Wallet anlegen">+</button>
+                                                title="Neues Wertguthaben anlegen"
+                                                aria-label="Neues Wertguthaben anlegen">+</button>
                                             <span class="normal-case whitespace-nowrap text-[10px] sm:text-[11px] leading-tight">Eigentümer</span>
                                         </div>
                                     </th>
@@ -2108,7 +2108,7 @@
                             <tbody id="wertguthaben-table-body" class="divide-y divide-gray-200">
                                 <tr>
                                     <td colspan="11" class="px-4 py-8 text-center text-gray-400 italic">
-                                        Keine Credit Wallets vorhanden. Erstelle deinen ersten Eintrag!
+                                        Keine Wertguthaben vorhanden. Erstelle deinen ersten Eintrag!
                                     </td>
                                 </tr>
                             </tbody>
@@ -8608,7 +8608,10 @@
                             </div>
                             <p id="transaktionVerificationName" class="text-xl font-black text-slate-900 break-words">-</p>
                             <p id="transaktionVerificationSummary" class="text-sm font-semibold leading-relaxed text-slate-600">-</p>
-                            <p class="text-xs font-semibold leading-relaxed text-emerald-800">Bei Bestätigung wird der Betrag mit Zeitstempel und Benutzer dauerhaft verifiziert.</p>
+                            <div id="transaktionVerificationCurrentValue" class="flex items-center justify-center rounded-2xl border border-emerald-300 bg-gradient-to-r from-emerald-500 via-emerald-500 to-teal-500 px-4 py-3 text-center text-xl font-black text-white shadow-md">
+                                Aktueller Wert: 0,00 €
+                            </div>
+                            <p class="text-xs font-semibold leading-relaxed text-emerald-800 text-center">Bei Bestätigung wird der aktuelle Restwert mit Zeitstempel und Benutzer dauerhaft verifiziert.</p>
                         </div>
                     </div>
 

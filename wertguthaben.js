@@ -180,12 +180,12 @@ const TYP_CONFIG = {
         color: 'bg-purple-100 text-purple-800' 
     },
     wertguthaben: { 
-        label: 'Credit Wallet', 
+        label: 'Wertguthaben', 
         icon: '🏦', 
         color: 'bg-emerald-100 text-emerald-800' 
     },
     wertguthaben_gesetzlich: { 
-        label: 'Credit Wallet (gesetzlich)', 
+        label: 'Wertguthaben (gesetzlich)', 
         icon: '⚖️', 
         color: 'bg-yellow-100 text-yellow-800' 
     },
@@ -5408,12 +5408,14 @@ function closeTransaktionVerificationModal() {
     const idLabel = document.getElementById('transaktionVerificationIdLabel');
     const nameLabel = document.getElementById('transaktionVerificationName');
     const summaryLabel = document.getElementById('transaktionVerificationSummary');
+    const currentValueLabel = document.getElementById('transaktionVerificationCurrentValue');
 
     if (modal) modal.style.display = 'none';
     if (checkbox) checkbox.checked = false;
     if (idLabel) idLabel.textContent = 'ID: #-';
     if (nameLabel) nameLabel.textContent = '-';
     if (summaryLabel) summaryLabel.textContent = '-';
+    if (currentValueLabel) currentValueLabel.textContent = 'Aktueller Wert: 0,00 €';
 
     transaktionVerificationModalState.wertguthabenId = '';
     transaktionVerificationModalState.transaktionId = '';
@@ -5428,6 +5430,7 @@ function openTransaktionVerificationModal(wertguthabenId, transaktion) {
     const idLabel = document.getElementById('transaktionVerificationIdLabel');
     const nameLabel = document.getElementById('transaktionVerificationName');
     const summaryLabel = document.getElementById('transaktionVerificationSummary');
+    const currentValueLabel = document.getElementById('transaktionVerificationCurrentValue');
 
     if (!wg || !transaktion?.id || !modal) {
         alertUser('Verifizierungsdaten konnten nicht geladen werden.', 'error');
@@ -5451,11 +5454,14 @@ function openTransaktionVerificationModal(wertguthabenId, transaktion) {
     const datum = formatDateTime(transaktion.datum || transaktion.createdAt || transaktion.updatedAt) || '-';
     const beschreibung = String(transaktion.beschreibung || '').trim();
     const summaryParts = [`${icon} ${betragText}`, `am ${datum}`];
+    const aktuellerRestwert = Number(wg.restwert !== undefined ? wg.restwert : wg.wert || 0);
+    const aktuellerRestwertText = `${aktuellerRestwert.toFixed(2).replace('.', ',')} €`;
     if (beschreibung) summaryParts.push(beschreibung);
 
     if (idLabel) idLabel.textContent = `ID: #${displayId || '-'}`;
     if (nameLabel) nameLabel.textContent = String(wg.name || '').trim() || `#${displayId || '-'}`;
     if (summaryLabel) summaryLabel.textContent = summaryParts.join(' · ');
+    if (currentValueLabel) currentValueLabel.textContent = `Aktueller Wert: ${aktuellerRestwertText}`;
     if (checkbox) checkbox.checked = false;
 
     transaktionVerificationModalState.wertguthabenId = wertguthabenId;
