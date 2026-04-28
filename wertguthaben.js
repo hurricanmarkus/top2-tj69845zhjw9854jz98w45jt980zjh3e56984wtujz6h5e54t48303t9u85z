@@ -2291,7 +2291,7 @@ function renderWertguthabenTable() {
         
         return `
             <tr class="hover:bg-gray-50 cursor-pointer transition" onclick="window.openWertguthabenDetails('${w.id}')">
-                <td class="px-2 py-3 text-center align-top" onclick="event.stopPropagation()">
+                <td class="px-2 py-3 text-center align-middle" onclick="event.stopPropagation()">
                     <button ${isUnassignedEntry ? 'disabled' : `onclick="window.openTransaktionModal('${w.id}')"`}
                         class="inline-flex h-9 w-9 items-center justify-center rounded-lg transition ${isUnassignedEntry ? 'cursor-not-allowed text-gray-300 bg-gray-100' : 'text-violet-600 hover:bg-violet-50 hover:text-violet-800'}" title="${escapeHtml(transactionButtonTitle)}" aria-label="${escapeHtml(transactionButtonTitle)}">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
@@ -2300,26 +2300,26 @@ function renderWertguthabenTable() {
                         </svg>
                     </button>
                 </td>
-                <td class="w-[6.5rem] max-w-[6.5rem] px-2 py-3 align-top">${eigentuemerCell}</td>
-                <td class="px-4 py-3">
+                <td class="w-[6.5rem] max-w-[6.5rem] px-2 py-3 align-middle">${eigentuemerCell}</td>
+                <td class="px-4 py-3 align-middle">
                     <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold ${typConfig.color}">
                         ${typConfig.icon} ${typConfig.label}
                     </span>
                 </td>
-                <td class="px-4 py-3 text-sm font-mono font-bold text-gray-700">#${escapeHtml(getWertguthabenDisplayId(w))}</td>
-                <td class="px-4 py-3 align-top">${categoryCell}</td>
-                <td class="px-4 py-3 align-top">${nameCell}</td>
-                <td class="px-4 py-3 align-top">${unternehmenCell}</td>
-                <td class="px-4 py-3 text-sm">
+                <td class="px-4 py-3 text-sm font-mono font-bold text-gray-700 align-middle">#${escapeHtml(getWertguthabenDisplayId(w))}</td>
+                <td class="px-4 py-3 align-middle">${categoryCell}</td>
+                <td class="px-4 py-3 align-middle">${nameCell}</td>
+                <td class="px-4 py-3 align-middle">${unternehmenCell}</td>
+                <td class="px-4 py-3 text-sm align-middle">
                     <div class="flex flex-col">
                         <span class="font-bold text-emerald-700">${restwert !== undefined ? restwert.toFixed(2) + ' €' : '-'}</span>
                         ${w.wert && w.wert !== restwert ? `<span class="text-xs text-gray-500">von ${w.wert.toFixed(2)} €</span>` : ''}
                         ${verificationBadge}
                     </div>
                 </td>
-                <td class="px-4 py-3 text-sm">${restzeit}</td>
-                <td class="px-4 py-3">${statusBadge}</td>
-                <td class="px-2 py-3 text-center align-top" onclick="event.stopPropagation()">
+                <td class="px-4 py-3 text-sm align-middle">${restzeit}</td>
+                <td class="px-4 py-3 align-middle">${statusBadge}</td>
+                <td class="px-2 py-3 text-center align-middle" onclick="event.stopPropagation()">
                     <button onclick="window.openEditWertguthaben('${w.id}')" 
                         class="inline-flex h-9 w-9 items-center justify-center rounded-lg text-blue-600 transition hover:bg-blue-50 hover:text-blue-800" title="Bearbeiten" aria-label="Bearbeiten">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5">
