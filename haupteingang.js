@@ -52,7 +52,7 @@ export const escapeHtml = (s = '') => String(s).replace(/[&<>"']/g, (m) => ({ '&
 
 // Zentrale Berechtigungen-Konfiguration (für admin_benutzersteuerung.js und admin_rollenverwaltung.js)
 export const PERMISSIONS_CONFIG = {
-    'ENTRANCE': { label: 'Haupteingang öffnen', indent: false },
+    'ENTRANCE': { label: 'Smart Top2', indent: false },
     'PUSHOVER': { label: 'Push-Nachricht senden', indent: false },
     'PUSHMAIL_CENTER': { label: 'PUSHMAIL-Center', indent: false },
     'PUSHOVER_SETTINGS_GRANTS': { label: '-> Einstellungen-Button zum Berechtigungen anlegen', indent: true },
@@ -2244,7 +2244,7 @@ const requestPushmailUserKeyChange = async () => {
 function getPushmailCenterProgramDefinitions() {
     return [
         { id: 'PUSHOVER', title: 'Push-Benachrichtigung', permission: 'PUSHOVER', border: 'border-red-500', text: 'text-red-600' },
-        { id: 'ENTRANCE', title: 'Haupteingang öffnen', permission: 'ENTRANCE', border: 'border-indigo-500', text: 'text-indigo-600' },
+        { id: 'ENTRANCE', title: 'Smart Top2', permission: 'ENTRANCE', border: 'border-indigo-500', text: 'text-indigo-600' },
         { id: 'CHECKLIST', title: 'Checkliste', permission: 'CHECKLIST', border: 'border-green-500', text: 'text-green-600' },
         { id: 'TERMINPLANER', title: 'Termin finden', permission: 'TERMINPLANER', border: 'border-cyan-500', text: 'text-cyan-600' },
         { id: 'ESSENSBERECHNUNG', title: 'Essensberechnung', permission: 'ESSENSBERECHNUNG', border: 'border-orange-500', text: 'text-orange-600' },
@@ -2891,7 +2891,7 @@ export function navigate(targetViewName, options = {}) {
 
     // Wenn NICHT Systemadmin, dann prüfe die Rechte
     if (targetViewName !== 'terminplaner' && targetViewName !== 'pushmailCenter' && !isSystemAdmin) {
-        if (targetViewName === 'entrance' && !userPermissions.includes('ENTRANCE')) return alertUser("Zugriff verweigert (Eingang).", 'error');
+        if (targetViewName === 'entrance' && !userPermissions.includes('ENTRANCE')) return alertUser("Zugriff verweigert (Smart Top2).", 'error');
         if (targetViewName === 'pushover' && !userPermissions.includes('PUSHOVER')) return alertUser("Zugriff verweigert (Push).", 'error');
         if (targetViewName === 'checklist' && !userPermissions.includes('CHECKLIST')) return alertUser("Zugriff verweigert (Checkliste).", 'error');
         if (targetViewName === 'checklistSettings' && !userPermissions.includes('CHECKLIST_SETTINGS')) return alertUser("Zugriff verweigert (Checklisten-Einstellungen).", 'error');

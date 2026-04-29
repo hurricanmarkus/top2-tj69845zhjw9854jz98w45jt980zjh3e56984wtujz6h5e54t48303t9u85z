@@ -414,7 +414,7 @@ export function renderRoleManagement() {
                                         
                                         <div class="pl-6 mt-1 space-y-1">
                                             <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canUseMainPush"> <span>-> Push</span></label>
-                                            <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canUseMainEntrance"> <span>-> Eingang</span></label>
+                                            <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canUseMainEntrance"> <span>-> Smart Top2</span></label>
                                             <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canUseMainChecklist"> <span>-> Checkliste</span></label>
                                             
                                             <div class="pt-1"> <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canUseMainTerminplaner"> <span>-> Termin finden</span></label>

@@ -1265,7 +1265,7 @@ export function renderAdminUserDetails(userId) {
                         <h5 class="font-semibold text-sm text-gray-600">Adminfunktionen Hauptseite</h5>
                         ${generateCheckbox('canSeeMainFunctions', 'Hauptmenü anzeigen')}
                         ${generateCheckbox('canUseMainPush', '-> Push-Funktion', true)}
-                        ${generateCheckbox('canUseMainEntrance', '-> Eingang öffnen', true)}
+                        ${generateCheckbox('canUseMainEntrance', '-> Smart Top2', true)}
                         ${generateCheckbox('canUseMainChecklist', '-> Checkliste', true)}
                         
                         ${generateCheckbox('canUseMainTerminplaner', '-> Termin finden', true)}

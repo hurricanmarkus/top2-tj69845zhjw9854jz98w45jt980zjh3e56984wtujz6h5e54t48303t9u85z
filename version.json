@@ -1,20 +1,30 @@
 {
-  "version": "1.12.5",
-  "buildId": "20260429-6",
+  "version": "1.12.6",
+  "buildId": "20260429-7",
   "releaseDate": "2026-04-29",
-  "releaseTime": "10:44",
-  "bereich": "Haupteingang öffnen",
+  "releaseTime": "10:53",
+  "bereich": "Smart Top2",
   "timezone": "Europe/Vienna",
-  "note": "Die Gardena-Ventilkarten nutzen jetzt eine volle orange Titelbreite, kompakte einzeilige Statusfelder, grüne Aktiv-Hintergründe und die vereinfachte Überschrift Ventilsteuerung.",
+  "note": "Das Modul heißt jetzt überall Smart Top2, inklusive Startseite, Hauptmenü, Adminmenü und Berechtigungsbeschriftungen.",
   "commitId": "27f9b9b",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.12.6",
+      "buildId": "20260429-7",
+      "releaseDate": "2026-04-29",
+      "releaseTime": "10:53",
+      "bereich": "Smart Top2",
+      "note": "Das Modul heißt jetzt überall Smart Top2, inklusive Startseite, Hauptmenü, Adminmenü und Berechtigungsbeschriftungen.",
+      "commitId": "27f9b9b",
+      "obligation": "false"
+    },
     {
       "version": "1.12.5",
       "buildId": "20260429-6",
       "releaseDate": "2026-04-29",
       "releaseTime": "10:44",
-      "bereich": "Haupteingang öffnen",
+      "bereich": "Smart Top2",
       "note": "Die Gardena-Ventilkarten nutzen jetzt eine volle orange Titelbreite, kompakte einzeilige Statusfelder, grüne Aktiv-Hintergründe und die vereinfachte Überschrift Ventilsteuerung.",
       "commitId": "27f9b9b",
       "obligation": "false"
@@ -24,8 +34,8 @@
       "buildId": "20260429-5",
       "releaseDate": "2026-04-29",
       "releaseTime": "10:36",
-      "bereich": "Haupteingang öffnen",
-      "note": "Gardena blendet jetzt auch Platzhalter-Ventile 4 bis 6 aus, erkennt aktive Bewässerung robuster und aktualisiert den Status im Haupteingang automatisch ohne Refresh-Button.",
+      "bereich": "Smart Top2",
+      "note": "Gardena blendet jetzt auch Platzhalter-Ventile 4 bis 6 aus, erkennt aktive Bewässerung robuster und aktualisiert den Status in Smart Top2 automatisch ohne Refresh-Button.",
       "commitId": "27f9b9b",
       "obligation": "false"
     },
@@ -34,7 +44,7 @@
       "buildId": "20260429-4",
       "releaseDate": "2026-04-29",
       "releaseTime": "09:58",
-      "bereich": "Haupteingang öffnen",
+      "bereich": "Smart Top2",
       "note": "Gardena blendet unverbundene Ventile aus, zeigt deutsche Status mit LED-Anzeigen und nutzt online eine Cloud-Function-Fallback-API statt der Hosting-404-Seite.",
       "commitId": "27f9b9b",
       "obligation": "false"
@@ -44,7 +54,7 @@
       "buildId": "20260429-3",
       "releaseDate": "2026-04-29",
       "releaseTime": "09:41",
-      "bereich": "Haupteingang öffnen",
+      "bereich": "Smart Top2",
       "note": "Der Gardena-Parser erkennt jetzt mehrere VALVE-Services pro Gerät korrekt, sodass Ventile 1 bis 6 nicht mehr gegenseitig überschrieben werden.",
       "commitId": "27f9b9b",
       "obligation": "false"
@@ -54,7 +64,7 @@
       "buildId": "20260429-2",
       "releaseDate": "2026-04-29",
       "releaseTime": "09:38",
-      "bereich": "Haupteingang öffnen",
+      "bereich": "Smart Top2",
       "note": "Die Gardena-Steuerung nutzt jetzt einen localhost-Backend-Fallback, zeigt Fehler lesbar an und bleibt dank CORS auch bei getrenntem Frontend-Origin erreichbar.",
       "commitId": "27f9b9b",
       "obligation": "false"
@@ -64,8 +74,8 @@
       "buildId": "20260429-1",
       "releaseDate": "2026-04-29",
       "releaseTime": "08:54",
-      "bereich": "Haupteingang öffnen",
-      "note": "Der Haupteingang enthält jetzt eine mobile Gardena-Steuerung mit Mäherstatus, sechs Ventilkarten, Dauer-Modal und Express-Backend mit automatischem Token-Refresh.",
+      "bereich": "Smart Top2",
+      "note": "Smart Top2 enthält jetzt eine mobile Gardena-Steuerung mit Mäherstatus, sechs Ventilkarten, Dauer-Modal und Express-Backend mit automatischem Token-Refresh.",
       "commitId": "bd4fa61",
       "obligation": "false"
     },
