@@ -390,7 +390,8 @@ option {
 }
 
 .gardena-valve-name {
-    max-width: min(100%, 13rem);
+    width: 100%;
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

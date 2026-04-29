@@ -3,7 +3,9 @@ const COMMAND_ENDPOINT = '/api/command';
 const DEFAULT_BACKEND_ORIGIN = 'http://localhost:3000';
 const DEFAULT_FUNCTIONS_API_BASE = 'https://europe-west1-top2-e9ac0.cloudfunctions.net/gardenaApi';
 const STATUS_STALE_MS = 30000;
+const AUTO_REFRESH_INTERVAL_MS = 5000;
 const PRESET_MINUTES = [5, 10, 15, 30];
+const ACTIVE_VALVE_CODES = new Set(['MANUAL_CONTROL', 'SCHEDULED_WATERING', 'START_SECONDS_TO_OVERRIDE', 'OPEN', 'ACTIVE', 'RUNNING', 'WATERING']);
 const GARDENA_TEXTS = {
   ONLINE: 'Online',
   OFFLINE: 'Offline',
@@ -19,6 +21,9 @@ const GARDENA_TEXTS = {
   LOW: 'Niedrig',
   CRITICAL: 'Kritisch',
   CHARGING: 'Lädt',
+  ACTIVE: 'Aktiv',
+  RUNNING: 'Läuft',
+  WATERING: 'Bewässerung aktiv',
   MANUAL_CONTROL: 'Manuelle Bewässerung',
   SCHEDULED_WATERING: 'Geplante Bewässerung',
   START_SECONDS_TO_OVERRIDE: 'Manuell gestartet',
@@ -41,6 +46,8 @@ const state = {
   modalServiceId: '',
   modalValveName: '',
   selectedMinutes: 10,
+  autoRefreshTimer: null,
+  visibilityListenerBound: false,
 };
 
 let helperAlertUser = null;
@@ -72,6 +79,23 @@ function translateGardenaCode(value, fallback = 'Unbekannt') {
     .join(' ') || fallback;
 }
 
+function toPositiveNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : 0;
+}
+
+function hasPlaceholderValveName(valve) {
+  const name = String(valve?.name || '').trim();
+  return /^valve\s+\d+$/i.test(name);
+}
+
+function isValveActive(valve, activity, status) {
+  if (ACTIVE_VALVE_CODES.has(activity) || ACTIVE_VALVE_CODES.has(status)) {
+    return true;
+  }
+  return toPositiveNumber(valve?.duration) > 0;
+}
+
 function buildApiUrl(base, endpointPath) {
   const normalizedBase = normalizeOrigin(base);
   if (!normalizedBase) return '';
@@ -88,9 +112,6 @@ function isHtmlLikeResponse(value = '') {
 function getElements() {
   return {
     section: document.getElementById('gardenaEntranceSection'),
-    refreshButton: document.getElementById('gardenaEntranceRefreshButton'),
-    refreshButtonText: document.querySelector('#gardenaEntranceRefreshButton .button-text'),
-    refreshButtonSpinner: document.querySelector('#gardenaEntranceRefreshButton .loading-spinner'),
     loading: document.getElementById('gardenaEntranceLoading'),
     error: document.getElementById('gardenaEntranceError'),
     mowerHost: document.getElementById('gardenaEntranceMowerHost'),
@@ -251,8 +272,10 @@ function getMowerMeta(mower) {
 function getValveMeta(valve) {
   const activity = normalizeGardenaCode(valve?.activity || valve?.state || 'UNKNOWN');
   const status = normalizeGardenaCode(valve?.state || valve?.activity || 'UNKNOWN');
-  const isOpen = activity === 'MANUAL_CONTROL' || activity === 'SCHEDULED_WATERING' || status === 'OPEN';
-  const isUnavailable = valve?.unavailable || !valve?.serviceId;
+  const duration = toPositiveNumber(valve?.duration);
+  const isOpen = isValveActive(valve, activity, status);
+  const isUnavailable = valve?.unavailable || !valve?.serviceId || hasPlaceholderValveName(valve);
+  const activeByDuration = duration > 0 && !ACTIVE_VALVE_CODES.has(activity) && !ACTIVE_VALVE_CODES.has(status);
 
   if (isUnavailable) {
     return {
@@ -264,7 +287,6 @@ function getValveMeta(valve) {
       showStart: false,
       showStop: false,
       ledClass: 'gardena-led gardena-led--slate',
-      ledLabel: 'Nicht verbunden',
     };
   }
 
@@ -278,7 +300,6 @@ function getValveMeta(valve) {
       showStart: false,
       showStop: false,
       ledClass: 'gardena-led gardena-led--red gardena-led--blink',
-      ledLabel: 'Offline',
     };
   }
 
@@ -286,15 +307,14 @@ function getValveMeta(valve) {
     return {
       hidden: false,
       badgeClass: 'bg-emerald-100 text-emerald-700',
-      badgeText: activity === 'SCHEDULED_WATERING' ? 'Geplant aktiv' : 'Offen',
-      activityText: translateGardenaCode(activity, 'Offen'),
-      stateText: translateGardenaCode(status, 'Offen'),
+      badgeText: activity === 'SCHEDULED_WATERING' ? 'Geplant aktiv' : 'Aktiv',
+      activityText: activeByDuration ? 'Bewässerung aktiv' : translateGardenaCode(activity, 'Bewässerung aktiv'),
+      stateText: activeByDuration ? 'Aktiv' : translateGardenaCode(status, 'Aktiv'),
       showStart: false,
       showStop: true,
       ledClass: activity === 'SCHEDULED_WATERING'
         ? 'gardena-led gardena-led--amber gardena-led--blink'
         : 'gardena-led gardena-led--green gardena-led--blink',
-      ledLabel: activity === 'SCHEDULED_WATERING' ? 'Automatisch aktiv' : 'Manuell aktiv',
     };
   }
 
@@ -307,7 +327,6 @@ function getValveMeta(valve) {
     showStart: true,
     showStop: false,
     ledClass: 'gardena-led gardena-led--red gardena-led--blink',
-    ledLabel: 'Aus',
   };
 }
 
@@ -373,12 +392,12 @@ function renderValveCards() {
     return `
       <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm ${valve.online ? '' : 'opacity-95'}">
         <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0">
+          <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
               <span class="${meta.ledClass}" aria-hidden="true"></span>
               <span>Ventil ${escapeHtml(String(valve.slot || '—'))}</span>
             </div>
-            <div class="mt-2 inline-flex max-w-full items-center rounded-xl border border-orange-300 bg-orange-50 px-2.5 py-1.5">
+            <div class="mt-2 flex w-full items-center rounded-xl border border-orange-300 bg-orange-50 px-2.5 py-1.5">
               <h4 class="gardena-valve-name text-sm font-extrabold text-slate-900">${escapeHtml(valve.name || `Ventil ${valve.slot || ''}`)}</h4>
             </div>
           </div>
@@ -393,11 +412,6 @@ function renderValveCards() {
             <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Zustand</div>
             <div class="mt-1 text-sm font-bold text-slate-900 break-words">${escapeHtml(meta.stateText)}</div>
           </div>
-        </div>
-        <div class="mt-3 flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-          <span class="${meta.ledClass}" aria-hidden="true"></span>
-          <span class="text-xs font-bold uppercase tracking-wide text-slate-600">LED</span>
-          <span class="text-sm font-bold text-slate-900">${escapeHtml(meta.ledLabel)}</span>
         </div>
         <div class="mt-4 flex flex-wrap gap-3">
           ${meta.showStart ? `
@@ -436,7 +450,7 @@ function renderValveCards() {
 }
 
 function renderStatusMeta() {
-  const { updatedBadge, locationBadge, error, loading, refreshButton, refreshButtonText, refreshButtonSpinner } = getElements();
+  const { updatedBadge, locationBadge, error, loading } = getElements();
 
   if (updatedBadge) {
     updatedBadge.textContent = state.lastLoadedAt ? `Aktualisiert: ${formatTimestamp(state.status?.fetchedAt)}` : 'Aktualisiert: —';
@@ -461,8 +475,6 @@ function renderStatusMeta() {
     loading.classList.toggle('hidden', !show);
     loading.classList.toggle('flex', show);
   }
-
-  setButtonBusy(refreshButton, refreshButtonText, refreshButtonSpinner, state.loading);
 }
 
 function renderModal() {
@@ -638,15 +650,39 @@ async function sendCommand(serviceId, command, seconds = null) {
   }
 }
 
+function isGardenaViewVisible() {
+  const { section } = getElements();
+  if (!section) return false;
+
+  const view = section.closest('.view') || section;
+  if (!(view instanceof Element)) return false;
+
+  const computedStyle = window.getComputedStyle(view);
+  return computedStyle.display !== 'none' && computedStyle.visibility !== 'hidden';
+}
+
+function startAutoRefresh() {
+  if (!state.autoRefreshTimer) {
+    state.autoRefreshTimer = window.setInterval(() => {
+      if (state.loading || state.pendingServiceIds.size || !isGardenaViewVisible()) return;
+      fetchStatus({ force: true });
+    }, AUTO_REFRESH_INTERVAL_MS);
+  }
+
+  if (!state.visibilityListenerBound) {
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden || state.loading || !isGardenaViewVisible()) return;
+      fetchStatus({ force: true });
+    });
+    state.visibilityListenerBound = true;
+  }
+}
+
 function bindListeners() {
   if (state.listenersBound) return;
   state.listenersBound = true;
 
-  const { refreshButton, valveGrid, presetButtons, durationInput, confirmButton, modal } = getElements();
-
-  refreshButton?.addEventListener('click', () => {
-    fetchStatus({ force: true });
-  });
+  const { valveGrid, presetButtons, durationInput, confirmButton, modal } = getElements();
 
   valveGrid?.addEventListener('click', (event) => {
     const button = event.target.closest('[data-gardena-action]');
@@ -703,10 +739,11 @@ export function initializeGardenaEntranceControls(options = {}) {
   }
 
   bindListeners();
+  startAutoRefresh();
   render();
 
-  const isStale = !state.lastLoadedAt || Date.now() - state.lastLoadedAt > STATUS_STALE_MS;
-  if (isStale) {
-    fetchStatus();
+  const needsRefresh = !state.lastLoadedAt || Date.now() - state.lastLoadedAt > AUTO_REFRESH_INTERVAL_MS;
+  if (needsRefresh && !state.loading && isGardenaViewVisible()) {
+    fetchStatus({ force: true });
   }
 }

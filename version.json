@@ -1,14 +1,24 @@
 {
-  "version": "1.12.3",
-  "buildId": "20260429-4",
+  "version": "1.12.4",
+  "buildId": "20260429-5",
   "releaseDate": "2026-04-29",
-  "releaseTime": "09:58",
+  "releaseTime": "10:36",
   "bereich": "Haupteingang öffnen",
   "timezone": "Europe/Vienna",
-  "note": "Gardena blendet unverbundene Ventile aus, zeigt deutsche Status mit LED-Anzeigen und nutzt online eine Cloud-Function-Fallback-API statt der Hosting-404-Seite.",
+  "note": "Gardena blendet jetzt auch Platzhalter-Ventile 4 bis 6 aus, erkennt aktive Bewässerung robuster und aktualisiert den Status im Haupteingang automatisch ohne Refresh-Button.",
   "commitId": "27f9b9b",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.12.4",
+      "buildId": "20260429-5",
+      "releaseDate": "2026-04-29",
+      "releaseTime": "10:36",
+      "bereich": "Haupteingang öffnen",
+      "note": "Gardena blendet jetzt auch Platzhalter-Ventile 4 bis 6 aus, erkennt aktive Bewässerung robuster und aktualisiert den Status im Haupteingang automatisch ohne Refresh-Button.",
+      "commitId": "27f9b9b",
+      "obligation": "false"
+    },
     {
       "version": "1.12.3",
       "buildId": "20260429-4",
