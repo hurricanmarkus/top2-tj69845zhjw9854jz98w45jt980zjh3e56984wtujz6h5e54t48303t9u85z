@@ -155,22 +155,26 @@ function createEmptyValve(slot) {
   };
 }
 
+function createDeviceState(deviceId) {
+  return {
+    deviceId,
+    common: null,
+    mower: null,
+    valves: [],
+    valveSet: null,
+    name: '',
+    modelType: '',
+    serial: '',
+  };
+}
+
 function parseLocationStatus(payload) {
   const included = Array.isArray(payload?.included) ? payload.included : [];
   const devices = new Map();
 
   for (const item of included) {
     if (item?.type !== 'DEVICE') continue;
-    devices.set(item.id, {
-      deviceId: item.id,
-      common: null,
-      mower: null,
-      valve: null,
-      valveSet: null,
-      name: '',
-      modelType: '',
-      serial: '',
-    });
+    devices.set(item.id, createDeviceState(item.id));
   }
 
   for (const item of included) {
@@ -179,16 +183,7 @@ function parseLocationStatus(payload) {
     if (!deviceId) continue;
 
     if (!devices.has(deviceId)) {
-      devices.set(deviceId, {
-        deviceId,
-        common: null,
-        mower: null,
-        valve: null,
-        valveSet: null,
-        name: '',
-        modelType: '',
-        serial: '',
-      });
+      devices.set(deviceId, createDeviceState(deviceId));
     }
 
     const device = devices.get(deviceId);
@@ -204,7 +199,7 @@ function parseLocationStatus(payload) {
       device.mower = item;
     }
     if (item.type === 'VALVE') {
-      device.valve = item;
+      device.valves.push(item);
       device.name = device.name || nameValue || '';
     }
     if (item.type === 'VALVE_SET') {
@@ -235,34 +230,37 @@ function parseLocationStatus(payload) {
   const valveMap = new Map();
 
   for (const device of devices.values()) {
-    if (!device.valve?.id) continue;
-    const suffixMatch = /:(\d+)$/.exec(device.valve.id);
-    if (!suffixMatch) continue;
+    if (!Array.isArray(device.valves) || !device.valves.length) continue;
 
-    const slot = Number(suffixMatch[1]);
-    if (slot < 1 || slot > 6) continue;
+    for (const valve of device.valves) {
+      if (!valve?.id) continue;
+      const suffixMatch = /:(\d+)$/.exec(valve.id);
+      if (!suffixMatch) continue;
 
-    const common = device.common;
-    const valve = device.valve;
-    const activity = getAttributeValue(valve, 'activity') || getAttributeValue(valve, 'state') || getAttributeValue(common, 'state') || 'UNKNOWN';
-    const state = getAttributeValue(valve, 'state') || getAttributeValue(common, 'state') || activity;
+      const slot = Number(suffixMatch[1]);
+      if (slot < 1 || slot > 6) continue;
 
-    valveMap.set(slot, {
-      slot,
-      deviceId: device.deviceId,
-      serviceId: valve.id,
-      name: getAttributeValue(valve, 'name') || device.name || `Ventil ${slot}`,
-      activity,
-      state,
-      duration: getAttributeValue(valve, 'duration'),
-      online: !isOfflineState(
-        getAttributeValue(common, 'state'),
-        getAttributeValue(common, 'rfLinkState'),
-        getAttributeValue(valve, 'state'),
-        activity
-      ),
-      unavailable: false,
-    });
+      const common = device.common;
+      const activity = getAttributeValue(valve, 'activity') || getAttributeValue(valve, 'state') || getAttributeValue(common, 'state') || 'UNKNOWN';
+      const state = getAttributeValue(valve, 'state') || getAttributeValue(common, 'state') || activity;
+
+      valveMap.set(slot, {
+        slot,
+        deviceId: device.deviceId,
+        serviceId: valve.id,
+        name: getAttributeValue(valve, 'name') || device.name || `Ventil ${slot}`,
+        activity,
+        state,
+        duration: getAttributeValue(valve, 'duration'),
+        online: !isOfflineState(
+          getAttributeValue(common, 'state'),
+          getAttributeValue(common, 'rfLinkState'),
+          getAttributeValue(valve, 'state'),
+          activity
+        ),
+        unavailable: false,
+      });
+    }
   }
 
   const valves = Array.from({ length: 6 }, (_, index) => valveMap.get(index + 1) || createEmptyValve(index + 1));
