@@ -1,5 +1,6 @@
 const STATUS_ENDPOINT = '/api/status';
 const COMMAND_ENDPOINT = '/api/command';
+const DEFAULT_BACKEND_ORIGIN = 'http://localhost:3000';
 const STATUS_STALE_MS = 30000;
 const PRESET_MINUTES = [5, 10, 15, 30];
 
@@ -56,6 +57,83 @@ function alertUser(message, type = 'info') {
     return;
   }
   window.alert(message);
+}
+
+function createFallbackValve(slot) {
+  return {
+    slot,
+    deviceId: '',
+    serviceId: '',
+    name: `Ventil ${slot}`,
+    activity: 'UNAVAILABLE',
+    state: 'UNAVAILABLE',
+    duration: null,
+    online: false,
+    unavailable: true,
+  };
+}
+
+function normalizeOrigin(value = '') {
+  const normalized = String(value || '').trim().replace(/\/+$/, '');
+  return normalized === 'null' ? '' : normalized;
+}
+
+function extractErrorMessage(value, fallback = 'Unbekannter Fehler') {
+  if (!value) return fallback;
+
+  if (value instanceof Error) {
+    return value.message || fallback;
+  }
+
+  if (typeof value === 'string') {
+    return value.trim() || fallback;
+  }
+
+  if (Array.isArray(value)) {
+    const combined = value
+      .map((entry) => extractErrorMessage(entry, ''))
+      .filter(Boolean)
+      .join(' | ');
+    return combined || fallback;
+  }
+
+  if (typeof value === 'object') {
+    if (typeof value.error === 'string') return value.error;
+    if (typeof value.message === 'string') return value.message;
+    if (typeof value.detail === 'string') return value.detail;
+    if (typeof value.title === 'string') return value.title;
+    if (Array.isArray(value.errors) && value.errors.length) {
+      return extractErrorMessage(value.errors, fallback);
+    }
+    try {
+      return JSON.stringify(value);
+    } catch (error) {
+      return fallback;
+    }
+  }
+
+  return String(value);
+}
+
+function getApiUrlCandidates(endpointPath) {
+  const configuredOrigin = normalizeOrigin(window.TOP2_API_ORIGIN);
+  const currentOrigin = window.location.protocol === 'file:' ? '' : normalizeOrigin(window.location.origin);
+  const allowLocalHttpFallback = window.location.protocol !== 'https:';
+  const candidates = [];
+
+  if (configuredOrigin) {
+    candidates.push(`${configuredOrigin}${endpointPath}`);
+  }
+
+  if (currentOrigin) {
+    candidates.push(`${currentOrigin}${endpointPath}`);
+  }
+
+  if (allowLocalHttpFallback) {
+    candidates.push(`${DEFAULT_BACKEND_ORIGIN}${endpointPath}`);
+  }
+
+  return [...new Set(candidates.filter(Boolean))];
 }
 
 function setButtonBusy(button, textEl, spinnerEl, isBusy) {
@@ -194,7 +272,9 @@ function renderValveCards() {
   const { valveGrid } = getElements();
   if (!valveGrid) return;
 
-  const valves = Array.isArray(state.status?.valves) ? state.status.valves : [];
+  const valves = Array.isArray(state.status?.valves) && state.status.valves.length
+    ? state.status.valves
+    : Array.from({ length: 6 }, (_, index) => createFallbackValve(index + 1));
 
   valveGrid.innerHTML = valves.map((valve) => {
     const meta = getValveMeta(valve);
@@ -310,12 +390,52 @@ function render() {
 }
 
 async function readJsonResponse(response) {
-  const payload = await response.json().catch(() => null);
+  const rawText = await response.text().catch(() => '');
+  let payload = null;
+
+  try {
+    payload = rawText ? JSON.parse(rawText) : null;
+  } catch (error) {
+    payload = rawText || null;
+  }
+
   if (!response.ok || !payload?.ok) {
-    const message = payload?.error || `HTTP ${response.status}`;
-    throw new Error(message);
+    const message = extractErrorMessage(payload?.error || payload?.message || payload, `HTTP ${response.status}`);
+    const error = new Error(message);
+    error.statusCode = response.status;
+    error.payload = payload;
+    throw error;
   }
   return payload;
+}
+
+async function requestApi(endpoint, options = {}) {
+  const candidates = getApiUrlCandidates(endpoint);
+  let lastError = null;
+
+  for (let index = 0; index < candidates.length; index += 1) {
+    const url = candidates[index];
+
+    try {
+      const response = await fetch(url, options);
+      return await readJsonResponse(response);
+    } catch (error) {
+      lastError = error;
+      const canTryNext = index < candidates.length - 1;
+      const retryableStatus = error?.statusCode === 404 || error?.statusCode === 200;
+      const retryableNetworkError = error instanceof TypeError;
+
+      if (canTryNext && (retryableStatus || retryableNetworkError)) {
+        continue;
+      }
+    }
+  }
+
+  const message = extractErrorMessage(lastError, 'Backend nicht erreichbar. Bitte Express auf http://localhost:3000 starten.');
+  if ((lastError?.statusCode === 404 || lastError instanceof TypeError) && candidates.includes(`${DEFAULT_BACKEND_ORIGIN}${endpoint}`)) {
+    throw new Error('Backend nicht erreichbar. Bitte die TOP2-App über http://localhost:3000 öffnen oder den Express-Server starten.');
+  }
+  throw new Error(message);
 }
 
 async function fetchStatus({ force = false } = {}) {
@@ -326,17 +446,16 @@ async function fetchStatus({ force = false } = {}) {
   render();
 
   try {
-    const response = await fetch(STATUS_ENDPOINT, {
+    const payload = await requestApi(STATUS_ENDPOINT, {
       headers: {
         Accept: 'application/json',
       },
       cache: 'no-store',
     });
-    const payload = await readJsonResponse(response);
     state.status = payload;
     state.lastLoadedAt = Date.now();
   } catch (error) {
-    state.error = error.message || 'Gardena-Status konnte nicht geladen werden.';
+    state.error = extractErrorMessage(error, 'Gardena-Status konnte nicht geladen werden.');
   } finally {
     state.loading = false;
     render();
@@ -377,7 +496,7 @@ async function sendCommand(serviceId, command, seconds = null) {
   render();
 
   try {
-    const response = await fetch(COMMAND_ENDPOINT, {
+    await requestApi(COMMAND_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -385,7 +504,6 @@ async function sendCommand(serviceId, command, seconds = null) {
       },
       body: JSON.stringify({ serviceId, command, seconds }),
     });
-    await readJsonResponse(response);
     alertUser(command === 'STOP_UNTIL_NEXT_TASK' ? 'Ventil wird gestoppt.' : 'Ventil wird gestartet.', 'success');
     closeDurationModal();
     await fetchStatus({ force: true });
@@ -393,7 +511,7 @@ async function sendCommand(serviceId, command, seconds = null) {
       fetchStatus({ force: true });
     }, 2500);
   } catch (error) {
-    alertUser(error.message || 'Befehl konnte nicht gesendet werden.', 'error_long');
+    alertUser(extractErrorMessage(error, 'Befehl konnte nicht gesendet werden.'), 'error_long');
   } finally {
     state.pendingServiceIds.delete(serviceId);
     render();

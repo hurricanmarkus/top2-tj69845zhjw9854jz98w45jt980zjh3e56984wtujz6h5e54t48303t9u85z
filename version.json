@@ -1,14 +1,24 @@
 {
-  "version": "1.12.0",
-  "buildId": "20260429-1",
+  "version": "1.12.1",
+  "buildId": "20260429-2",
   "releaseDate": "2026-04-29",
-  "releaseTime": "08:54",
+  "releaseTime": "09:38",
   "bereich": "Haupteingang öffnen",
   "timezone": "Europe/Vienna",
-  "note": "Der Haupteingang enthält jetzt eine mobile Gardena-Steuerung mit Mäherstatus, sechs Ventilkarten, Dauer-Modal und Express-Backend mit automatischem Token-Refresh.",
-  "commitId": "bd4fa61",
+  "note": "Die Gardena-Steuerung nutzt jetzt einen localhost-Backend-Fallback, zeigt Fehler lesbar an und bleibt dank CORS auch bei getrenntem Frontend-Origin erreichbar.",
+  "commitId": "27f9b9b",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.12.1",
+      "buildId": "20260429-2",
+      "releaseDate": "2026-04-29",
+      "releaseTime": "09:38",
+      "bereich": "Haupteingang öffnen",
+      "note": "Die Gardena-Steuerung nutzt jetzt einen localhost-Backend-Fallback, zeigt Fehler lesbar an und bleibt dank CORS auch bei getrenntem Frontend-Origin erreichbar.",
+      "commitId": "27f9b9b",
+      "obligation": "false"
+    },
     {
       "version": "1.12.0",
       "buildId": "20260429-1",
