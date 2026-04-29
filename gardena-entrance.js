@@ -280,6 +280,7 @@ function getValveMeta(valve) {
   if (isUnavailable) {
     return {
       hidden: true,
+      cardClass: 'border-slate-200 bg-white',
       badgeClass: 'bg-gray-100 text-gray-700',
       badgeText: 'Nicht verbunden',
       activityText: 'Nicht angeschlossen',
@@ -293,6 +294,7 @@ function getValveMeta(valve) {
   if (!valve.online) {
     return {
       hidden: false,
+      cardClass: 'border-red-200 bg-red-50/60',
       badgeClass: 'bg-red-100 text-red-700',
       badgeText: 'Offline',
       activityText: translateGardenaCode(activity, 'Offline'),
@@ -306,6 +308,7 @@ function getValveMeta(valve) {
   if (isOpen) {
     return {
       hidden: false,
+      cardClass: 'border-emerald-300 bg-emerald-50',
       badgeClass: 'bg-emerald-100 text-emerald-700',
       badgeText: activity === 'SCHEDULED_WATERING' ? 'Geplant aktiv' : 'Aktiv',
       activityText: activeByDuration ? 'Bewässerung aktiv' : translateGardenaCode(activity, 'Bewässerung aktiv'),
@@ -320,6 +323,7 @@ function getValveMeta(valve) {
 
   return {
     hidden: false,
+    cardClass: 'border-slate-200 bg-white',
     badgeClass: 'bg-slate-100 text-slate-700',
     badgeText: 'Geschlossen',
     activityText: translateGardenaCode(activity, 'Geschlossen'),
@@ -390,27 +394,25 @@ function renderValveCards() {
     const stopDisabledAttr = isPending ? 'disabled' : '';
 
     return `
-      <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm ${valve.online ? '' : 'opacity-95'}">
+      <div class="rounded-2xl border p-4 shadow-sm ${meta.cardClass} ${valve.online ? '' : 'opacity-95'}">
         <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-              <span class="${meta.ledClass}" aria-hidden="true"></span>
-              <span>Ventil ${escapeHtml(String(valve.slot || '—'))}</span>
-            </div>
-            <div class="mt-2 flex w-full items-center rounded-xl border border-orange-300 bg-orange-50 px-2.5 py-1.5">
-              <h4 class="gardena-valve-name text-sm font-extrabold text-slate-900">${escapeHtml(valve.name || `Ventil ${valve.slot || ''}`)}</h4>
-            </div>
+          <div class="min-w-0 flex-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+            <span class="${meta.ledClass}" aria-hidden="true"></span>
+            <span>Ventil ${escapeHtml(String(valve.slot || '—'))}</span>
           </div>
           <span class="shrink-0 rounded-full px-3 py-1 text-xs font-bold ${meta.badgeClass}">${escapeHtml(meta.badgeText)}</span>
         </div>
+        <div class="mt-2 flex w-full items-center rounded-xl border border-orange-300 bg-orange-50 px-3 py-2">
+          <h4 class="gardena-valve-name text-sm font-extrabold text-slate-900">${escapeHtml(valve.name || `Ventil ${valve.slot || ''}`)}</h4>
+        </div>
         <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div class="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-100">
+          <div class="rounded-xl bg-white/80 px-3 py-2.5 ring-1 ring-slate-100">
             <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Aktivität</div>
-            <div class="mt-1 text-sm font-bold text-slate-900 break-words">${escapeHtml(meta.activityText)}</div>
+            <div class="gardena-status-line mt-1 text-sm font-bold text-slate-900">${escapeHtml(meta.activityText)}</div>
           </div>
-          <div class="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-100">
+          <div class="rounded-xl bg-white/80 px-3 py-2.5 ring-1 ring-slate-100">
             <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Zustand</div>
-            <div class="mt-1 text-sm font-bold text-slate-900 break-words">${escapeHtml(meta.stateText)}</div>
+            <div class="gardena-status-line mt-1 text-sm font-bold text-slate-900">${escapeHtml(meta.stateText)}</div>
           </div>
         </div>
         <div class="mt-4 flex flex-wrap gap-3">

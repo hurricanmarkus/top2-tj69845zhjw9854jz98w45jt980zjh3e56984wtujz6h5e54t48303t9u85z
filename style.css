@@ -393,8 +393,15 @@ option {
     width: 100%;
     max-width: 100%;
     overflow: hidden;
-    text-overflow: ellipsis;
+    text-overflow: clip;
     white-space: nowrap;
+    line-height: 1.1;
+}
+
+.gardena-status-line {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     line-height: 1.1;
 }
 
