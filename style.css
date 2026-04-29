@@ -389,6 +389,60 @@ option {
     display: none !important;
 }
 
+.gardena-valve-name {
+    max-width: min(100%, 13rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.1;
+}
+
+.gardena-led {
+    width: 0.85rem;
+    height: 0.85rem;
+    border-radius: 9999px;
+    display: inline-block;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 0 10px currentColor;
+}
+
+.gardena-led--green {
+    color: #10b981;
+    background: #10b981;
+}
+
+.gardena-led--red {
+    color: #ef4444;
+    background: #ef4444;
+}
+
+.gardena-led--amber {
+    color: #f59e0b;
+    background: #f59e0b;
+}
+
+.gardena-led--slate {
+    color: #94a3b8;
+    background: #94a3b8;
+}
+
+.gardena-led--blink {
+    animation: gardenaLedPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes gardenaLedPulse {
+    0%,
+    100% {
+        opacity: 0.35;
+        transform: scale(0.95);
+        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 0 6px currentColor;
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.08);
+        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 0 14px currentColor;
+    }
+}
+
 #gardenaEntranceSection .loading-spinner,
 #gardenaDurationModal .loading-spinner {
     margin-left: 0;

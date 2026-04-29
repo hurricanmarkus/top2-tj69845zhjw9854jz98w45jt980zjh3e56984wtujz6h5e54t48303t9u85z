@@ -1,5 +1,5 @@
 // // @ts-check
-const SW_VERSION = 'top2-v20260429-3';
+const SW_VERSION = 'top2-v20260429-4';
 
 const APP_CACHE = `${SW_VERSION}-app`;
 const ASSET_CACHE = `${SW_VERSION}-assets`;
@@ -9,7 +9,7 @@ const APP_SHELL_URLS = [
   '/index.html',
   '/index.html?source=pwa',
   '/manifest.json',
-  '/manifest.json?v=20260429-3',
+  '/manifest.json?v=20260429-4',
   '/style.css'
 ];
 

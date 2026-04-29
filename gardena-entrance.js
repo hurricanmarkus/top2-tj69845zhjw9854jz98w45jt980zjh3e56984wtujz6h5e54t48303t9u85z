@@ -1,8 +1,34 @@
 const STATUS_ENDPOINT = '/api/status';
 const COMMAND_ENDPOINT = '/api/command';
 const DEFAULT_BACKEND_ORIGIN = 'http://localhost:3000';
+const DEFAULT_FUNCTIONS_API_BASE = 'https://europe-west1-top2-e9ac0.cloudfunctions.net/gardenaApi';
 const STATUS_STALE_MS = 30000;
 const PRESET_MINUTES = [5, 10, 15, 30];
+const GARDENA_TEXTS = {
+  ONLINE: 'Online',
+  OFFLINE: 'Offline',
+  UNKNOWN: 'Unbekannt',
+  UNAVAILABLE: 'Nicht verfügbar',
+  NOT_AVAILABLE: 'Nicht verfügbar',
+  NONE: 'Keine Aktivität',
+  OK: 'Bereit',
+  ERROR: 'Fehler',
+  CLOSED: 'Geschlossen',
+  OPEN: 'Offen',
+  PAUSED: 'Pausiert',
+  LOW: 'Niedrig',
+  CRITICAL: 'Kritisch',
+  CHARGING: 'Lädt',
+  MANUAL_CONTROL: 'Manuelle Bewässerung',
+  SCHEDULED_WATERING: 'Geplante Bewässerung',
+  START_SECONDS_TO_OVERRIDE: 'Manuell gestartet',
+  STOP_UNTIL_NEXT_TASK: 'Bis zum nächsten Plan gestoppt',
+  LEAVING: 'Fährt los',
+  MOWING: 'Mäht',
+  GOING_HOME: 'Fährt zur Station',
+  PARKED_IN_CS: 'In Ladestation',
+  PARKED_PARKED_SELECTED: 'Geparkt',
+};
 
 const state = {
   listenersBound: false,
@@ -27,6 +53,36 @@ function escapeHtml(value = '') {
     '"': '&quot;',
     "'": '&#39;',
   }[char] || char));
+}
+
+function normalizeGardenaCode(value = '') {
+  return String(value || '').trim().toUpperCase();
+}
+
+function translateGardenaCode(value, fallback = 'Unbekannt') {
+  const code = normalizeGardenaCode(value);
+  if (!code) return fallback;
+  if (GARDENA_TEXTS[code]) return GARDENA_TEXTS[code];
+
+  return code
+    .toLowerCase()
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ') || fallback;
+}
+
+function buildApiUrl(base, endpointPath) {
+  const normalizedBase = normalizeOrigin(base);
+  if (!normalizedBase) return '';
+  if (normalizedBase.endsWith('/gardenaApi')) {
+    return `${normalizedBase}${String(endpointPath || '').replace(/^\/api/, '')}`;
+  }
+  return `${normalizedBase}${endpointPath}`;
+}
+
+function isHtmlLikeResponse(value = '') {
+  return typeof value === 'string' && /<!doctype html|<html|the page could not be found/i.test(value);
 }
 
 function getElements() {
@@ -122,15 +178,17 @@ function getApiUrlCandidates(endpointPath) {
   const candidates = [];
 
   if (configuredOrigin) {
-    candidates.push(`${configuredOrigin}${endpointPath}`);
+    candidates.push(buildApiUrl(configuredOrigin, endpointPath));
   }
 
   if (currentOrigin) {
-    candidates.push(`${currentOrigin}${endpointPath}`);
+    candidates.push(buildApiUrl(currentOrigin, endpointPath));
   }
 
+  candidates.push(buildApiUrl(DEFAULT_FUNCTIONS_API_BASE, endpointPath));
+
   if (allowLocalHttpFallback) {
-    candidates.push(`${DEFAULT_BACKEND_ORIGIN}${endpointPath}`);
+    candidates.push(buildApiUrl(DEFAULT_BACKEND_ORIGIN, endpointPath));
   }
 
   return [...new Set(candidates.filter(Boolean))];
@@ -174,63 +232,82 @@ function getMowerMeta(mower) {
   if (!mower.online) {
     return {
       badgeClass: 'bg-red-100 text-red-700',
-      badgeText: 'OFFLINE',
-      activityText: mower.activity || mower.state || 'Offline',
+      badgeText: 'Offline',
+      activityText: translateGardenaCode(mower.activity || mower.state || 'OFFLINE', 'Offline'),
       batteryText: mower.batteryLevel ?? '—',
-      batteryStateText: mower.batteryState || '—',
+      batteryStateText: translateGardenaCode(mower.batteryState, '—'),
     };
   }
 
   return {
     badgeClass: 'bg-emerald-100 text-emerald-700',
-    badgeText: 'ONLINE',
-    activityText: mower.activity || mower.state || 'Unbekannt',
+    badgeText: 'Online',
+    activityText: translateGardenaCode(mower.activity || mower.state || 'UNKNOWN'),
     batteryText: mower.batteryLevel ?? '—',
-    batteryStateText: mower.batteryState || '—',
+    batteryStateText: translateGardenaCode(mower.batteryState, '—'),
   };
 }
 
 function getValveMeta(valve) {
-  const activity = String(valve?.activity || valve?.state || 'UNBEKANNT').toUpperCase();
-  const isOpen = activity === 'MANUAL_CONTROL';
+  const activity = normalizeGardenaCode(valve?.activity || valve?.state || 'UNKNOWN');
+  const status = normalizeGardenaCode(valve?.state || valve?.activity || 'UNKNOWN');
+  const isOpen = activity === 'MANUAL_CONTROL' || activity === 'SCHEDULED_WATERING' || status === 'OPEN';
   const isUnavailable = valve?.unavailable || !valve?.serviceId;
 
   if (isUnavailable) {
     return {
+      hidden: true,
       badgeClass: 'bg-gray-100 text-gray-700',
-      badgeText: 'Nicht gefunden',
-      activityText: 'Keine Ventil-Daten',
-      canStart: false,
-      canStop: false,
+      badgeText: 'Nicht verbunden',
+      activityText: 'Nicht angeschlossen',
+      stateText: 'Nicht verfügbar',
+      showStart: false,
+      showStop: false,
+      ledClass: 'gardena-led gardena-led--slate',
+      ledLabel: 'Nicht verbunden',
     };
   }
 
   if (!valve.online) {
     return {
+      hidden: false,
       badgeClass: 'bg-red-100 text-red-700',
-      badgeText: 'OFFLINE',
-      activityText: activity,
-      canStart: true,
-      canStop: true,
+      badgeText: 'Offline',
+      activityText: translateGardenaCode(activity, 'Offline'),
+      stateText: translateGardenaCode(status, 'Offline'),
+      showStart: false,
+      showStop: false,
+      ledClass: 'gardena-led gardena-led--red gardena-led--blink',
+      ledLabel: 'Offline',
     };
   }
 
   if (isOpen) {
     return {
+      hidden: false,
       badgeClass: 'bg-emerald-100 text-emerald-700',
-      badgeText: 'Offen',
-      activityText: activity,
-      canStart: true,
-      canStop: true,
+      badgeText: activity === 'SCHEDULED_WATERING' ? 'Geplant aktiv' : 'Offen',
+      activityText: translateGardenaCode(activity, 'Offen'),
+      stateText: translateGardenaCode(status, 'Offen'),
+      showStart: false,
+      showStop: true,
+      ledClass: activity === 'SCHEDULED_WATERING'
+        ? 'gardena-led gardena-led--amber gardena-led--blink'
+        : 'gardena-led gardena-led--green gardena-led--blink',
+      ledLabel: activity === 'SCHEDULED_WATERING' ? 'Automatisch aktiv' : 'Manuell aktiv',
     };
   }
 
   return {
+    hidden: false,
     badgeClass: 'bg-slate-100 text-slate-700',
     badgeText: 'Geschlossen',
-    activityText: activity,
-    canStart: true,
-    canStop: true,
+    activityText: translateGardenaCode(activity, 'Geschlossen'),
+    stateText: translateGardenaCode(status, 'Geschlossen'),
+    showStart: true,
+    showStop: false,
+    ledClass: 'gardena-led gardena-led--red gardena-led--blink',
+    ledLabel: 'Aus',
   };
 }
 
@@ -276,46 +353,82 @@ function renderValveCards() {
     ? state.status.valves
     : Array.from({ length: 6 }, (_, index) => createFallbackValve(index + 1));
 
-  valveGrid.innerHTML = valves.map((valve) => {
+  const visibleValves = valves.filter((valve) => !getValveMeta(valve).hidden);
+
+  if (!visibleValves.length) {
+    valveGrid.innerHTML = `
+      <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm font-bold text-amber-800 sm:col-span-2">
+        Es wurden aktuell keine angeschlossenen Ventile erkannt.
+      </div>
+    `;
+    return;
+  }
+
+  valveGrid.innerHTML = visibleValves.map((valve) => {
     const meta = getValveMeta(valve);
     const isPending = valve.serviceId && state.pendingServiceIds.has(valve.serviceId);
-    const disabledAttr = (!meta.canStart || isPending) ? 'disabled' : '';
-    const stopDisabledAttr = (!meta.canStop || isPending) ? 'disabled' : '';
+    const startDisabledAttr = isPending ? 'disabled' : '';
+    const stopDisabledAttr = isPending ? 'disabled' : '';
 
     return `
       <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm ${valve.online ? '' : 'opacity-95'}">
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
-            <div class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Ventil ${escapeHtml(String(valve.slot || '—'))}</div>
-            <h4 class="mt-1 text-lg font-extrabold text-slate-900 break-words">${escapeHtml(valve.name || `Ventil ${valve.slot || ''}`)}</h4>
+            <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+              <span class="${meta.ledClass}" aria-hidden="true"></span>
+              <span>Ventil ${escapeHtml(String(valve.slot || '—'))}</span>
+            </div>
+            <div class="mt-2 inline-flex max-w-full items-center rounded-xl border border-orange-300 bg-orange-50 px-2.5 py-1.5">
+              <h4 class="gardena-valve-name text-sm font-extrabold text-slate-900">${escapeHtml(valve.name || `Ventil ${valve.slot || ''}`)}</h4>
+            </div>
           </div>
           <span class="shrink-0 rounded-full px-3 py-1 text-xs font-bold ${meta.badgeClass}">${escapeHtml(meta.badgeText)}</span>
         </div>
-        <div class="mt-3 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-100">
-          <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Activity</div>
-          <div class="mt-1 text-sm font-bold text-slate-900 break-words">${escapeHtml(meta.activityText)}</div>
+        <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div class="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-100">
+            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Aktivität</div>
+            <div class="mt-1 text-sm font-bold text-slate-900 break-words">${escapeHtml(meta.activityText)}</div>
+          </div>
+          <div class="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-100">
+            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Zustand</div>
+            <div class="mt-1 text-sm font-bold text-slate-900 break-words">${escapeHtml(meta.stateText)}</div>
+          </div>
         </div>
-        <div class="mt-4 grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            class="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-            data-gardena-action="open-modal"
-            data-service-id="${escapeHtml(valve.serviceId || '')}"
-            data-valve-name="${escapeHtml(valve.name || `Ventil ${valve.slot || ''}`)}"
-            ${disabledAttr}
-          >
-            Starten
-          </button>
-          <button
-            type="button"
-            class="rounded-xl bg-rose-600 px-4 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center"
-            data-gardena-action="stop"
-            data-service-id="${escapeHtml(valve.serviceId || '')}"
-            ${stopDisabledAttr}
-          >
-            <span class="button-text" style="display:${isPending ? 'none' : 'inline-block'}">Stoppen</span>
-            <span class="loading-spinner" style="display:${isPending ? 'inline-block' : 'none'}"></span>
-          </button>
+        <div class="mt-3 flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+          <span class="${meta.ledClass}" aria-hidden="true"></span>
+          <span class="text-xs font-bold uppercase tracking-wide text-slate-600">LED</span>
+          <span class="text-sm font-bold text-slate-900">${escapeHtml(meta.ledLabel)}</span>
+        </div>
+        <div class="mt-4 flex flex-wrap gap-3">
+          ${meta.showStart ? `
+            <button
+              type="button"
+              class="flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+              data-gardena-action="open-modal"
+              data-service-id="${escapeHtml(valve.serviceId || '')}"
+              data-valve-name="${escapeHtml(valve.name || `Ventil ${valve.slot || ''}`)}"
+              ${startDisabledAttr}
+            >
+              Starten
+            </button>
+          ` : ''}
+          ${meta.showStop ? `
+            <button
+              type="button"
+              class="flex-1 rounded-xl bg-rose-600 px-4 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center"
+              data-gardena-action="stop"
+              data-service-id="${escapeHtml(valve.serviceId || '')}"
+              ${stopDisabledAttr}
+            >
+              <span class="button-text" style="display:${isPending ? 'none' : 'inline-block'}">Stoppen</span>
+              <span class="loading-spinner" style="display:${isPending ? 'inline-block' : 'none'}"></span>
+            </button>
+          ` : ''}
+          ${!meta.showStart && !meta.showStop ? `
+            <div class="w-full rounded-xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-600">
+              Derzeit ist keine Aktion verfügbar.
+            </div>
+          ` : ''}
         </div>
       </div>
     `;
@@ -397,6 +510,13 @@ async function readJsonResponse(response) {
     payload = rawText ? JSON.parse(rawText) : null;
   } catch (error) {
     payload = rawText || null;
+  }
+
+  if (isHtmlLikeResponse(payload)) {
+    payload = {
+      ok: false,
+      message: 'Die aktuelle Website liefert kein Gardena-Backend. Online bitte die Cloud Function gardenaApi bereitstellen.',
+    };
   }
 
   if (!response.ok || !payload?.ok) {

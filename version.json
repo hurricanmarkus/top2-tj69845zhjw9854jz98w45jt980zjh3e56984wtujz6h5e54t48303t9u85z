@@ -1,14 +1,24 @@
 {
-  "version": "1.12.2",
-  "buildId": "20260429-3",
+  "version": "1.12.3",
+  "buildId": "20260429-4",
   "releaseDate": "2026-04-29",
-  "releaseTime": "09:41",
+  "releaseTime": "09:58",
   "bereich": "Haupteingang öffnen",
   "timezone": "Europe/Vienna",
-  "note": "Der Gardena-Parser erkennt jetzt mehrere VALVE-Services pro Gerät korrekt, sodass Ventile 1 bis 6 nicht mehr gegenseitig überschrieben werden.",
+  "note": "Gardena blendet unverbundene Ventile aus, zeigt deutsche Status mit LED-Anzeigen und nutzt online eine Cloud-Function-Fallback-API statt der Hosting-404-Seite.",
   "commitId": "27f9b9b",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.12.3",
+      "buildId": "20260429-4",
+      "releaseDate": "2026-04-29",
+      "releaseTime": "09:58",
+      "bereich": "Haupteingang öffnen",
+      "note": "Gardena blendet unverbundene Ventile aus, zeigt deutsche Status mit LED-Anzeigen und nutzt online eine Cloud-Function-Fallback-API statt der Hosting-404-Seite.",
+      "commitId": "27f9b9b",
+      "obligation": "false"
+    },
     {
       "version": "1.12.2",
       "buildId": "20260429-3",
