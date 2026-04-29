@@ -1,14 +1,24 @@
 {
-  "version": "1.11.10",
-  "buildId": "20260428-1",
-  "releaseDate": "2026-04-28",
-  "releaseTime": "07:49",
-  "bereich": "Wertguthaben",
+  "version": "1.12.0",
+  "buildId": "20260429-1",
+  "releaseDate": "2026-04-29",
+  "releaseTime": "08:54",
+  "bereich": "Haupteingang öffnen",
   "timezone": "Europe/Vienna",
-  "note": "Die Inhalte der Eintragszeilen in der Wertguthaben-Dashboard-Tabelle sind jetzt vertikal mittig ausgerichtet.",
-  "commitId": "a5700b7",
+  "note": "Der Haupteingang enthält jetzt eine mobile Gardena-Steuerung mit Mäherstatus, sechs Ventilkarten, Dauer-Modal und Express-Backend mit automatischem Token-Refresh.",
+  "commitId": "bd4fa61",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.12.0",
+      "buildId": "20260429-1",
+      "releaseDate": "2026-04-29",
+      "releaseTime": "08:54",
+      "bereich": "Haupteingang öffnen",
+      "note": "Der Haupteingang enthält jetzt eine mobile Gardena-Steuerung mit Mäherstatus, sechs Ventilkarten, Dauer-Modal und Express-Backend mit automatischem Token-Refresh.",
+      "commitId": "bd4fa61",
+      "obligation": "false"
+    },
     {
       "version": "1.11.10",
       "buildId": "20260428-1",

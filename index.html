@@ -24,15 +24,15 @@
     <meta name="application-name" content="TOP 2 App">
     <meta name="apple-mobile-web-app-title" content="TOP2">
     <meta name="theme-color" content="#4f46e5" />
-    <meta name="top2-app-version" content="1.11.10" />
-    <meta name="top2-build-id" content="20260428-1" />
+    <meta name="top2-app-version" content="1.12.0" />
+    <meta name="top2-build-id" content="20260429-1" />
     <meta name="msapplication-navbutton-color" content="#4f46e5">
     <meta name="apple-mobile-app-status-bar-style" content="black-translucent">
     <link rel="icon" type="image/png" sizes="192x192" href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
     <link rel="apple-touch-icon" type="image/png" sizes="192x192"
         href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
 
-    <link rel="manifest" href="manifest.json?v=20260428-1">
+    <link rel="manifest" href="manifest.json?v=20260429-1">
 
     <link rel="stylesheet" href="style.css">
     
@@ -669,6 +669,48 @@
                         <div class="loading-spinner"></div>
                     </button>
                 </div>
+
+                <section id="gardenaEntranceSection" class="mt-6 space-y-4">
+                    <div class="rounded-3xl bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 p-[1px] shadow-xl">
+                        <div class="rounded-[calc(1.5rem-1px)] bg-white/95 p-4 sm:p-5 backdrop-blur">
+                            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div>
+                                    <div class="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-600">Gardena Smart System</div>
+                                    <h3 class="mt-1 text-2xl font-extrabold text-slate-900">Bewässerung &amp; Mähroboter</h3>
+                                    <p class="mt-1 text-sm text-slate-600">Status und Ventilsteuerung direkt unter dem Haupteingang.</p>
+                                </div>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span id="gardenaEntranceLocationBadge" class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">Ort: GARDENA</span>
+                                    <span id="gardenaEntranceUpdatedBadge" class="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">Aktualisiert: —</span>
+                                    <button id="gardenaEntranceRefreshButton" type="button" class="inline-flex items-center justify-center rounded-full bg-indigo-600 px-4 py-2 text-sm font-extrabold text-white shadow-md transition hover:bg-indigo-700">
+                                        <span class="button-text">Aktualisieren</span>
+                                        <span class="loading-spinner"></span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div id="gardenaEntranceLoading" class="hidden items-center justify-center gap-3 rounded-2xl bg-slate-50 px-4 py-6 text-slate-600 ring-1 ring-slate-200">
+                                <svg class="h-5 w-5 animate-spin text-emerald-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                                </svg>
+                                <span class="text-sm font-semibold">Gardena-Daten werden geladen...</span>
+                            </div>
+
+                            <div id="gardenaEntranceError" class="hidden rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700"></div>
+
+                            <div id="gardenaEntranceMowerHost" class="mt-4"></div>
+
+                            <div class="mt-5">
+                                <div class="mb-3 flex items-center justify-between gap-3">
+                                    <h4 class="text-lg font-extrabold text-slate-900">6-Kanal-Ventilsteuerung</h4>
+                                    <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">IDs :1 bis :6</span>
+                                </div>
+                                <div id="gardenaEntranceValveGrid" class="grid grid-cols-1 gap-4 sm:grid-cols-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </div>
 
             <div id="checklistView" class="view"></div>
@@ -9436,6 +9478,44 @@
             <div id="kategorien-settings-list" class="space-y-2">
                 <p class="text-center text-gray-400 italic py-4">Keine Kategorien vorhanden.</p>
             </div>
+        </div>
+    </div>
+</div>
+
+<div id="gardenaDurationModal" class="fixed inset-0 z-[90] hidden items-end justify-center bg-slate-950/60 p-0 sm:items-center sm:p-4">
+    <div class="w-full rounded-t-3xl bg-white p-4 shadow-2xl sm:max-w-md sm:rounded-3xl sm:p-5">
+        <div class="flex items-start justify-between gap-3">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">Ventil starten</div>
+                <h3 id="gardenaDurationModalTitle" class="mt-1 text-xl font-extrabold text-slate-900">Ventil starten</h3>
+            </div>
+            <button type="button" data-gardena-modal-close="true" class="rounded-full bg-slate-100 p-2 text-slate-600 transition hover:bg-slate-200" aria-label="Schließen">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-5 w-5">
+                    <path fill-rule="evenodd" d="M5.47 5.47a.75.75 0 011.06 0L12 10.94l5.47-5.47a.75.75 0 111.06 1.06L13.06 12l5.47 5.47a.75.75 0 11-1.06 1.06L12 13.06l-5.47 5.47a.75.75 0 11-1.06-1.06L10.94 12 5.47 6.53a.75.75 0 010-1.06z" clip-rule="evenodd" />
+                </svg>
+            </button>
+        </div>
+
+        <p class="mt-3 text-sm text-slate-600">Wähle eine Dauer oder gib eigene Minuten ein. Gesendet wird automatisch als <span class="font-bold">START_SECONDS</span> in Sekunden.</p>
+
+        <div class="mt-4 grid grid-cols-2 gap-3">
+            <button type="button" data-gardena-preset-minutes="5" class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-extrabold text-slate-700 transition hover:border-emerald-400 hover:text-emerald-700">5 Min</button>
+            <button type="button" data-gardena-preset-minutes="10" class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-extrabold text-slate-700 transition hover:border-emerald-400 hover:text-emerald-700">10 Min</button>
+            <button type="button" data-gardena-preset-minutes="15" class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-extrabold text-slate-700 transition hover:border-emerald-400 hover:text-emerald-700">15 Min</button>
+            <button type="button" data-gardena-preset-minutes="30" class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-extrabold text-slate-700 transition hover:border-emerald-400 hover:text-emerald-700">30 Min</button>
+        </div>
+
+        <div class="mt-4">
+            <label for="gardenaDurationInput" class="mb-2 block text-sm font-bold text-slate-700">Eigene Minuten</label>
+            <input id="gardenaDurationInput" type="number" min="1" step="1" inputmode="numeric" class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-lg font-bold text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100" placeholder="z. B. 12">
+        </div>
+
+        <div class="mt-5 grid grid-cols-2 gap-3">
+            <button type="button" data-gardena-modal-close="true" class="rounded-2xl bg-slate-200 px-4 py-3 text-sm font-extrabold text-slate-700 transition hover:bg-slate-300">Abbrechen</button>
+            <button id="gardenaDurationConfirmButton" type="button" class="flex items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-extrabold text-white shadow-md transition hover:bg-emerald-700">
+                <span class="button-text">Starten</span>
+                <span class="loading-spinner"></span>
+            </button>
         </div>
     </div>
 </div>

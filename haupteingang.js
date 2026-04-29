@@ -37,6 +37,7 @@ import { initializeAbbuchungsberechner, stopAbbuchungsberechnerListeners } from 
 import { initializeGeschenkemanagement, listenForGeschenke, stopGeschenkemanagementListeners } from './geschenkemanagement.js';
 import { initializeSendungsverwaltungView, listenForSendungen, stopSendungsverwaltungListeners } from './sendungsverwaltung.js';
 import { initializeEinkaufsliste, stopEinkaufslisteListeners } from './einkaufsliste.js';
+import { initializeGardenaEntranceControls } from './gardena-entrance.js';
 import { ensureNachrichtencenterSelfContact } from './notfall.js';
 import { initializeNotizen, stopNotizenListeners } from './notizen.js';
 import { initializeMitarbeiterkarte, stopMitarbeiterkarteListeners } from './ma-karte.js';
@@ -2986,6 +2987,10 @@ export function navigate(targetViewName, options = {}) {
 
     if (targetViewName === 'pushmailCenter') {
         initializePushmailCenterView();
+    }
+
+    if (targetViewName === 'entrance') {
+        initializeGardenaEntranceControls({ alertUser });
     }
 
     if (targetViewName === 'userSettings') {

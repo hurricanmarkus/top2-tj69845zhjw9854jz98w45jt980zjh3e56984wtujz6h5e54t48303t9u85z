@@ -388,3 +388,19 @@ option {
     height: 0 !important;
     display: none !important;
 }
+
+#gardenaEntranceSection .loading-spinner,
+#gardenaDurationModal .loading-spinner {
+    margin-left: 0;
+}
+
+#gardenaDurationModal > div {
+    max-height: min(90vh, 42rem);
+    overflow-y: auto;
+}
+
+@media (max-width: 640px) {
+    #gardenaDurationModal > div {
+        padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    }
+}
