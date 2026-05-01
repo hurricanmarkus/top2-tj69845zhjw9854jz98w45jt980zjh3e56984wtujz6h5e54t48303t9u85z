@@ -54,11 +54,11 @@ function getApiUrlCandidates(endpointPath) {
     candidates.push(buildApiUrl(configuredOrigin, endpointPath));
   }
 
+  candidates.push(buildApiUrl(DEFAULT_FUNCTIONS_API_BASE, endpointPath));
+
   if (currentOrigin) {
     candidates.push(buildApiUrl(currentOrigin, endpointPath));
   }
-
-  candidates.push(buildApiUrl(DEFAULT_FUNCTIONS_API_BASE, endpointPath));
 
   return [...new Set(candidates.filter(Boolean))];
 }
