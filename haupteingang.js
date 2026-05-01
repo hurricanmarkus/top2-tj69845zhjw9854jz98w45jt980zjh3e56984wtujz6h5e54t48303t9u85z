@@ -38,6 +38,7 @@ import { initializeGeschenkemanagement, listenForGeschenke, stopGeschenkemanagem
 import { initializeSendungsverwaltungView, listenForSendungen, stopSendungsverwaltungListeners } from './sendungsverwaltung.js';
 import { initializeEinkaufsliste, stopEinkaufslisteListeners } from './einkaufsliste.js';
 import { initializeGardenaEntranceControls } from './gardena-entrance.js';
+import { initializeHueEntranceControls } from './hue-entrance.js';
 import { ensureNachrichtencenterSelfContact } from './notfall.js';
 import { initializeNotizen, stopNotizenListeners } from './notizen.js';
 import { initializeMitarbeiterkarte, stopMitarbeiterkarteListeners } from './ma-karte.js';
@@ -1484,7 +1485,6 @@ function registerAppServiceWorker() {
 }
 
 
-
 window.onload = function () {
     // KORREKTUR: Kein 'const' mehr für diese Variablen, damit sie global gespeichert werden!
     modalUserButtons = document.getElementById('modalUserButtons');
@@ -1521,8 +1521,6 @@ window.onload = function () {
     const userManagementArea = document.getElementById('userManagementArea');
     const approvalProcessSection = document.getElementById('approvalProcessSection');
     const approvalProcessArea = document.getElementById('approvalProcessArea');
-    const protocolHistorySection = document.getElementById('protocolHistorySection');
-    const protocolHistoryArea = document.getElementById('protocolHistoryArea');
     const noAdminPermissionsPrompt = document.getElementById('noAdminPermissionsPrompt');
     const mainFunctionsSection = document.getElementById('mainFunctionsSection');
     const mainFunctionsArea = document.getElementById('mainFunctionsArea');
@@ -2028,7 +2026,10 @@ const loadPushmailPushoverProgramConfig = async (recipientId, forceReload = fals
 };
 
 const checkPendingUserKeyChangeRequest = async (userId) => {
-    if (!db || !userId) return false;
+    if (!db || !userId) {
+        // eslint-disable-next-line no-undef
+        return false;
+    }
     
     try {
         const requestsCollection = collection(db, 'artifacts', appId, 'public', 'data', 'pushover_userkey_change_requests');
@@ -2991,6 +2992,7 @@ export function navigate(targetViewName, options = {}) {
 
     if (targetViewName === 'entrance') {
         initializeGardenaEntranceControls({ alertUser });
+        initializeHueEntranceControls({ alertUser });
     }
 
     if (targetViewName === 'userSettings') {

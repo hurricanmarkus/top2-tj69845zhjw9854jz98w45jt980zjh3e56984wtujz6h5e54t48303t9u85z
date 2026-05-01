@@ -1,14 +1,24 @@
 {
-  "version": "1.12.6",
-  "buildId": "20260429-7",
-  "releaseDate": "2026-04-29",
-  "releaseTime": "10:53",
+  "version": "1.13.0",
+  "buildId": "20260501-1",
+  "releaseDate": "2026-05-01",
+  "releaseTime": "20:52",
   "bereich": "Smart Top2",
   "timezone": "Europe/Vienna",
-  "note": "Das Modul heißt jetzt überall Smart Top2, inklusive Startseite, Hauptmenü, Adminmenü und Berechtigungsbeschriftungen.",
-  "commitId": "27f9b9b",
+  "note": "Smart Top2 enthält jetzt eine eigene Philips-Hue-Cloud-Box mit OAuth-Verbindung, Online-Geräteliste und Schaltfunktion für steuerbare Hue-Lichter.",
+  "commitId": "c09cf0f",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.13.0",
+      "buildId": "20260501-1",
+      "releaseDate": "2026-05-01",
+      "releaseTime": "20:52",
+      "bereich": "Smart Top2",
+      "note": "Smart Top2 enthält jetzt eine eigene Philips-Hue-Cloud-Box mit OAuth-Verbindung, Online-Geräteliste und Schaltfunktion für steuerbare Hue-Lichter.",
+      "commitId": "c09cf0f",
+      "obligation": "false"
+    },
     {
       "version": "1.12.6",
       "buildId": "20260429-7",
