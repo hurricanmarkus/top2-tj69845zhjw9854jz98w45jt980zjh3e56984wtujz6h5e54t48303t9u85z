@@ -1,14 +1,24 @@
 {
-  "version": "1.13.6",
-  "buildId": "20260501-7",
+  "version": "1.13.7",
+  "buildId": "20260501-8",
   "releaseDate": "2026-05-01",
-  "releaseTime": "22:45",
+  "releaseTime": "22:50",
   "bereich": "Eingang",
   "timezone": "Europe/Vienna",
-  "note": "Gardena löst jetzt automatisch eine erreichbare freigegebene Location auf, statt an einer nicht autorisierten festen Resource zu scheitern.",
-  "commitId": "5b49186",
+  "note": "Gardena probiert jetzt bei explicit-deny automatisch den nächsten Backend-Kandidaten weiter, statt am ersten falschen Credential-Satz stehenzubleiben.",
+  "commitId": "180aa59",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.13.7",
+      "buildId": "20260501-8",
+      "releaseDate": "2026-05-01",
+      "releaseTime": "22:50",
+      "bereich": "Eingang",
+      "note": "Gardena probiert jetzt bei explicit-deny automatisch den nächsten Backend-Kandidaten weiter, statt am ersten falschen Credential-Satz stehenzubleiben.",
+      "commitId": "180aa59",
+      "obligation": "false"
+    },
     {
       "version": "1.13.6",
       "buildId": "20260501-7",

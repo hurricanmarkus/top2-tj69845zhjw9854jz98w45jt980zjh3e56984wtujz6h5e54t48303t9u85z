@@ -192,6 +192,20 @@ function extractErrorMessage(value, fallback = 'Unbekannter Fehler') {
   return String(value);
 }
 
+function shouldTryNextBackendCandidate(error) {
+  const statusCode = Number(error?.statusCode || 0);
+  const message = String(error?.message || '').trim().toLowerCase();
+  if (statusCode === 404 || statusCode === 200) {
+    return true;
+  }
+  if (statusCode !== 403 && statusCode !== 429) {
+    return false;
+  }
+  return message.includes('explicit deny')
+    || message.includes('not authorized to access this resource')
+    || message.includes('dürfen diese resource nicht lesen');
+}
+
 function getApiUrlCandidates(endpointPath) {
   const configuredOrigin = normalizeOrigin(window.TOP2_API_ORIGIN);
   const currentOrigin = window.location.protocol === 'file:' ? '' : normalizeOrigin(window.location.origin);
@@ -557,7 +571,7 @@ async function requestApi(endpoint, options = {}) {
     } catch (error) {
       lastError = error;
       const canTryNext = index < candidates.length - 1;
-      const retryableStatus = error?.statusCode === 404 || error?.statusCode === 200;
+      const retryableStatus = shouldTryNextBackendCandidate(error);
       const retryableNetworkError = error instanceof TypeError;
 
       if (canTryNext && (retryableStatus || retryableNetworkError)) {
