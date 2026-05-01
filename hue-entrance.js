@@ -246,7 +246,7 @@ function renderStatus() {
   if (elements.authNotice) {
     if (!isLoggedIn) {
       elements.authNotice.className = 'rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800';
-      elements.authNotice.textContent = 'Bitte melde dich zuerst in der TOP2-App an, damit deine persönliche Hue-Verbindung geladen werden kann.';
+      elements.authNotice.textContent = 'Bitte melde dich zuerst in der TOP2-App an, damit die gemeinsame Hue-Verbindung geladen werden kann.';
     } else if (!connected) {
       const needsReconnect = Boolean(status?.needsReconnect);
       elements.authNotice.className = needsReconnect
@@ -254,7 +254,7 @@ function renderStatus() {
         : 'rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-semibold text-sky-700';
       elements.authNotice.textContent = needsReconnect
         ? (status?.error || 'Hue muss erneut verbunden werden.')
-        : 'Verbinde jetzt dein persönliches Philips-Hue-Konto, damit die Bridge online geladen und schaltbare Lichter in Smart Top2 bedient werden können.';
+        : 'Verbinde jetzt die gemeinsame Philips-Hue-Bridge einmalig, damit alle berechtigten Nutzer die Lampen in Smart Top2 sehen und steuern können.';
     } else {
       elements.authNotice.className = 'rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700';
       elements.authNotice.textContent = `Hue ist verbunden. ${status?.controllableDevices?.length || 0} Geräte können direkt geschaltet werden.`;

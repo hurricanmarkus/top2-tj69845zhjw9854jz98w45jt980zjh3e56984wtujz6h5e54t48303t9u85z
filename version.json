@@ -1,14 +1,24 @@
 {
-  "version": "1.13.3",
-  "buildId": "20260501-4",
+  "version": "1.13.4",
+  "buildId": "20260501-5",
   "releaseDate": "2026-05-01",
-  "releaseTime": "21:52",
+  "releaseTime": "22:25",
   "bereich": "Smart Top2",
   "timezone": "Europe/Vienna",
-  "note": "Der Türöffner Vordereingang hat jetzt eine eigene Karte mit Sofort-Öffnen-Button sowie 5/10/15-Sekunden-Aktionen.",
-  "commitId": "4fae0f8",
+  "note": "Die Philips-Hue-Bridge wird jetzt einmalig global verbunden und danach für alle angemeldeten Nutzer gemeinsam geladen und gesteuert.",
+  "commitId": "dba877c",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.13.4",
+      "buildId": "20260501-5",
+      "releaseDate": "2026-05-01",
+      "releaseTime": "22:25",
+      "bereich": "Smart Top2",
+      "note": "Die Philips-Hue-Bridge wird jetzt einmalig global verbunden und danach für alle angemeldeten Nutzer gemeinsam geladen und gesteuert.",
+      "commitId": "dba877c",
+      "obligation": "false"
+    },
     {
       "version": "1.13.3",
       "buildId": "20260501-4",
