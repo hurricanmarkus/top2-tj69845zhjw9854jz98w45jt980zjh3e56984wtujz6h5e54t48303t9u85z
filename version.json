@@ -1,14 +1,24 @@
 {
-  "version": "1.13.5",
-  "buildId": "20260501-6",
+  "version": "1.13.6",
+  "buildId": "20260501-7",
   "releaseDate": "2026-05-01",
-  "releaseTime": "22:39",
+  "releaseTime": "22:45",
   "bereich": "Eingang",
   "timezone": "Europe/Vienna",
-  "note": "Die Hue-Karte zeigt keinen Trennen-Button mehr und der kleine Aktualisieren-Button bleibt jetzt fix über der Versionsleiste sichtbar.",
-  "commitId": "aaa17f3",
+  "note": "Gardena löst jetzt automatisch eine erreichbare freigegebene Location auf, statt an einer nicht autorisierten festen Resource zu scheitern.",
+  "commitId": "5b49186",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.13.6",
+      "buildId": "20260501-7",
+      "releaseDate": "2026-05-01",
+      "releaseTime": "22:45",
+      "bereich": "Eingang",
+      "note": "Gardena löst jetzt automatisch eine erreichbare freigegebene Location auf, statt an einer nicht autorisierten festen Resource zu scheitern.",
+      "commitId": "5b49186",
+      "obligation": "false"
+    },
     {
       "version": "1.13.5",
       "buildId": "20260501-6",

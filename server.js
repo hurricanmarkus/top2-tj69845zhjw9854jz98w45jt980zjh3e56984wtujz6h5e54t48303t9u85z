@@ -8,7 +8,7 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const AUTH_URL = 'https://api.authentication.husqvarnagroup.dev/v1/oauth2/token';
 const API_BASE_URL = 'https://api.smart.gardena.dev/v1';
-const LOCATION_ID = '81a9f060-0c9e-4fff-a58a-aab202c2ef92';
+const DEFAULT_LOCATION_ID = '81a9f060-0c9e-4fff-a58a-aab202c2ef92';
 const MOWER_DEVICE_ID = '789c5051-fb7b-4851-be4e-ec3b1568b1b5';
 const REQUIRED_ENV_KEYS = ['CLIENT_ID', 'CLIENT_SECRET', 'X_API_KEY'];
 
@@ -16,6 +16,10 @@ const tokenState = {
   accessToken: '',
   expiresAt: 0,
   refreshPromise: null,
+};
+
+const locationState = {
+  locationId: '',
 };
 
 function getMissingEnvKeys() {
@@ -40,6 +44,20 @@ function createApiHeaders(token) {
     'Content-Type': 'application/vnd.api+json',
     Accept: 'application/vnd.api+json',
   };
+}
+
+function isAccessDeniedDetail(statusCode, detail) {
+  const normalizedDetail = String(detail || '').trim().toLowerCase();
+  if (!normalizedDetail) return false;
+  if (statusCode !== 403 && statusCode !== 429) return false;
+  return normalizedDetail.includes('explicit deny') || normalizedDetail.includes('not authorized to access this resource');
+}
+
+function formatGardenaApiDetail(statusCode, detail) {
+  if (isAccessDeniedDetail(statusCode, detail)) {
+    return 'Die aktuellen Gardena-Zugangsdaten dürfen diese Resource nicht lesen. Ich prüfe deshalb automatisch auf eine erreichbare freigegebene Location.';
+  }
+  return String(detail || '').trim() || 'Unbekannter Fehler';
 }
 
 async function requestNewAccessToken() {
@@ -119,16 +137,71 @@ async function gardenaRequest(endpoint, options = {}, retryOnUnauthorized = true
   }
 
   if (!response.ok) {
-    const detail = typeof payload === 'string'
+    const rawDetail = typeof payload === 'string'
       ? payload
       : payload?.message || payload?.errors?.[0]?.detail || payload?.errors?.[0]?.title || response.statusText;
-    const error = new Error(`Gardena API Fehler (${response.status}): ${detail || 'Unbekannter Fehler'}`);
+    const detail = formatGardenaApiDetail(response.status, rawDetail);
+    const error = new Error(`Gardena API Fehler (${response.status}): ${detail}`);
     error.statusCode = response.status;
     error.payload = payload;
+    error.rawDetail = rawDetail;
     throw error;
   }
 
   return payload;
+}
+
+function shouldRetryLocationResolution(error) {
+  const statusCode = Number(error?.statusCode || 0);
+  const rawDetail = String(error?.rawDetail || error?.message || '').trim();
+  return statusCode === 403 || statusCode === 404 || statusCode === 429 || isAccessDeniedDetail(statusCode, rawDetail);
+}
+
+function extractLocationEntries(payload) {
+  return Array.isArray(payload?.data)
+    ? payload.data.filter((entry) => entry && typeof entry === 'object')
+    : [];
+}
+
+async function loadAccessibleLocation() {
+  const candidateIds = [];
+  const cachedId = String(locationState.locationId || '').trim();
+  const preferredId = String(DEFAULT_LOCATION_ID || '').trim();
+
+  if (cachedId) {
+    candidateIds.push(cachedId);
+  }
+  if (preferredId && !candidateIds.includes(preferredId)) {
+    candidateIds.push(preferredId);
+  }
+
+  let lastError = null;
+
+  for (const locationId of candidateIds) {
+    try {
+      const payload = await gardenaRequest(`/locations/${encodeURIComponent(locationId)}`);
+      locationState.locationId = locationId;
+      return { locationId, payload };
+    } catch (error) {
+      lastError = error;
+      if (!shouldRetryLocationResolution(error)) {
+        throw error;
+      }
+    }
+  }
+
+  const locationListPayload = await gardenaRequest('/locations');
+  const locations = extractLocationEntries(locationListPayload);
+  const fallbackLocationId = String(locations[0]?.id || '').trim();
+
+  if (!fallbackLocationId) {
+    if (lastError) throw lastError;
+    throw createConfigError('Für die aktuellen Gardena-Zugangsdaten wurde keine erreichbare Location gefunden.', 404);
+  }
+
+  const payload = await gardenaRequest(`/locations/${encodeURIComponent(fallbackLocationId)}`);
+  locationState.locationId = fallbackLocationId;
+  return { locationId: fallbackLocationId, payload };
 }
 
 function getAttributeValue(item, attributeName) {
@@ -168,7 +241,7 @@ function createDeviceState(deviceId) {
   };
 }
 
-function parseLocationStatus(payload) {
+function parseLocationStatus(payload, resolvedLocationId = '') {
   const included = Array.isArray(payload?.included) ? payload.included : [];
   const devices = new Map();
 
@@ -267,7 +340,7 @@ function parseLocationStatus(payload) {
 
   return {
     location: {
-      id: payload?.data?.id || LOCATION_ID,
+      id: payload?.data?.id || resolvedLocationId || DEFAULT_LOCATION_ID,
       name: payload?.data?.attributes?.name || 'GARDENA',
     },
     mower,
@@ -325,13 +398,13 @@ app.get('/api/status', async (req, res) => {
       throw createConfigError(`Fehlende .env-Werte: ${getMissingEnvKeys().join(', ')}`, 500);
     }
 
-    const payload = await gardenaRequest(`/locations/${LOCATION_ID}`);
-    const parsed = parseLocationStatus(payload);
+    const { locationId, payload } = await loadAccessibleLocation();
+    const parsed = parseLocationStatus(payload, locationId);
 
     res.json({
       ok: true,
       fetchedAt: new Date().toISOString(),
-      locationId: LOCATION_ID,
+      locationId,
       ...parsed,
     });
   } catch (error) {
