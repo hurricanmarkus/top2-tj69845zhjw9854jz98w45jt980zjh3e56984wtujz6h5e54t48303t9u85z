@@ -3,7 +3,6 @@ import { auth, currentUser, GUEST_MODE } from './haupteingang.js';
 const STATUS_ENDPOINT = '/api/status';
 const CONNECT_ENDPOINT = '/api/connect';
 const COMMAND_ENDPOINT = '/api/command';
-const DISCONNECT_ENDPOINT = '/api/disconnect';
 const DEFAULT_FUNCTIONS_API_BASE = 'https://europe-west1-top2-e9ac0.cloudfunctions.net/hueApi';
 const AUTO_REFRESH_INTERVAL_MS = 15000;
 
@@ -11,7 +10,6 @@ const state = {
   listenersBound: false,
   loading: false,
   connectLoading: false,
-  disconnectLoading: false,
   status: null,
   error: '',
   autoRefreshTimer: null,
@@ -124,7 +122,6 @@ function getElements() {
     authNotice: document.getElementById('hueEntranceAuthNotice'),
     connectButton: document.getElementById('hueConnectButton'),
     refreshButton: document.getElementById('hueRefreshButton'),
-    disconnectButton: document.getElementById('hueDisconnectButton'),
     deviceGrid: document.getElementById('hueEntranceDeviceGrid'),
   };
 }
@@ -262,7 +259,6 @@ function renderStatus() {
   }
 
   setButtonBusy(elements.connectButton, state.connectLoading, 'Weiter zu Hue...', 'Hue verbinden');
-  setButtonBusy(elements.disconnectButton, state.disconnectLoading, 'Trennen...', 'Verbindung trennen');
   if (elements.refreshButton) {
     elements.refreshButton.disabled = state.loading || !isLoggedIn;
   }
@@ -271,9 +267,6 @@ function renderStatus() {
   }
   if (elements.refreshButton) {
     elements.refreshButton.style.display = isLoggedIn ? 'inline-flex' : 'none';
-  }
-  if (elements.disconnectButton) {
-    elements.disconnectButton.style.display = isLoggedIn && connected ? 'inline-flex' : 'none';
   }
 
   if (elements.deviceGrid) {
@@ -396,30 +389,6 @@ async function toggleHueLight(lightId, nextOn) {
   }
 }
 
-async function disconnectHue() {
-  state.disconnectLoading = true;
-  renderStatus();
-  try {
-    await requestApi(DISCONNECT_ENDPOINT, { method: 'POST' });
-    state.status = {
-      ok: true,
-      connected: false,
-      fetchedAt: new Date().toISOString(),
-      bridge: null,
-      devices: [],
-      controllableDevices: [],
-    };
-    state.error = '';
-    alertUser('Die Hue-Verbindung wurde getrennt.', 'success');
-  } catch (error) {
-    state.error = extractErrorMessage(error, 'Hue-Verbindung konnte nicht getrennt werden.');
-    alertUser(state.error, 'error');
-  } finally {
-    state.disconnectLoading = false;
-    renderStatus();
-  }
-}
-
 function stopAutoRefresh() {
   if (state.autoRefreshTimer) {
     window.clearInterval(state.autoRefreshTimer);
@@ -452,31 +421,29 @@ function bindListeners() {
   if (state.listenersBound) return;
   const elements = getElements();
   const section = elements.section;
-  if (!section) return;
+  if (!section && !elements.refreshButton) return;
 
-  section.addEventListener('click', (event) => {
-    const target = event.target instanceof Element ? event.target.closest('[data-hue-light-id], #hueConnectButton, #hueRefreshButton, #hueDisconnectButton') : null;
-    if (!target) return;
+  if (section) {
+    section.addEventListener('click', (event) => {
+      const target = event.target instanceof Element ? event.target.closest('[data-hue-light-id], #hueConnectButton') : null;
+      if (!target) return;
 
-    if (target.id === 'hueConnectButton') {
-      startHueConnect().catch(() => {});
-      return;
-    }
+      if (target.id === 'hueConnectButton') {
+        startHueConnect().catch(() => {});
+        return;
+      }
 
-    if (target.id === 'hueRefreshButton') {
+      const lightId = target.getAttribute('data-hue-light-id') || '';
+      const nextOn = String(target.getAttribute('data-hue-next-on') || '').trim() === 'true';
+      toggleHueLight(lightId, nextOn).catch(() => {});
+    });
+  }
+
+  if (elements.refreshButton) {
+    elements.refreshButton.addEventListener('click', () => {
       fetchStatus(true).catch(() => {});
-      return;
-    }
-
-    if (target.id === 'hueDisconnectButton') {
-      disconnectHue().catch(() => {});
-      return;
-    }
-
-    const lightId = target.getAttribute('data-hue-light-id') || '';
-    const nextOn = String(target.getAttribute('data-hue-next-on') || '').trim() === 'true';
-    toggleHueLight(lightId, nextOn).catch(() => {});
-  });
+    });
+  }
 
   state.listenersBound = true;
 }
