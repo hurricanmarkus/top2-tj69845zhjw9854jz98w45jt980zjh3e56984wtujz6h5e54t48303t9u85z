@@ -195,6 +195,7 @@ function extractErrorMessage(value, fallback = 'Unbekannter Fehler') {
 function getApiUrlCandidates(endpointPath) {
   const configuredOrigin = normalizeOrigin(window.TOP2_API_ORIGIN);
   const currentOrigin = window.location.protocol === 'file:' ? '' : normalizeOrigin(window.location.origin);
+  const allowCurrentOriginFallback = Boolean(currentOrigin) && /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(window.location.hostname || '');
   const allowLocalHttpFallback = window.location.protocol !== 'https:';
   const candidates = [];
 
@@ -204,7 +205,7 @@ function getApiUrlCandidates(endpointPath) {
 
   candidates.push(buildApiUrl(DEFAULT_FUNCTIONS_API_BASE, endpointPath));
 
-  if (currentOrigin) {
+  if (allowCurrentOriginFallback) {
     candidates.push(buildApiUrl(currentOrigin, endpointPath));
   }
 

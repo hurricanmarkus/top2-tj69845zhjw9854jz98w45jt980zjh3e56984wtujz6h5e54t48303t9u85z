@@ -48,6 +48,7 @@ function buildApiUrl(base, endpointPath) {
 function getApiUrlCandidates(endpointPath) {
   const configuredOrigin = normalizeOrigin(window.TOP2_API_ORIGIN);
   const currentOrigin = window.location.protocol === 'file:' ? '' : normalizeOrigin(window.location.origin);
+  const allowCurrentOriginFallback = Boolean(currentOrigin) && /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(window.location.hostname || '');
   const candidates = [];
 
   if (configuredOrigin) {
@@ -56,7 +57,7 @@ function getApiUrlCandidates(endpointPath) {
 
   candidates.push(buildApiUrl(DEFAULT_FUNCTIONS_API_BASE, endpointPath));
 
-  if (currentOrigin) {
+  if (allowCurrentOriginFallback) {
     candidates.push(buildApiUrl(currentOrigin, endpointPath));
   }
 
