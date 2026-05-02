@@ -2,8 +2,6 @@ const STATUS_ENDPOINT = '/api/status';
 const COMMAND_ENDPOINT = '/api/command';
 const DEFAULT_BACKEND_ORIGIN = 'http://localhost:3000';
 const DEFAULT_FUNCTIONS_API_BASE = 'https://europe-west1-top2-e9ac0.cloudfunctions.net/gardenaApi';
-const STATUS_STALE_MS = 30000;
-const AUTO_REFRESH_INTERVAL_MS = 5000;
 const PRESET_MINUTES = [5, 10, 15, 30];
 const ACTIVE_VALVE_CODES = new Set(['MANUAL_CONTROL', 'SCHEDULED_WATERING', 'START_SECONDS_TO_OVERRIDE', 'OPEN', 'ACTIVE', 'RUNNING', 'WATERING']);
 const GARDENA_TEXTS = {
@@ -46,8 +44,7 @@ const state = {
   modalServiceId: '',
   modalValveName: '',
   selectedMinutes: 10,
-  autoRefreshTimer: null,
-  visibilityListenerBound: false,
+  postActionRefreshTimer: null,
 };
 
 let helperAlertUser = null;
@@ -118,6 +115,7 @@ function getElements() {
     valveGrid: document.getElementById('gardenaEntranceValveGrid'),
     updatedBadge: document.getElementById('gardenaEntranceUpdatedBadge'),
     locationBadge: document.getElementById('gardenaEntranceLocationBadge'),
+    refreshButton: document.getElementById('hueRefreshButton'),
     modal: document.getElementById('gardenaDurationModal'),
     modalTitle: document.getElementById('gardenaDurationModalTitle'),
     durationInput: document.getElementById('gardenaDurationInput'),
@@ -587,8 +585,8 @@ async function requestApi(endpoint, options = {}) {
   throw new Error(message);
 }
 
-async function fetchStatus({ force = false } = {}) {
-  if (state.loading && !force) return;
+async function fetchStatus() {
+  if (state.loading) return;
 
   state.loading = true;
   state.error = '';
@@ -609,6 +607,18 @@ async function fetchStatus({ force = false } = {}) {
     state.loading = false;
     render();
   }
+}
+
+function scheduleStatusRefresh(delayMs = 5000) {
+  if (state.postActionRefreshTimer) {
+    window.clearTimeout(state.postActionRefreshTimer);
+  }
+
+  state.postActionRefreshTimer = window.setTimeout(() => {
+    state.postActionRefreshTimer = null;
+    if (!isGardenaViewVisible()) return;
+    fetchStatus();
+  }, delayMs);
 }
 
 function closeDurationModal() {
@@ -655,10 +665,7 @@ async function sendCommand(serviceId, command, seconds = null) {
     });
     alertUser(command === 'STOP_UNTIL_NEXT_TASK' ? 'Ventil wird gestoppt.' : 'Ventil wird gestartet.', 'success');
     closeDurationModal();
-    await fetchStatus({ force: true });
-    window.setTimeout(() => {
-      fetchStatus({ force: true });
-    }, 2500);
+    scheduleStatusRefresh(5000);
   } catch (error) {
     alertUser(extractErrorMessage(error, 'Befehl konnte nicht gesendet werden.'), 'error_long');
   } finally {
@@ -678,28 +685,11 @@ function isGardenaViewVisible() {
   return computedStyle.display !== 'none' && computedStyle.visibility !== 'hidden';
 }
 
-function startAutoRefresh() {
-  if (!state.autoRefreshTimer) {
-    state.autoRefreshTimer = window.setInterval(() => {
-      if (state.loading || state.pendingServiceIds.size || !isGardenaViewVisible()) return;
-      fetchStatus({ force: true });
-    }, AUTO_REFRESH_INTERVAL_MS);
-  }
-
-  if (!state.visibilityListenerBound) {
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden || state.loading || !isGardenaViewVisible()) return;
-      fetchStatus({ force: true });
-    });
-    state.visibilityListenerBound = true;
-  }
-}
-
 function bindListeners() {
   if (state.listenersBound) return;
   state.listenersBound = true;
 
-  const { valveGrid, presetButtons, durationInput, confirmButton, modal } = getElements();
+  const { valveGrid, presetButtons, durationInput, confirmButton, modal, refreshButton } = getElements();
 
   valveGrid?.addEventListener('click', (event) => {
     const button = event.target.closest('[data-gardena-action]');
@@ -746,6 +736,11 @@ function bindListeners() {
       closeDurationModal();
     }
   });
+
+  refreshButton?.addEventListener('click', () => {
+    if (!isGardenaViewVisible()) return;
+    fetchStatus();
+  });
 }
 
 export function initializeGardenaEntranceControls(options = {}) {
@@ -756,11 +751,9 @@ export function initializeGardenaEntranceControls(options = {}) {
   }
 
   bindListeners();
-  startAutoRefresh();
   render();
 
-  const needsRefresh = !state.lastLoadedAt || Date.now() - state.lastLoadedAt > AUTO_REFRESH_INTERVAL_MS;
-  if (needsRefresh && !state.loading && isGardenaViewVisible()) {
-    fetchStatus({ force: true });
+  if (!state.loading && isGardenaViewVisible()) {
+    fetchStatus();
   }
 }
