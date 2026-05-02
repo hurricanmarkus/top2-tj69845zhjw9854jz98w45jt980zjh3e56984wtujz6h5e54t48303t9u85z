@@ -1,14 +1,24 @@
 {
-  "version": "1.15.0",
-  "buildId": "20260502-7",
+  "version": "1.15.1",
+  "buildId": "20260502-8",
   "releaseDate": "2026-05-02",
-  "releaseTime": "17:48",
+  "releaseTime": "18:46",
   "bereich": "Smart Top2",
   "timezone": "Europe/Vienna",
-  "note": "Smart Top2 enthält jetzt unter Philips Hue eine globale Homematic-IP-Heizungsbox mit sicherem Backend, Temperatur-, Boost- und Modussteuerung sowie zentralem Refresh für alle berechtigten Nutzer.",
-  "commitId": "7dac4e2",
+  "note": "Smart Top2 behandelt Homematic-IP-Heizungen jetzt mit 5,0 °C als aus und zeigt erst oberhalb davon den aktiven Heizstatus an.",
+  "commitId": "eaf77eb",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.15.1",
+      "buildId": "20260502-8",
+      "releaseDate": "2026-05-02",
+      "releaseTime": "18:46",
+      "bereich": "Smart Top2",
+      "note": "Smart Top2 behandelt Homematic-IP-Heizungen jetzt mit 5,0 °C als aus und zeigt erst oberhalb davon den aktiven Heizstatus an.",
+      "commitId": "eaf77eb",
+      "obligation": "false"
+    },
     {
       "version": "1.15.0",
       "buildId": "20260502-7",

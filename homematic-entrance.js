@@ -233,12 +233,8 @@ function formatPercent(value) {
 
 function computeHeatingActive(device) {
   if (!device) return false;
-  if (device.boostMode) return true;
-  const valvePosition = Number(device.valvePosition);
-  if (Number.isFinite(valvePosition) && valvePosition > 0) return true;
   const target = Number(device.setPointTemperature);
-  const actual = Number(device.actualTemperature);
-  return Number.isFinite(target) && Number.isFinite(actual) && target > (actual + 0.2);
+  return Number.isFinite(target) && target > 5;
 }
 
 function getHomematicLedClass(device) {
