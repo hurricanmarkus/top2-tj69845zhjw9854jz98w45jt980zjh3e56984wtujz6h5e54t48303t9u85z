@@ -389,6 +389,11 @@ option {
     display: none !important;
 }
 
+#entranceView {
+    gap: 0.25rem;
+    margin: -0.35rem;
+}
+
 .gardena-valve-name {
     width: 100%;
     max-width: 100%;

@@ -14,6 +14,7 @@ const state = {
   activeLightId: '',
   postActionRefreshTimer: null,
   pendingLightIds: new Set(),
+  viewObserverBound: false,
 };
 
 let helperAlertUser = null;
@@ -269,6 +270,103 @@ function syncSelectedDevice(devices = []) {
   }
 }
 
+function renderHueDeviceCard(device) {
+  if (!device) return '';
+
+  const isBusy = state.pendingLightIds.has(device.lightId);
+  const switchLabel = device.on ? 'Ausschalten' : 'Einschalten';
+  const switchClass = device.on
+    ? 'bg-slate-900 text-white hover:bg-slate-700'
+    : 'bg-amber-500 text-slate-950 hover:bg-amber-400';
+  const brightnessText = Number.isFinite(device.brightness) ? `${device.brightness} %` : '—';
+  const typeText = device.archetype || device.modelId || 'Unbekannt';
+  const brightnessControlHtml = device.controllable && device.supportsBrightness ? `
+    <div class="mt-1 rounded-lg bg-slate-50 px-2 py-1.5 ring-1 ring-slate-200">
+      <div class="flex items-center justify-between gap-3 text-[10px] font-semibold text-slate-600">
+        <span>Helligkeit</span>
+        <span data-hue-brightness-label="${escapeHtml(device.lightId)}">${escapeHtml(brightnessText)}</span>
+      </div>
+      <div class="mt-1 flex items-center gap-2">
+        <input
+          type="range"
+          min="0"
+          max="100"
+          step="1"
+          value="${escapeHtml(String(Number.isFinite(device.brightness) ? device.brightness : 100))}"
+          data-hue-brightness-input="${escapeHtml(device.lightId)}"
+          class="h-2 w-full accent-violet-600"
+        />
+        <button
+          type="button"
+          data-hue-action="brightness"
+          data-hue-light-id="${escapeHtml(device.lightId)}"
+          class="rounded-lg bg-violet-600 px-2.5 py-1.5 text-[11px] font-extrabold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+          ${isBusy ? 'disabled' : ''}
+        >
+          OK
+        </button>
+      </div>
+    </div>
+  ` : '';
+  const colorControlHtml = device.controllable && device.supportsColor ? `
+    <div class="mt-1 flex items-center gap-2 rounded-lg bg-slate-50 px-2 py-1.5 ring-1 ring-slate-200">
+      <input
+        type="color"
+        value="${escapeHtml(device.colorHex || '#FFFFFF')}"
+        data-hue-color-input="${escapeHtml(device.lightId)}"
+        class="h-8 w-12 rounded-lg border border-slate-200 bg-white p-1"
+      />
+      <button
+        type="button"
+        data-hue-action="color"
+        data-hue-light-id="${escapeHtml(device.lightId)}"
+        class="rounded-lg bg-fuchsia-600 px-2.5 py-1.5 text-[11px] font-extrabold text-white transition hover:bg-fuchsia-700 disabled:cursor-not-allowed disabled:opacity-50"
+        ${isBusy ? 'disabled' : ''}
+      >
+        Farbe
+      </button>
+    </div>
+  ` : '';
+  const controlHtml = device.controllable
+    ? `
+      <button
+        type="button"
+        data-hue-action="toggle"
+        data-hue-light-id="${escapeHtml(device.lightId)}"
+        data-hue-next-on="${device.on ? 'false' : 'true'}"
+        class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-[11px] font-extrabold transition ${switchClass}"
+        ${isBusy ? 'disabled' : ''}
+      >
+        ${isBusy ? 'Sende...' : switchLabel}
+      </button>
+      ${brightnessControlHtml}
+      ${colorControlHtml}
+    `
+    : '<div class="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2.5 py-1.5 text-[11px] font-semibold text-slate-500">Dieses Gerät ist sichtbar, aber in Smart Top2 derzeit nicht direkt schaltbar.</div>';
+
+  return `<article class="rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+    <div class="flex items-start gap-2">
+      <span class="${getHueLedClass(device)} mt-0.5" aria-hidden="true"></span>
+      <div class="min-w-0 flex-1">
+        <div class="text-[10px] font-semibold text-violet-600">${escapeHtml(device.roomName || 'Ohne Raum')}</div>
+        <h4 class="mt-0.5 text-[11px] font-extrabold text-slate-900">${escapeHtml(device.name)}</h4>
+        <p class="mt-0.5 text-[10px] text-slate-600">${escapeHtml(device.productName || 'Hue Gerät')}</p>
+      </div>
+    </div>
+    <div class="mt-1 grid grid-cols-2 gap-1 text-[11px]">
+      <div class="rounded-lg bg-slate-50 px-2 py-1.5">
+        <div class="text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-500">Typ</div>
+        <div class="mt-0.5 font-bold text-slate-900">${escapeHtml(typeText)}</div>
+      </div>
+      <div class="rounded-lg bg-slate-50 px-2 py-1.5">
+        <div class="text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-500">Helligkeit</div>
+        <div class="mt-0.5 font-bold text-slate-900">${escapeHtml(brightnessText)}</div>
+      </div>
+    </div>
+    <div class="mt-1">${controlHtml}</div>
+  </article>`;
+}
+
 function renderStatus() {
   const elements = getElements();
   if (!elements.section) return;
@@ -298,7 +396,7 @@ function renderStatus() {
   }
 
   if (elements.details) {
-    const showDetails = !connected || Boolean(selectedDevice);
+    const showDetails = !connected;
     elements.details.classList.toggle('hidden', !showDetails);
   }
 
@@ -327,6 +425,7 @@ function renderStatus() {
             <span class="truncate">${escapeHtml(device.name || 'Hue Gerät')}</span>
           </div>
         </button>
+        ${String(device.lightId) === String(state.activeLightId || '') ? `<div class="sm:col-span-2 -mt-px">${renderHueDeviceCard(selectedDevice)}</div>` : ''}
       `).join('');
     }
   }
@@ -339,111 +438,14 @@ function renderStatus() {
     elements.connectButton.style.display = isLoggedIn && !connected ? 'inline-flex' : 'none';
   }
   if (elements.refreshButton) {
-    elements.refreshButton.style.display = isLoggedIn ? 'inline-flex' : 'none';
+    elements.refreshButton.style.display = isLoggedIn && isHueViewVisible() ? 'inline-flex' : 'none';
   }
 
   if (elements.deviceGrid) {
     if (!connected) {
       elements.deviceGrid.innerHTML = '';
-    } else if (!devices.length) {
-      elements.deviceGrid.innerHTML = '<div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-5 text-sm font-semibold text-slate-600">Es wurden noch keine Hue-Geräte gefunden.</div>';
-    } else if (!selectedDevice) {
-      elements.deviceGrid.innerHTML = '';
     } else {
-      elements.deviceGrid.innerHTML = [selectedDevice].map((device) => {
-        const isBusy = state.pendingLightIds.has(device.lightId);
-        const switchLabel = device.on ? 'Ausschalten' : 'Einschalten';
-        const switchClass = device.on
-          ? 'bg-slate-900 text-white hover:bg-slate-700'
-          : 'bg-amber-500 text-slate-950 hover:bg-amber-400';
-        const brightnessText = Number.isFinite(device.brightness) ? `${device.brightness} %` : '—';
-        const typeText = device.archetype || device.modelId || 'Unbekannt';
-        const brightnessControlHtml = device.controllable && device.supportsBrightness ? `
-          <div class="mt-2 rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
-            <div class="flex items-center justify-between gap-3 text-[11px] font-semibold text-slate-600">
-              <span>Helligkeit</span>
-              <span data-hue-brightness-label="${escapeHtml(device.lightId)}">${escapeHtml(brightnessText)}</span>
-            </div>
-            <div class="mt-2 flex items-center gap-2">
-              <input
-                type="range"
-                min="0"
-                max="100"
-                step="1"
-                value="${escapeHtml(String(Number.isFinite(device.brightness) ? device.brightness : 100))}"
-                data-hue-brightness-input="${escapeHtml(device.lightId)}"
-                class="h-2 w-full accent-violet-600"
-              />
-              <button
-                type="button"
-                data-hue-action="brightness"
-                data-hue-light-id="${escapeHtml(device.lightId)}"
-                class="rounded-lg bg-violet-600 px-3 py-2 text-[11px] font-extrabold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
-                ${isBusy ? 'disabled' : ''}
-              >
-                OK
-              </button>
-            </div>
-          </div>
-        ` : '';
-        const colorControlHtml = device.controllable && device.supportsColor ? `
-          <div class="mt-2 flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
-            <input
-              type="color"
-              value="${escapeHtml(device.colorHex || '#FFFFFF')}"
-              data-hue-color-input="${escapeHtml(device.lightId)}"
-              class="h-9 w-14 rounded-lg border border-slate-200 bg-white p-1"
-            />
-            <button
-              type="button"
-              data-hue-action="color"
-              data-hue-light-id="${escapeHtml(device.lightId)}"
-              class="rounded-lg bg-fuchsia-600 px-3 py-2 text-[11px] font-extrabold text-white transition hover:bg-fuchsia-700 disabled:cursor-not-allowed disabled:opacity-50"
-              ${isBusy ? 'disabled' : ''}
-            >
-              Farbe
-            </button>
-          </div>
-        ` : '';
-        const controlHtml = device.controllable
-          ? `
-            <button
-              type="button"
-              data-hue-action="toggle"
-              data-hue-light-id="${escapeHtml(device.lightId)}"
-              data-hue-next-on="${device.on ? 'false' : 'true'}"
-              class="inline-flex items-center justify-center rounded-lg px-3 py-2 text-xs font-extrabold transition ${switchClass}"
-              ${isBusy ? 'disabled' : ''}
-            >
-              ${isBusy ? 'Sende...' : switchLabel}
-            </button>
-            ${brightnessControlHtml}
-            ${colorControlHtml}
-          `
-          : '<div class="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">Dieses Gerät ist sichtbar, aber in Smart Top2 derzeit nicht direkt schaltbar.</div>';
-
-        return `<article class="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-          <div class="flex items-start gap-2">
-            <span class="${getHueLedClass(device)} mt-0.5" aria-hidden="true"></span>
-            <div class="min-w-0 flex-1">
-              <div class="text-[11px] font-semibold text-violet-600">${escapeHtml(device.roomName || 'Ohne Raum')}</div>
-              <h4 class="mt-0.5 text-sm font-extrabold text-slate-900">${escapeHtml(device.name)}</h4>
-              <p class="mt-0.5 text-xs text-slate-600">${escapeHtml(device.productName || 'Hue Gerät')}</p>
-            </div>
-          </div>
-          <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
-            <div class="rounded-lg bg-slate-50 px-2.5 py-2">
-              <div class="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">Typ</div>
-              <div class="mt-0.5 font-bold text-slate-900">${escapeHtml(typeText)}</div>
-            </div>
-            <div class="rounded-lg bg-slate-50 px-2.5 py-2">
-              <div class="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">Helligkeit</div>
-              <div class="mt-0.5 font-bold text-slate-900">${escapeHtml(brightnessText)}</div>
-            </div>
-          </div>
-          <div class="mt-2">${controlHtml}</div>
-        </article>`;
-      }).join('');
+      elements.deviceGrid.innerHTML = '';
     }
   }
 }
@@ -551,6 +553,41 @@ function bindListeners() {
   if (!elements.section && !elements.refreshButton) return;
 
   elements.summaryGrid?.addEventListener('click', (event) => {
+    const actionTarget = event.target instanceof Element ? event.target.closest('[data-hue-action]') : null;
+    if (actionTarget) {
+      const action = String(actionTarget.getAttribute('data-hue-action') || '');
+      const lightId = String(actionTarget.getAttribute('data-hue-light-id') || '');
+      if (!lightId) return;
+
+      if (action === 'toggle') {
+        const nextOn = String(actionTarget.getAttribute('data-hue-next-on') || '').trim() === 'true';
+        toggleHueLight(lightId, nextOn).catch(() => {});
+        return;
+      }
+
+      if (action === 'brightness') {
+        const input = elements.summaryGrid.querySelector(`[data-hue-brightness-input="${CSS.escape(lightId)}"]`);
+        const brightness = Number(input?.value || '0');
+        if (!Number.isInteger(brightness) || brightness < 0 || brightness > 100) {
+          alertUser('Bitte eine Helligkeit zwischen 0 und 100 wählen.', 'error');
+          return;
+        }
+        updateHueBrightness(lightId, brightness).catch(() => {});
+        return;
+      }
+
+      if (action === 'color') {
+        const input = elements.summaryGrid.querySelector(`[data-hue-color-input="${CSS.escape(lightId)}"]`);
+        const color = String(input?.value || '').trim();
+        if (!/^#[0-9A-Fa-f]{6}$/.test(color)) {
+          alertUser('Bitte eine gültige Farbe auswählen.', 'error');
+          return;
+        }
+        updateHueColor(lightId, color).catch(() => {});
+        return;
+      }
+    }
+
     const target = event.target instanceof Element ? event.target.closest('[data-hue-select-light-id]') : null;
     if (!target) return;
 
@@ -606,17 +643,36 @@ function bindListeners() {
     });
   }
 
-  elements.deviceGrid?.addEventListener('input', (event) => {
+  elements.summaryGrid?.addEventListener('input', (event) => {
     const target = event.target instanceof Element ? event.target.closest('[data-hue-brightness-input]') : null;
     if (!target) return;
 
     const lightId = target.getAttribute('data-hue-brightness-input') || '';
-    const label = elements.deviceGrid.querySelector(`[data-hue-brightness-label="${CSS.escape(lightId)}"]`);
+    const label = elements.summaryGrid.querySelector(`[data-hue-brightness-label="${CSS.escape(lightId)}"]`);
     const value = Number(target.value || '0');
     if (label) {
       label.textContent = `${Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0))} %`;
     }
   });
+
+  if (!state.viewObserverBound) {
+    state.viewObserverBound = true;
+    const view = elements.section?.closest('.view');
+    if (view instanceof Element && typeof MutationObserver === 'function') {
+      const observer = new MutationObserver(() => {
+        renderStatus();
+      });
+      observer.observe(view, { attributes: true, attributeFilter: ['class', 'style'] });
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      renderStatus();
+    });
+
+    window.addEventListener('focus', () => {
+      renderStatus();
+    });
+  }
 
   state.listenersBound = true;
 }

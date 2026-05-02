@@ -24,15 +24,15 @@
     <meta name="application-name" content="TOP 2 App">
     <meta name="apple-mobile-web-app-title" content="TOP2">
     <meta name="theme-color" content="#4f46e5" />
-    <meta name="top2-app-version" content="1.14.0" />
-    <meta name="top2-build-id" content="20260502-3" />
+    <meta name="top2-app-version" content="1.14.1" />
+    <meta name="top2-build-id" content="20260502-4" />
     <meta name="msapplication-navbutton-color" content="#4f46e5">
     <meta name="apple-mobile-app-status-bar-style" content="black-translucent">
     <link rel="icon" type="image/png" sizes="192x192" href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
     <link rel="apple-touch-icon" type="image/png" sizes="192x192"
         href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
 
-    <link rel="manifest" href="manifest.json?v=20260502-3">
+    <link rel="manifest" href="manifest.json?v=20260502-4">
 
     <link rel="stylesheet" href="style.css">
     
@@ -630,55 +630,54 @@
                 </div>
             </div>
 
-            <div id="entranceView" class="view">
-                <div class="back-link-container w-full mb-2">
-                    <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition"
-                        data-target="home">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
-                            class="w-5 h-5 mr-1">
-                            <path d="m15 18-6-6 6-6" />
-                        </svg>
-                        <span class="text-sm font-semibold">zurück</span>
-                    </button>
-                    <div class="border-t border-gray-300 mt-2"></div>
+                <div id="entranceView" class="view gap-1 pb-14">
+                <div class="back-link-container w-full mb-1 border-b border-gray-300 pb-1">
+                    <div class="grid grid-cols-[auto_1fr_auto] items-center gap-2">
+                        <button class="back-link inline-flex items-center text-gray-600 hover:text-indigo-600 transition"
+                            data-target="home">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+                                class="w-5 h-5 mr-1">
+                                <path d="m15 18-6-6 6-6" />
+                            </svg>
+                            <span class="text-sm font-semibold">zurück</span>
+                        </button>
+                        <h2 class="text-center text-base font-bold text-gray-800">Smart Top2</h2>
+                        <div class="w-[72px]"></div>
+                    </div>
                 </div>
 
-                <h2 class="text-xl font-bold text-gray-800 mb-2">Smart Top2</h2>
-
-                <section class="mb-2">
-                    <div class="rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-700 to-violet-600 p-[1px] shadow-lg">
-                        <div class="rounded-[calc(1rem-1px)] bg-white/95 p-2.5 sm:p-3 backdrop-blur">
-                            <div class="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between">
+                <section class="mb-1">
+                    <div class="rounded-xl bg-gradient-to-br from-slate-900 via-indigo-700 to-violet-600 p-[1px] shadow-md">
+                        <div class="rounded-[calc(0.75rem-1px)] bg-white/95 p-2 backdrop-blur">
+                            <div class="flex items-center justify-between gap-1.5">
                                 <div>
                                     <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-600">Türöffner</div>
-                                    <h3 class="mt-0.5 text-sm font-extrabold text-slate-900">Vordereingang</h3>
                                 </div>
                                 <div class="flex flex-wrap items-center gap-1.5">
                                     <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700">Zutritt</span>
-                                    <span class="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">Vordereingang</span>
                                 </div>
                             </div>
 
-                            <div class="mt-2 grid grid-cols-3 gap-1.5">
+                            <div class="mt-1.5 grid grid-cols-3 gap-1">
                                 <button data-delay="0"
-                                    class="action-button w-full py-2 px-2 bg-indigo-700 text-white text-[11px] font-extrabold rounded-xl shadow-md hover:bg-indigo-800 transition duration-200 flex items-center justify-center col-span-3">
+                                    class="action-button w-full py-1.5 px-2 bg-indigo-700 text-white text-[11px] font-extrabold rounded-lg shadow-sm hover:bg-indigo-800 transition duration-200 flex items-center justify-center col-span-3">
                                     <span class="button-text">SOFORT</span>
                                     <div class="loading-spinner"></div>
                                 </button>
 
                                 <button data-delay="5"
-                                    class="action-button py-2 bg-gray-200 text-gray-800 text-[11px] font-semibold rounded-xl shadow-sm hover:bg-gray-300 transition duration-200 flex items-center justify-center">
+                                    class="action-button py-1.5 bg-gray-200 text-gray-800 text-[11px] font-semibold rounded-lg shadow-sm hover:bg-gray-300 transition duration-200 flex items-center justify-center">
                                     <span class="button-text">5s</span>
                                     <div class="loading-spinner"></div>
                                 </button>
                                 <button data-delay="10"
-                                    class="action-button py-2 bg-gray-200 text-gray-800 text-[11px] font-semibold rounded-xl shadow-sm hover:bg-gray-300 transition duration-200 flex items-center justify-center">
+                                    class="action-button py-1.5 bg-gray-200 text-gray-800 text-[11px] font-semibold rounded-lg shadow-sm hover:bg-gray-300 transition duration-200 flex items-center justify-center">
                                     <span class="button-text">10s</span>
                                     <div class="loading-spinner"></div>
                                 </button>
                                 <button data-delay="15"
-                                    class="action-button py-2 bg-gray-200 text-gray-800 text-[11px] font-semibold rounded-xl shadow-sm hover:bg-gray-300 transition duration-200 flex items-center justify-center">
+                                    class="action-button py-1.5 bg-gray-200 text-gray-800 text-[11px] font-semibold rounded-lg shadow-sm hover:bg-gray-300 transition duration-200 flex items-center justify-center">
                                     <span class="button-text">15s</span>
                                     <div class="loading-spinner"></div>
                                 </button>
@@ -687,18 +686,18 @@
                     </div>
                 </section>
 
-                <section id="gardenaEntranceSection" class="mt-2 space-y-2">
-                    <div class="rounded-2xl bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 p-[1px] shadow-lg">
-                        <div class="rounded-[calc(1rem-1px)] bg-white/95 p-2.5 sm:p-3 backdrop-blur">
+                <section id="gardenaEntranceSection" class="mt-1 space-y-1">
+                    <div class="rounded-xl bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 p-[1px] shadow-md">
+                        <div class="rounded-[calc(0.75rem-1px)] bg-white/95 p-2 backdrop-blur">
                             <div id="gardenaEntranceToggle" class="w-full text-left">
                                 <div class="flex items-center justify-between gap-2">
                                     <div class="min-w-0 text-xs font-extrabold text-slate-900">Gardena Smart System</div>
                                     <span id="gardenaEntranceLocationBadge" class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700">Ort: GARDENA</span>
                                 </div>
-                                <div id="gardenaEntranceSummaryGrid" class="mt-2 grid grid-cols-2 gap-x-1.5 gap-y-1.5"></div>
+                                <div id="gardenaEntranceSummaryGrid" class="mt-1 grid grid-cols-1 gap-1 sm:grid-cols-2"></div>
                             </div>
 
-                            <div id="gardenaEntranceLoading" class="hidden items-center justify-center gap-2 rounded-xl bg-slate-50 px-3 py-4 text-slate-600 ring-1 ring-slate-200">
+                            <div id="gardenaEntranceLoading" class="hidden items-center justify-center gap-2 rounded-lg bg-slate-50 px-2 py-3 text-slate-600 ring-1 ring-slate-200">
                                 <svg class="h-4 w-4 animate-spin text-emerald-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
@@ -706,28 +705,28 @@
                                 <span class="text-xs font-semibold">Gardena lädt...</span>
                             </div>
 
-                            <div id="gardenaEntranceError" class="hidden rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700"></div>
+                            <div id="gardenaEntranceError" class="hidden rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs font-semibold text-red-700"></div>
 
-                            <div id="gardenaEntranceDetails" class="mt-2 hidden space-y-2">
+                            <div id="gardenaEntranceDetails" class="hidden space-y-1">
                                 <div id="gardenaEntranceMowerHost"></div>
-                                <div id="gardenaEntranceValveGrid" class="grid grid-cols-1 gap-2"></div>
+                                <div id="gardenaEntranceValveGrid" class="grid grid-cols-1 gap-1"></div>
                             </div>
                         </div>
                     </div>
                 </section>
 
-                <section id="hueEntranceSection" class="mt-2 space-y-2" data-connected="false">
-                    <div class="rounded-2xl bg-gradient-to-br from-violet-600 via-fuchsia-600 to-amber-400 p-[1px] shadow-lg">
-                        <div class="rounded-[calc(1rem-1px)] bg-white/95 p-2.5 sm:p-3 backdrop-blur">
+                <section id="hueEntranceSection" class="mt-1 space-y-1" data-connected="false">
+                    <div class="rounded-xl bg-gradient-to-br from-violet-600 via-fuchsia-600 to-amber-400 p-[1px] shadow-md">
+                        <div class="rounded-[calc(0.75rem-1px)] bg-white/95 p-2 backdrop-blur">
                             <div id="hueEntranceToggle" class="w-full text-left">
                                 <div class="flex items-center justify-between gap-2">
                                     <div class="min-w-0 text-xs font-extrabold text-slate-900">Philips Hue</div>
                                     <span id="hueEntranceBridgeBadge" class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700">Bridge: Hue nicht verbunden</span>
                                 </div>
-                                <div id="hueEntranceSummaryGrid" class="mt-2 grid grid-cols-2 gap-x-1.5 gap-y-1.5"></div>
+                                <div id="hueEntranceSummaryGrid" class="mt-1 grid grid-cols-1 gap-1 sm:grid-cols-2"></div>
                             </div>
 
-                            <div id="hueEntranceLoading" class="hidden items-center justify-center gap-2 rounded-xl bg-slate-50 px-3 py-4 text-slate-600 ring-1 ring-slate-200">
+                            <div id="hueEntranceLoading" class="hidden items-center justify-center gap-2 rounded-lg bg-slate-50 px-2 py-3 text-slate-600 ring-1 ring-slate-200">
                                 <svg class="h-4 w-4 animate-spin text-violet-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
@@ -735,23 +734,19 @@
                                 <span class="text-xs font-semibold">Hue lädt...</span>
                             </div>
 
-                            <div id="hueEntranceError" class="hidden rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700"></div>
+                            <div id="hueEntranceError" class="hidden rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs font-semibold text-red-700"></div>
 
-                            <div id="hueEntranceDetails" class="mt-2 hidden space-y-2">
-                                <div class="flex flex-wrap gap-2">
-                                    <button id="hueConnectButton" type="button" class="inline-flex items-center justify-center rounded-lg bg-violet-600 px-3 py-2 text-xs font-extrabold text-white shadow-sm transition hover:bg-violet-700">
+                            <div id="hueEntranceDetails" class="hidden space-y-1">
+                                <div class="flex flex-wrap gap-1">
+                                    <button id="hueConnectButton" type="button" class="inline-flex items-center justify-center rounded-lg bg-violet-600 px-2.5 py-1.5 text-[11px] font-extrabold text-white shadow-sm transition hover:bg-violet-700">
                                         <span data-button-label>Hue verbinden</span>
                                     </button>
                                 </div>
-                                <div id="hueEntranceDeviceGrid" class="grid grid-cols-1 gap-2"></div>
+                                <div id="hueEntranceDeviceGrid" class="grid grid-cols-1 gap-1"></div>
                             </div>
                         </div>
                     </div>
                 </section>
-
-                <button id="hueRefreshButton" type="button" class="fixed bottom-14 right-3 z-[90] hidden items-center justify-center rounded-full bg-slate-900/90 px-3 py-2 text-[11px] font-bold text-white shadow-lg backdrop-blur transition hover:bg-slate-800 sm:bottom-16 sm:right-4 sm:text-xs">
-                    <span data-button-label>Aktualisieren</span>
-                </button>
             </div>
 
             <div id="checklistView" class="view"></div>
@@ -6706,6 +6701,10 @@
                 </div>
             </div>
         </div>
+
+        <button id="hueRefreshButton" type="button" class="absolute bottom-[3.4rem] right-2 z-[100] hidden items-center justify-center rounded-full bg-slate-900/90 px-3 py-2 text-[11px] font-bold text-white shadow-lg backdrop-blur transition hover:bg-slate-800 sm:right-3 sm:text-xs">
+            <span data-button-label>Aktualisieren</span>
+        </button>
 
         <footer id="appFooter"
             class="flex-shrink-0 bg-gray-700 text-white border-t border-gray-600 p-2 flex items-center gap-2 flex-nowrap text-sm shadow-inner">
