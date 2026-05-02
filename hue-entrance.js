@@ -302,7 +302,7 @@ function renderHueDeviceCard(device) {
         <span>Helligkeit</span>
         <span data-hue-brightness-label="${escapeHtml(device.lightId)}">${escapeHtml(brightnessText)}</span>
       </div>
-      <div class="mt-1 flex items-center gap-2">
+      <div class="mt-1">
         <input
           type="range"
           min="0"
@@ -311,16 +311,8 @@ function renderHueDeviceCard(device) {
           value="${escapeHtml(String(Number.isFinite(device.brightness) ? device.brightness : 100))}"
           data-hue-brightness-input="${escapeHtml(device.lightId)}"
           class="h-2 w-full accent-violet-600"
-        />
-        <button
-          type="button"
-          data-hue-action="brightness"
-          data-hue-light-id="${escapeHtml(device.lightId)}"
-          class="rounded-lg bg-violet-600 px-2.5 py-1.5 text-[11px] font-extrabold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
           ${isBusy ? 'disabled' : ''}
-        >
-          OK
-        </button>
+        />
       </div>
     </div>
   ` : '';
@@ -685,6 +677,20 @@ function bindListeners() {
   });
 
   elements.summaryGrid?.addEventListener('change', (event) => {
+    const brightnessTarget = event.target instanceof Element ? event.target.closest('[data-hue-brightness-input]') : null;
+    if (brightnessTarget) {
+      const lightId = brightnessTarget.getAttribute('data-hue-brightness-input') || '';
+      const brightness = Number(brightnessTarget.value || '0');
+      if (!lightId) return;
+      if (!Number.isInteger(brightness) || brightness < 0 || brightness > 100) {
+        alertUser('Bitte eine Helligkeit zwischen 0 und 100 wählen.', 'error');
+        return;
+      }
+
+      updateHueBrightness(lightId, brightness).catch(() => {});
+      return;
+    }
+
     const target = event.target instanceof Element ? event.target.closest('[data-hue-color-input]') : null;
     if (!target) return;
 

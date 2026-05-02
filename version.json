@@ -1,14 +1,24 @@
 {
-  "version": "1.15.2",
-  "buildId": "20260502-9",
+  "version": "1.15.3",
+  "buildId": "20260502-10",
   "releaseDate": "2026-05-02",
-  "releaseTime": "23:28",
-  "bereich": "Versionssystem",
+  "releaseTime": "23:36",
+  "bereich": "Smart Top2",
   "timezone": "Europe/Vienna",
-  "note": "Das Versionssystem prüft jetzt alle 15 Sekunden und optionale Updates werden nicht mehr automatisch durch einen Service-Worker-Wechsel neu geladen.",
-  "commitId": "32979e0",
-  "obligation": "false",
+  "note": "Hue-Geräte senden die Helligkeit in Smart Top2 jetzt direkt beim Loslassen des Reglers, ohne zusätzlichen OK-Button.",
+  "commitId": "3d10b02",
+  "obligation": "true",
   "history": [
+    {
+      "version": "1.15.3",
+      "buildId": "20260502-10",
+      "releaseDate": "2026-05-02",
+      "releaseTime": "23:36",
+      "bereich": "Smart Top2",
+      "note": "Hue-Geräte senden die Helligkeit in Smart Top2 jetzt direkt beim Loslassen des Reglers, ohne zusätzlichen OK-Button.",
+      "commitId": "3d10b02",
+      "obligation": "false"
+    },
     {
       "version": "1.15.2",
       "buildId": "20260502-9",
