@@ -479,7 +479,7 @@ const APP_BUILD_META = document.querySelector('meta[name="top2-build-id"]');
 const CURRENT_APP_VERSION = String(APP_VERSION_META?.content || '0.0.0').trim();
 const CURRENT_BUILD_ID = String(APP_BUILD_META?.content || 'local').trim();
 const VERSION_INFO_URL = '/version.json';
-const VERSION_CHECK_INTERVAL_MS = 30 * 1000;
+const VERSION_CHECK_INTERVAL_MS = 15 * 1000;
 const VERSION_EARLY_RECHECK_DELAYS_MS = [4000, 12000];
 const UPDATE_DEFERRED_STORAGE_KEY = 'top2_update_deferred_version';
 
@@ -1281,6 +1281,7 @@ function openVersionInfoModal(versionInfoOverride = null, options = {}) {
                 summary.textContent = isGuestViewer ? '' : 'Update wird abgeschlossen...';
             } catch (error) {
                 console.error('Update-Installation fehlgeschlagen:', error);
+                localUpdateInProgress = false;
                 stopVersionInstallProgressSimulation();
                 setVersionInstallProgressUi({
                     visible: false,
@@ -1330,11 +1331,13 @@ async function installPendingAppUpdate(registration) {
         }
 
         if (registration.waiting) {
+            localUpdateInProgress = true;
             registration.waiting.postMessage({ type: 'SKIP_WAITING' });
             return;
         }
     }
 
+    localUpdateInProgress = true;
     forceAppReload();
 }
 
@@ -1452,7 +1455,7 @@ function registerAppServiceWorker() {
 
     let refreshing = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (refreshing) return;
+        if (refreshing || !localUpdateInProgress) return;
         refreshing = true;
         forceAppReload();
     });

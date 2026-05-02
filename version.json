@@ -1,14 +1,24 @@
 {
-  "version": "1.15.1",
-  "buildId": "20260502-8",
+  "version": "1.15.2",
+  "buildId": "20260502-9",
   "releaseDate": "2026-05-02",
-  "releaseTime": "18:46",
-  "bereich": "Smart Top2",
+  "releaseTime": "23:28",
+  "bereich": "Versionssystem",
   "timezone": "Europe/Vienna",
-  "note": "Smart Top2 behandelt Homematic-IP-Heizungen jetzt mit 5,0 °C als aus und zeigt erst oberhalb davon den aktiven Heizstatus an.",
-  "commitId": "eaf77eb",
+  "note": "Das Versionssystem prüft jetzt alle 15 Sekunden und optionale Updates werden nicht mehr automatisch durch einen Service-Worker-Wechsel neu geladen.",
+  "commitId": "32979e0",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.15.2",
+      "buildId": "20260502-9",
+      "releaseDate": "2026-05-02",
+      "releaseTime": "23:28",
+      "bereich": "Versionssystem",
+      "note": "Das Versionssystem prüft jetzt alle 15 Sekunden und optionale Updates werden nicht mehr automatisch durch einen Service-Worker-Wechsel neu geladen.",
+      "commitId": "32979e0",
+      "obligation": "false"
+    },
     {
       "version": "1.15.1",
       "buildId": "20260502-8",
