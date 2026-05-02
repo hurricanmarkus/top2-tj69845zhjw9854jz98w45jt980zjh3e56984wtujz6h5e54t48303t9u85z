@@ -7,7 +7,7 @@
   "timezone": "Europe/Vienna",
   "note": "Hue-Geräte senden die Helligkeit in Smart Top2 jetzt direkt beim Loslassen des Reglers, ohne zusätzlichen OK-Button.",
   "commitId": "3d10b02",
-  "obligation": "true",
+  "obligation": "false",
   "history": [
     {
       "version": "1.15.3",
