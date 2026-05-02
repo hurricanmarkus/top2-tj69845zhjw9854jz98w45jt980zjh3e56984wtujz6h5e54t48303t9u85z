@@ -285,7 +285,7 @@ function getMowerMeta(mower) {
       batteryStateText: translateGardenaCode(mower.batteryState, '—'),
       showStart: false,
       showStop: false,
-      ledClass: 'gardena-led gardena-led--red gardena-led--blink',
+      ledClass: 'gardena-led gardena-led--red',
     };
   }
 
@@ -299,7 +299,7 @@ function getMowerMeta(mower) {
     batteryStateText: translateGardenaCode(mower.batteryState, '—'),
     showStart: !mowerActive,
     showStop: mowerActive,
-    ledClass: mowerActive ? 'gardena-led gardena-led--green gardena-led--blink' : 'gardena-led gardena-led--red gardena-led--blink',
+    ledClass: mowerActive ? 'gardena-led gardena-led--green gardena-led--blink' : 'gardena-led gardena-led--red',
   };
 }
 
@@ -335,7 +335,7 @@ function getValveMeta(valve) {
       stateText: translateGardenaCode(status, 'Offline'),
       showStart: false,
       showStop: false,
-      ledClass: 'gardena-led gardena-led--red gardena-led--blink',
+      ledClass: 'gardena-led gardena-led--red',
     };
   }
 
@@ -362,7 +362,7 @@ function getValveMeta(valve) {
     stateText: translateGardenaCode(status, 'Geschlossen'),
     showStart: true,
     showStop: false,
-    ledClass: 'gardena-led gardena-led--red gardena-led--blink',
+    ledClass: 'gardena-led gardena-led--red',
   };
 }
 
@@ -587,11 +587,11 @@ function renderSummaryGrid(entries = [], activeEntry = null) {
         class="min-w-0 rounded-lg px-2 py-1.5 text-[11px] font-semibold text-slate-700 ring-1 transition ${entry.key === state.activeDeviceKey ? 'bg-emerald-50 ring-emerald-300' : 'bg-white/80 ring-black/5 hover:bg-emerald-50/70'}"
       >
         <div class="flex items-center gap-2 min-w-0">
-          <span class="${entry.ledClass}" aria-hidden="true"></span>
+          <span class="${escapeHtml(entry.ledClass)}" aria-hidden="true"></span>
           <span class="truncate">${escapeHtml(entry.label)}</span>
         </div>
       </button>
-      ${entry.key === state.activeDeviceKey ? `<div class="sm:col-span-2 -mt-px">${renderGardenaInlineDetail(activeEntry)}</div>` : ''}
+      ${entry.key === state.activeDeviceKey ? `<div class="col-span-2 sm:col-span-2 -mt-px">${renderGardenaInlineDetail(activeEntry)}</div>` : ''}
     `)
     .join('');
 }

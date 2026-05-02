@@ -4,6 +4,16 @@ const STATUS_ENDPOINT = '/api/status';
 const CONNECT_ENDPOINT = '/api/connect';
 const COMMAND_ENDPOINT = '/api/command';
 const DEFAULT_FUNCTIONS_API_BASE = 'https://europe-west1-top2-e9ac0.cloudfunctions.net/hueApi';
+const HUE_PRESET_COLORS = [
+  { label: 'Warmweiß', value: '#F4E7C2' },
+  { label: 'Kaltweiß', value: '#F5FAFF' },
+  { label: 'Gelb', value: '#FACC15' },
+  { label: 'Orange', value: '#FB923C' },
+  { label: 'Pink', value: '#EC4899' },
+  { label: 'Blau', value: '#3B82F6' },
+  { label: 'Grün', value: '#22C55E' },
+  { label: 'Lila', value: '#A855F7' },
+];
 
 const state = {
   listenersBound: false,
@@ -235,7 +245,7 @@ function getHueLedClass(device) {
   }
   return device.on
     ? 'gardena-led gardena-led--green gardena-led--blink'
-    : 'gardena-led gardena-led--red gardena-led--blink';
+    : 'gardena-led gardena-led--red';
 }
 
 function getSortedDevices(devices = []) {
@@ -270,6 +280,11 @@ function syncSelectedDevice(devices = []) {
   }
 }
 
+function normalizeHueColor(value = '') {
+  const normalized = String(value || '').trim().toUpperCase();
+  return /^#[0-9A-F]{6}$/.test(normalized) ? normalized : '#FFFFFF';
+}
+
 function renderHueDeviceCard(device) {
   if (!device) return '';
 
@@ -280,8 +295,9 @@ function renderHueDeviceCard(device) {
     : 'bg-amber-500 text-slate-950 hover:bg-amber-400';
   const brightnessText = Number.isFinite(device.brightness) ? `${device.brightness} %` : '—';
   const typeText = device.archetype || device.modelId || 'Unbekannt';
+  const currentColor = normalizeHueColor(device.colorHex || '#FFFFFF');
   const brightnessControlHtml = device.controllable && device.supportsBrightness ? `
-    <div class="mt-1 rounded-lg bg-slate-50 px-2 py-1.5 ring-1 ring-slate-200">
+    <div class="rounded-lg bg-slate-50 px-2 py-1.5 ring-1 ring-slate-200">
       <div class="flex items-center justify-between gap-3 text-[10px] font-semibold text-slate-600">
         <span>Helligkeit</span>
         <span data-hue-brightness-label="${escapeHtml(device.lightId)}">${escapeHtml(brightnessText)}</span>
@@ -309,38 +325,58 @@ function renderHueDeviceCard(device) {
     </div>
   ` : '';
   const colorControlHtml = device.controllable && device.supportsColor ? `
-    <div class="mt-1 flex items-center gap-2 rounded-lg bg-slate-50 px-2 py-1.5 ring-1 ring-slate-200">
-      <input
-        type="color"
-        value="${escapeHtml(device.colorHex || '#FFFFFF')}"
-        data-hue-color-input="${escapeHtml(device.lightId)}"
-        class="h-8 w-12 rounded-lg border border-slate-200 bg-white p-1"
-      />
-      <button
-        type="button"
-        data-hue-action="color"
-        data-hue-light-id="${escapeHtml(device.lightId)}"
-        class="rounded-lg bg-fuchsia-600 px-2.5 py-1.5 text-[11px] font-extrabold text-white transition hover:bg-fuchsia-700 disabled:cursor-not-allowed disabled:opacity-50"
-        ${isBusy ? 'disabled' : ''}
-      >
-        Farbe
-      </button>
+    <div class="rounded-lg bg-slate-50 px-2 py-1.5 ring-1 ring-slate-200">
+      <div class="flex items-center justify-between gap-2 text-[10px] font-semibold text-slate-600">
+        <span>Farbe</span>
+        <span class="font-bold text-slate-900">${escapeHtml(currentColor)}</span>
+      </div>
+      <div class="mt-1 flex flex-wrap gap-1">
+        ${HUE_PRESET_COLORS.map((entry) => `
+          <button
+            type="button"
+            data-hue-action="color-preset"
+            data-hue-light-id="${escapeHtml(device.lightId)}"
+            data-hue-color-value="${escapeHtml(entry.value)}"
+            aria-label="${escapeHtml(entry.label)}"
+            title="${escapeHtml(entry.label)}"
+            class="h-7 w-7 rounded-full border-2 shadow-sm transition ${entry.value === currentColor ? 'scale-105 border-violet-600' : 'border-white hover:border-slate-300'} ${isBusy ? 'cursor-not-allowed opacity-50' : ''}"
+            style="background:${escapeHtml(entry.value)}"
+            ${isBusy ? 'disabled' : ''}
+          ></button>
+        `).join('')}
+      </div>
+      <label class="mt-1 flex items-center gap-2 rounded-lg bg-white px-2 py-1 ring-1 ring-slate-200">
+        <span class="text-[10px] font-semibold text-slate-600">Eigene</span>
+        <input
+          type="color"
+          value="${escapeHtml(currentColor)}"
+          data-hue-color-input="${escapeHtml(device.lightId)}"
+          class="h-8 min-w-0 flex-1 cursor-pointer rounded-md border border-slate-200 bg-white p-1"
+          ${isBusy ? 'disabled' : ''}
+        />
+      </label>
     </div>
   ` : '';
   const controlHtml = device.controllable
     ? `
-      <button
-        type="button"
-        data-hue-action="toggle"
-        data-hue-light-id="${escapeHtml(device.lightId)}"
-        data-hue-next-on="${device.on ? 'false' : 'true'}"
-        class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-[11px] font-extrabold transition ${switchClass}"
-        ${isBusy ? 'disabled' : ''}
-      >
-        ${isBusy ? 'Sende...' : switchLabel}
-      </button>
-      ${brightnessControlHtml}
-      ${colorControlHtml}
+      ${colorControlHtml || brightnessControlHtml ? `
+        <div class="mt-1 grid ${colorControlHtml && brightnessControlHtml ? 'grid-cols-[minmax(0,0.92fr)_minmax(0,1.4fr)]' : 'grid-cols-1'} gap-1">
+          ${colorControlHtml}
+          ${brightnessControlHtml}
+        </div>
+      ` : ''}
+      <div class="mt-1 flex justify-center">
+        <button
+          type="button"
+          data-hue-action="toggle"
+          data-hue-light-id="${escapeHtml(device.lightId)}"
+          data-hue-next-on="${device.on ? 'false' : 'true'}"
+          class="inline-flex min-w-[8.5rem] items-center justify-center rounded-lg px-2.5 py-1.5 text-[11px] font-extrabold transition ${switchClass}"
+          ${isBusy ? 'disabled' : ''}
+        >
+          ${isBusy ? 'Sende...' : switchLabel}
+        </button>
+      </div>
     `
     : '<div class="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2.5 py-1.5 text-[11px] font-semibold text-slate-500">Dieses Gerät ist sichtbar, aber in Smart Top2 derzeit nicht direkt schaltbar.</div>';
 
@@ -405,7 +441,7 @@ function renderStatus() {
       elements.summaryGrid.innerHTML = `
         <div class="min-w-0 rounded-xl bg-white/80 px-2.5 py-2 text-[12px] font-semibold text-slate-700 ring-1 ring-black/5 col-span-2">
           <div class="flex items-center gap-2 min-w-0">
-            <span class="gardena-led gardena-led--red gardena-led--blink" aria-hidden="true"></span>
+            <span class="gardena-led gardena-led--red" aria-hidden="true"></span>
             <span class="truncate">Hue nicht verbunden</span>
           </div>
         </div>
@@ -425,7 +461,7 @@ function renderStatus() {
             <span class="truncate">${escapeHtml(device.name || 'Hue Gerät')}</span>
           </div>
         </button>
-        ${String(device.lightId) === String(state.activeLightId || '') ? `<div class="sm:col-span-2 -mt-px">${renderHueDeviceCard(selectedDevice)}</div>` : ''}
+        ${String(device.lightId) === String(state.activeLightId || '') ? `<div class="col-span-2 -mt-px">${renderHueDeviceCard(selectedDevice)}</div>` : ''}
       `).join('');
     }
   }
@@ -539,10 +575,11 @@ async function updateHueBrightness(lightId, brightness) {
 }
 
 async function updateHueColor(lightId, color) {
+  const normalizedColor = normalizeHueColor(color);
   await sendHueCommand(
     lightId,
-    { color },
-    { colorHex: color, on: true },
+    { color: normalizedColor },
+    { colorHex: normalizedColor, on: true },
     'Hue-Farbe konnte nicht gesetzt werden.'
   );
 }
@@ -576,10 +613,9 @@ function bindListeners() {
         return;
       }
 
-      if (action === 'color') {
-        const input = elements.summaryGrid.querySelector(`[data-hue-color-input="${CSS.escape(lightId)}"]`);
-        const color = String(input?.value || '').trim();
-        if (!/^#[0-9A-Fa-f]{6}$/.test(color)) {
+      if (action === 'color-preset') {
+        const color = normalizeHueColor(actionTarget.getAttribute('data-hue-color-value') || '');
+        if (!/^#[0-9A-F]{6}$/.test(color)) {
           alertUser('Bitte eine gültige Farbe auswählen.', 'error');
           return;
         }
@@ -646,6 +682,20 @@ function bindListeners() {
     if (label) {
       label.textContent = `${Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0))} %`;
     }
+  });
+
+  elements.summaryGrid?.addEventListener('change', (event) => {
+    const target = event.target instanceof Element ? event.target.closest('[data-hue-color-input]') : null;
+    if (!target) return;
+
+    const lightId = target.getAttribute('data-hue-color-input') || '';
+    const color = normalizeHueColor(target.value || '');
+    if (!lightId || !/^#[0-9A-F]{6}$/.test(color)) {
+      alertUser('Bitte eine gültige Farbe wählen.', 'error');
+      return;
+    }
+
+    updateHueColor(lightId, color).catch(() => {});
   });
 
   if (!state.viewObserverBound) {

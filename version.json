@@ -1,14 +1,24 @@
 {
-  "version": "1.14.2",
-  "buildId": "20260502-5",
+  "version": "1.14.3",
+  "buildId": "20260502-6",
   "releaseDate": "2026-05-02",
-  "releaseTime": "15:14",
+  "releaseTime": "15:36",
   "bereich": "Eingang",
   "timezone": "Europe/Vienna",
-  "note": "Der Aktualisieren-Button lädt Smart Top2 jetzt zentral für Gardena und Hue komplett neu, und aktive Gardena-Geräte blinken konsistent grün statt gelb.",
-  "commitId": "4df1447",
+  "note": "Smart Top2 zeigt Gardena und Hue jetzt auch auf schmalen Displays in zwei Spalten; rote LEDs leuchten statisch, grüne pulsieren weiter, und Hue-Farben lassen sich direkt per Presets oder Farbwähler ohne extra Button setzen.",
+  "commitId": "983335d",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.14.3",
+      "buildId": "20260502-6",
+      "releaseDate": "2026-05-02",
+      "releaseTime": "15:36",
+      "bereich": "Eingang",
+      "note": "Smart Top2 zeigt Gardena und Hue jetzt auch auf schmalen Displays in zwei Spalten; rote LEDs leuchten statisch, grüne pulsieren weiter, und Hue-Farben lassen sich direkt per Presets oder Farbwähler ohne extra Button setzen.",
+      "commitId": "983335d",
+      "obligation": "false"
+    },
     {
       "version": "1.14.2",
       "buildId": "20260502-5",
