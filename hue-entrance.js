@@ -11,7 +11,7 @@ const state = {
   connectLoading: false,
   status: null,
   error: '',
-  expanded: false,
+  activeLightId: '',
   postActionRefreshTimer: null,
   pendingLightIds: new Set(),
 };
@@ -259,6 +259,16 @@ function applyLocalDevicePatch(lightId, patch = {}) {
   state.status.controllableDevices = state.status.devices.filter((device) => device?.controllable);
 }
 
+function getSelectedDevice(devices = []) {
+  return devices.find((device) => String(device?.lightId || '') === String(state.activeLightId || '')) || null;
+}
+
+function syncSelectedDevice(devices = []) {
+  if (!devices.some((device) => String(device?.lightId || '') === String(state.activeLightId || ''))) {
+    state.activeLightId = '';
+  }
+}
+
 function renderStatus() {
   const elements = getElements();
   if (!elements.section) return;
@@ -268,6 +278,8 @@ function renderStatus() {
   const connected = Boolean(status?.connected);
   const bridgeName = connected ? (status?.bridge?.name || 'Philips Hue Bridge') : 'Hue nicht verbunden';
   const devices = connected && Array.isArray(status?.devices) ? getSortedDevices(status.devices) : [];
+  syncSelectedDevice(devices);
+  const selectedDevice = getSelectedDevice(devices);
 
   elements.section.dataset.connected = connected ? 'true' : 'false';
 
@@ -285,12 +297,9 @@ function renderStatus() {
     elements.bridgeBadge.textContent = `Bridge: ${bridgeName}`;
   }
 
-  if (elements.toggleButton) {
-    elements.toggleButton.setAttribute('aria-expanded', state.expanded ? 'true' : 'false');
-  }
-
   if (elements.details) {
-    elements.details.classList.toggle('hidden', !state.expanded);
+    const showDetails = !connected || Boolean(selectedDevice);
+    elements.details.classList.toggle('hidden', !showDetails);
   }
 
   if (elements.summaryGrid) {
@@ -307,12 +316,17 @@ function renderStatus() {
       elements.summaryGrid.innerHTML = '<div class="col-span-2 text-xs font-semibold text-slate-500">Keine Geräte verfügbar.</div>';
     } else {
       elements.summaryGrid.innerHTML = devices.map((device) => `
-        <div class="min-w-0 rounded-xl bg-white/80 px-2.5 py-2 text-[12px] font-semibold text-slate-700 ring-1 ring-black/5">
+        <button
+          type="button"
+          data-hue-select-light-id="${escapeHtml(device.lightId)}"
+          aria-expanded="${String(device.lightId) === String(state.activeLightId || '') ? 'true' : 'false'}"
+          class="min-w-0 rounded-lg px-2 py-1.5 text-[11px] font-semibold text-slate-700 ring-1 transition ${String(device.lightId) === String(state.activeLightId || '') ? 'bg-violet-50 ring-violet-300' : 'bg-white/80 ring-black/5 hover:bg-violet-50/70'}"
+        >
           <div class="flex items-center gap-2 min-w-0">
             <span class="${getHueLedClass(device)}" aria-hidden="true"></span>
             <span class="truncate">${escapeHtml(device.name || 'Hue Gerät')}</span>
           </div>
-        </div>
+        </button>
       `).join('');
     }
   }
@@ -333,8 +347,10 @@ function renderStatus() {
       elements.deviceGrid.innerHTML = '';
     } else if (!devices.length) {
       elements.deviceGrid.innerHTML = '<div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-5 text-sm font-semibold text-slate-600">Es wurden noch keine Hue-Geräte gefunden.</div>';
+    } else if (!selectedDevice) {
+      elements.deviceGrid.innerHTML = '';
     } else {
-      elements.deviceGrid.innerHTML = devices.map((device) => {
+      elements.deviceGrid.innerHTML = [selectedDevice].map((device) => {
         const isBusy = state.pendingLightIds.has(device.lightId);
         const switchLabel = device.on ? 'Ausschalten' : 'Einschalten';
         const switchClass = device.on
@@ -343,40 +359,46 @@ function renderStatus() {
         const brightnessText = Number.isFinite(device.brightness) ? `${device.brightness} %` : '—';
         const typeText = device.archetype || device.modelId || 'Unbekannt';
         const brightnessControlHtml = device.controllable && device.supportsBrightness ? `
-          <div class="mt-3 grid grid-cols-[1fr_auto] gap-2">
-            <input
-              type="number"
-              min="1"
-              max="100"
-              step="1"
-              value="${escapeHtml(String(device.brightness || 100))}"
-              data-hue-brightness-input="${escapeHtml(device.lightId)}"
-              class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
-            />
-            <button
-              type="button"
-              data-hue-action="brightness"
-              data-hue-light-id="${escapeHtml(device.lightId)}"
-              class="rounded-xl bg-violet-600 px-3 py-2 text-sm font-extrabold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
-              ${isBusy ? 'disabled' : ''}
-            >
-              Helligkeit
-            </button>
+          <div class="mt-2 rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+            <div class="flex items-center justify-between gap-3 text-[11px] font-semibold text-slate-600">
+              <span>Helligkeit</span>
+              <span data-hue-brightness-label="${escapeHtml(device.lightId)}">${escapeHtml(brightnessText)}</span>
+            </div>
+            <div class="mt-2 flex items-center gap-2">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="${escapeHtml(String(Number.isFinite(device.brightness) ? device.brightness : 100))}"
+                data-hue-brightness-input="${escapeHtml(device.lightId)}"
+                class="h-2 w-full accent-violet-600"
+              />
+              <button
+                type="button"
+                data-hue-action="brightness"
+                data-hue-light-id="${escapeHtml(device.lightId)}"
+                class="rounded-lg bg-violet-600 px-3 py-2 text-[11px] font-extrabold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+                ${isBusy ? 'disabled' : ''}
+              >
+                OK
+              </button>
+            </div>
           </div>
         ` : '';
         const colorControlHtml = device.controllable && device.supportsColor ? `
-          <div class="mt-3 flex items-center gap-3">
+          <div class="mt-2 flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
             <input
               type="color"
               value="${escapeHtml(device.colorHex || '#FFFFFF')}"
               data-hue-color-input="${escapeHtml(device.lightId)}"
-              class="h-11 w-16 rounded-xl border border-slate-200 bg-white p-1"
+              class="h-9 w-14 rounded-lg border border-slate-200 bg-white p-1"
             />
             <button
               type="button"
               data-hue-action="color"
               data-hue-light-id="${escapeHtml(device.lightId)}"
-              class="rounded-xl bg-fuchsia-600 px-3 py-2 text-sm font-extrabold text-white transition hover:bg-fuchsia-700 disabled:cursor-not-allowed disabled:opacity-50"
+              class="rounded-lg bg-fuchsia-600 px-3 py-2 text-[11px] font-extrabold text-white transition hover:bg-fuchsia-700 disabled:cursor-not-allowed disabled:opacity-50"
               ${isBusy ? 'disabled' : ''}
             >
               Farbe
@@ -390,7 +412,7 @@ function renderStatus() {
               data-hue-action="toggle"
               data-hue-light-id="${escapeHtml(device.lightId)}"
               data-hue-next-on="${device.on ? 'false' : 'true'}"
-              class="inline-flex items-center justify-center rounded-2xl px-4 py-3 text-sm font-extrabold transition ${switchClass}"
+              class="inline-flex items-center justify-center rounded-lg px-3 py-2 text-xs font-extrabold transition ${switchClass}"
               ${isBusy ? 'disabled' : ''}
             >
               ${isBusy ? 'Sende...' : switchLabel}
@@ -398,28 +420,28 @@ function renderStatus() {
             ${brightnessControlHtml}
             ${colorControlHtml}
           `
-          : '<div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500">Dieses Gerät ist sichtbar, aber in Smart Top2 derzeit nicht direkt schaltbar.</div>';
+          : '<div class="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">Dieses Gerät ist sichtbar, aber in Smart Top2 derzeit nicht direkt schaltbar.</div>';
 
-        return `<article class="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div class="flex items-start gap-3">
-            <span class="${getHueLedClass(device)} mt-1" aria-hidden="true"></span>
+        return `<article class="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+          <div class="flex items-start gap-2">
+            <span class="${getHueLedClass(device)} mt-0.5" aria-hidden="true"></span>
             <div class="min-w-0 flex-1">
-              <div class="text-xs font-semibold text-violet-600">${escapeHtml(device.roomName || 'Ohne Raum')}</div>
-              <h4 class="mt-1 text-lg font-extrabold text-slate-900">${escapeHtml(device.name)}</h4>
-              <p class="mt-1 text-sm text-slate-600">${escapeHtml(device.productName || 'Hue Gerät')}</p>
+              <div class="text-[11px] font-semibold text-violet-600">${escapeHtml(device.roomName || 'Ohne Raum')}</div>
+              <h4 class="mt-0.5 text-sm font-extrabold text-slate-900">${escapeHtml(device.name)}</h4>
+              <p class="mt-0.5 text-xs text-slate-600">${escapeHtml(device.productName || 'Hue Gerät')}</p>
             </div>
           </div>
-          <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
-            <div class="rounded-2xl bg-slate-50 px-3 py-2">
-              <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Typ</div>
-              <div class="mt-1 font-bold text-slate-900">${escapeHtml(typeText)}</div>
+          <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
+            <div class="rounded-lg bg-slate-50 px-2.5 py-2">
+              <div class="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">Typ</div>
+              <div class="mt-0.5 font-bold text-slate-900">${escapeHtml(typeText)}</div>
             </div>
-            <div class="rounded-2xl bg-slate-50 px-3 py-2">
-              <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Helligkeit</div>
-              <div class="mt-1 font-bold text-slate-900">${escapeHtml(brightnessText)}</div>
+            <div class="rounded-lg bg-slate-50 px-2.5 py-2">
+              <div class="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">Helligkeit</div>
+              <div class="mt-0.5 font-bold text-slate-900">${escapeHtml(brightnessText)}</div>
             </div>
           </div>
-          <div class="mt-4">${controlHtml}</div>
+          <div class="mt-2">${controlHtml}</div>
         </article>`;
       }).join('');
     }
@@ -509,7 +531,7 @@ async function updateHueBrightness(lightId, brightness) {
   await sendHueCommand(
     lightId,
     { brightness },
-    { brightness, on: true },
+    { brightness, on: brightness > 0 },
     'Hue-Helligkeit konnte nicht gesetzt werden.'
   );
 }
@@ -528,8 +550,12 @@ function bindListeners() {
   const elements = getElements();
   if (!elements.section && !elements.refreshButton) return;
 
-  elements.toggleButton?.addEventListener('click', () => {
-    state.expanded = !state.expanded;
+  elements.summaryGrid?.addEventListener('click', (event) => {
+    const target = event.target instanceof Element ? event.target.closest('[data-hue-select-light-id]') : null;
+    if (!target) return;
+
+    const lightId = target.getAttribute('data-hue-select-light-id') || '';
+    state.activeLightId = state.activeLightId === lightId ? '' : lightId;
     renderStatus();
   });
 
@@ -554,8 +580,8 @@ function bindListeners() {
     if (action === 'brightness') {
       const input = elements.deviceGrid.querySelector(`[data-hue-brightness-input="${CSS.escape(lightId)}"]`);
       const brightness = Number(input?.value || '0');
-      if (!Number.isInteger(brightness) || brightness < 1 || brightness > 100) {
-        alertUser('Bitte eine Helligkeit zwischen 1 und 100 eingeben.', 'error');
+      if (!Number.isInteger(brightness) || brightness < 0 || brightness > 100) {
+        alertUser('Bitte eine Helligkeit zwischen 0 und 100 wählen.', 'error');
         return;
       }
       updateHueBrightness(lightId, brightness).catch(() => {});
@@ -579,6 +605,18 @@ function bindListeners() {
       fetchStatus(true).catch(() => {});
     });
   }
+
+  elements.deviceGrid?.addEventListener('input', (event) => {
+    const target = event.target instanceof Element ? event.target.closest('[data-hue-brightness-input]') : null;
+    if (!target) return;
+
+    const lightId = target.getAttribute('data-hue-brightness-input') || '';
+    const label = elements.deviceGrid.querySelector(`[data-hue-brightness-label="${CSS.escape(lightId)}"]`);
+    const value = Number(target.value || '0');
+    if (label) {
+      label.textContent = `${Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0))} %`;
+    }
+  });
 
   state.listenersBound = true;
 }

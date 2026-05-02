@@ -1,14 +1,24 @@
 {
-  "version": "1.13.9",
-  "buildId": "20260502-2",
+  "version": "1.14.0",
+  "buildId": "20260502-3",
   "releaseDate": "2026-05-02",
-  "releaseTime": "13:40",
+  "releaseTime": "14:35",
   "bereich": "Eingang",
   "timezone": "Europe/Vienna",
-  "note": "Smart Top2 zeigt Gardena und Philips Hue jetzt kompakt als aufklappbare 2-Spalten-Listen mit Aktiv-vor-Inaktiv-Sortierung; Hue steuert zusätzlich Helligkeit und Farbe, Gardena den Mäher per Start/Stop.",
+  "note": "Smart Top2 öffnet bei Gardena und Hue jetzt nur noch das angeklickte Einzelgerät, zeigt Hue-Helligkeit per 0-100-Regler und verdichtet alle Karten deutlich stärker.",
   "commitId": "a2a516b",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.14.0",
+      "buildId": "20260502-3",
+      "releaseDate": "2026-05-02",
+      "releaseTime": "14:35",
+      "bereich": "Eingang",
+      "note": "Smart Top2 öffnet bei Gardena und Hue jetzt nur noch das angeklickte Einzelgerät, zeigt Hue-Helligkeit per 0-100-Regler und verdichtet alle Karten deutlich stärker.",
+      "commitId": "a2a516b",
+      "obligation": "false"
+    },
     {
       "version": "1.13.9",
       "buildId": "20260502-2",

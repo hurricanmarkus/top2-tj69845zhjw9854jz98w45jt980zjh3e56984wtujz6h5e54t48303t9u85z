@@ -45,7 +45,7 @@ const state = {
   modalServiceId: '',
   modalValveName: '',
   selectedMinutes: 10,
-  expanded: false,
+  activeDeviceKey: '',
   postActionRefreshTimer: null,
 };
 
@@ -385,29 +385,57 @@ function getSortedVisibleValves() {
     });
 }
 
-function renderSummaryGrid() {
-  const { summaryGrid } = getElements();
-  if (!summaryGrid) return;
-
+function getGardenaSummaryEntries() {
   const entries = [];
   const mower = state.status?.mower;
+
   if (mower?.name) {
     const meta = getMowerMeta(mower);
     entries.push({
+      key: `mower:${String(mower.serviceId || mower.name || 'default').trim()}`,
+      type: 'mower',
       label: mower.name || 'Mähroboter',
       active: meta.showStop,
       ledClass: meta.ledClass,
+      mower,
+      meta,
     });
   }
 
   getSortedVisibleValves().forEach((valve) => {
     const meta = getValveMeta(valve);
     entries.push({
+      key: `valve:${String(valve.serviceId || valve.slot || valve.name || 'unknown').trim()}`,
+      type: 'valve',
       label: valve.name || `Ventil ${valve.slot || ''}`,
       active: meta.showStop,
       ledClass: meta.ledClass,
+      valve,
+      meta,
     });
   });
+
+  return entries.sort((left, right) => {
+    if (left.active !== right.active) {
+      return Number(right.active) - Number(left.active);
+    }
+    return String(left.label || '').localeCompare(String(right.label || ''), 'de', { sensitivity: 'base' });
+  });
+}
+
+function syncActiveDeviceSelection(entries = []) {
+  if (!entries.some((entry) => entry.key === state.activeDeviceKey)) {
+    state.activeDeviceKey = '';
+  }
+}
+
+function getActiveGardenaEntry(entries = []) {
+  return entries.find((entry) => entry.key === state.activeDeviceKey) || null;
+}
+
+function renderSummaryGrid(entries = []) {
+  const { summaryGrid } = getElements();
+  if (!summaryGrid) return;
 
   if (!entries.length) {
     summaryGrid.innerHTML = '<div class="col-span-2 text-xs font-semibold text-slate-500">Keine Geräte verfügbar.</div>';
@@ -415,63 +443,67 @@ function renderSummaryGrid() {
   }
 
   summaryGrid.innerHTML = entries
-    .sort((left, right) => {
-      if (left.active !== right.active) {
-        return Number(right.active) - Number(left.active);
-      }
-      return String(left.label || '').localeCompare(String(right.label || ''), 'de', { sensitivity: 'base' });
-    })
     .map((entry) => `
-      <div class="min-w-0 rounded-xl bg-white/80 px-2.5 py-2 text-[12px] font-semibold text-slate-700 ring-1 ring-black/5">
+      <button
+        type="button"
+        data-gardena-device-key="${escapeHtml(entry.key)}"
+        aria-expanded="${entry.key === state.activeDeviceKey ? 'true' : 'false'}"
+        class="min-w-0 rounded-lg px-2 py-1.5 text-[11px] font-semibold text-slate-700 ring-1 transition ${entry.key === state.activeDeviceKey ? 'bg-emerald-50 ring-emerald-300' : 'bg-white/80 ring-black/5 hover:bg-emerald-50/70'}"
+      >
         <div class="flex items-center gap-2 min-w-0">
           <span class="${entry.ledClass}" aria-hidden="true"></span>
           <span class="truncate">${escapeHtml(entry.label)}</span>
         </div>
-      </div>
+      </button>
     `)
     .join('');
 }
 
-function renderMowerCard() {
+function renderMowerCard(activeEntry) {
   const { mowerHost } = getElements();
   if (!mowerHost) return;
 
-  const meta = getMowerMeta(state.status?.mower);
-  const mower = state.status?.mower || {};
+  if (!activeEntry || activeEntry.type !== 'mower') {
+    mowerHost.innerHTML = '';
+    return;
+  }
+
+  const meta = activeEntry.meta || getMowerMeta(activeEntry.mower);
+  const mower = activeEntry.mower || {};
   const isPending = mower.serviceId && state.pendingServiceIds.has(mower.serviceId);
   const actionDisabledAttr = isPending ? 'disabled' : '';
 
   mowerHost.innerHTML = `
-    <div class="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-4 shadow-sm">
-      <div class="flex items-start justify-between gap-3">
+    <div class="rounded-xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-3 shadow-sm">
+      <div class="flex items-start justify-between gap-2">
         <div class="min-w-0 flex-1">
-          <div class="flex items-center gap-2 text-xs font-semibold text-indigo-600">
+          <div class="flex items-center gap-2 text-[11px] font-semibold text-indigo-600">
             <span class="${meta.ledClass}" aria-hidden="true"></span>
             <span>Mähroboter</span>
           </div>
-          <h4 class="text-xl font-extrabold text-slate-900">${escapeHtml(mower.name || 'eSusi')}</h4>
+          <h4 class="mt-0.5 text-base font-extrabold text-slate-900">${escapeHtml(mower.name || 'eSusi')}</h4>
         </div>
-        <span class="rounded-full px-3 py-1 text-xs font-bold ${meta.badgeClass}">${escapeHtml(meta.badgeText)}</span>
+        <span class="rounded-full px-2.5 py-1 text-[10px] font-bold ${meta.badgeClass}">${escapeHtml(meta.badgeText)}</span>
       </div>
-      <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div class="rounded-xl bg-white/80 p-3 ring-1 ring-indigo-100">
-          <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</div>
-          <div class="mt-1 text-sm font-bold text-slate-900 break-words">${escapeHtml(meta.activityText)}</div>
+      <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div class="rounded-lg bg-white/80 px-2.5 py-2 ring-1 ring-indigo-100">
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Status</div>
+          <div class="mt-0.5 text-xs font-bold text-slate-900 break-words">${escapeHtml(meta.activityText)}</div>
         </div>
-        <div class="rounded-xl bg-white/80 p-3 ring-1 ring-indigo-100">
-          <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Batterie</div>
-          <div class="mt-1 text-sm font-bold text-slate-900">${escapeHtml(String(meta.batteryText))}${meta.batteryText !== '—' ? ' %' : ''}</div>
+        <div class="rounded-lg bg-white/80 px-2.5 py-2 ring-1 ring-indigo-100">
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Batterie</div>
+          <div class="mt-0.5 text-xs font-bold text-slate-900">${escapeHtml(String(meta.batteryText))}${meta.batteryText !== '—' ? ' %' : ''}</div>
         </div>
-        <div class="rounded-xl bg-white/80 p-3 ring-1 ring-indigo-100">
-          <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Batteriezustand</div>
-          <div class="mt-1 text-sm font-bold text-slate-900 break-words">${escapeHtml(meta.batteryStateText)}</div>
+        <div class="rounded-lg bg-white/80 px-2.5 py-2 ring-1 ring-indigo-100">
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Batteriezustand</div>
+          <div class="mt-0.5 text-xs font-bold text-slate-900 break-words">${escapeHtml(meta.batteryStateText)}</div>
         </div>
       </div>
-      <div class="mt-4 flex flex-wrap gap-3">
+      <div class="mt-2 flex flex-wrap gap-2">
         ${meta.showStart ? `
           <button
             type="button"
-            class="flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            class="flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-extrabold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
             data-gardena-action="mower-start"
             data-service-id="${escapeHtml(mower.serviceId || '')}"
             ${actionDisabledAttr}
@@ -482,7 +514,7 @@ function renderMowerCard() {
         ${meta.showStop ? `
           <button
             type="button"
-            class="flex-1 rounded-xl bg-rose-600 px-4 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center"
+            class="flex-1 rounded-lg bg-rose-600 px-3 py-2 text-xs font-extrabold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center"
             data-gardena-action="mower-stop"
             data-service-id="${escapeHtml(mower.serviceId || '')}"
             ${actionDisabledAttr}
@@ -496,98 +528,87 @@ function renderMowerCard() {
   `;
 }
 
-function renderValveCards() {
+function renderValveCards(activeEntry) {
   const { valveGrid } = getElements();
   if (!valveGrid) return;
 
-  const visibleValves = getSortedVisibleValves();
-
-  if (!visibleValves.length) {
-    valveGrid.innerHTML = `
-      <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm font-bold text-amber-800 sm:col-span-2">
-        Es wurden aktuell keine angeschlossenen Ventile erkannt.
-      </div>
-    `;
+  if (!activeEntry || activeEntry.type !== 'valve') {
+    valveGrid.innerHTML = '';
     return;
   }
 
-  valveGrid.innerHTML = visibleValves.map((valve) => {
-    const meta = getValveMeta(valve);
-    const isPending = valve.serviceId && state.pendingServiceIds.has(valve.serviceId);
-    const startDisabledAttr = isPending ? 'disabled' : '';
-    const stopDisabledAttr = isPending ? 'disabled' : '';
+  const valve = activeEntry.valve || {};
+  const meta = activeEntry.meta || getValveMeta(valve);
+  const isPending = valve.serviceId && state.pendingServiceIds.has(valve.serviceId);
+  const startDisabledAttr = isPending ? 'disabled' : '';
+  const stopDisabledAttr = isPending ? 'disabled' : '';
 
-    return `
-      <div class="rounded-2xl border p-4 shadow-sm ${meta.cardClass} ${valve.online ? '' : 'opacity-95'}">
-        <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0 flex-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-            <span class="${meta.ledClass}" aria-hidden="true"></span>
-            <span>Ventil ${escapeHtml(String(valve.slot || '—'))}</span>
-          </div>
-          <span class="shrink-0 rounded-full px-3 py-1 text-xs font-bold ${meta.badgeClass}">${escapeHtml(meta.badgeText)}</span>
+  valveGrid.innerHTML = `
+    <div class="rounded-xl border p-3 shadow-sm ${meta.cardClass} ${valve.online ? '' : 'opacity-95'}">
+      <div class="flex items-start justify-between gap-2">
+        <div class="min-w-0 flex-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+          <span class="${meta.ledClass}" aria-hidden="true"></span>
+          <span>Ventil ${escapeHtml(String(valve.slot || '—'))}</span>
         </div>
-        <div class="mt-2 flex w-full items-center rounded-xl border border-orange-300 bg-orange-50 px-3 py-2">
-          <h4 class="gardena-valve-name text-sm font-extrabold text-slate-900">${escapeHtml(valve.name || `Ventil ${valve.slot || ''}`)}</h4>
+        <span class="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${meta.badgeClass}">${escapeHtml(meta.badgeText)}</span>
+      </div>
+      <div class="mt-2 flex w-full items-center rounded-lg border border-orange-300 bg-orange-50 px-2.5 py-2">
+        <h4 class="gardena-valve-name text-xs font-extrabold text-slate-900">${escapeHtml(valve.name || `Ventil ${valve.slot || ''}`)}</h4>
+      </div>
+      <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div class="rounded-lg bg-white/80 px-2.5 py-2 ring-1 ring-slate-100">
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Aktivität</div>
+          <div class="gardena-status-line mt-0.5 text-xs font-bold text-slate-900">${escapeHtml(meta.activityText)}</div>
         </div>
-        <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div class="rounded-xl bg-white/80 px-3 py-2.5 ring-1 ring-slate-100">
-            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Aktivität</div>
-            <div class="gardena-status-line mt-1 text-sm font-bold text-slate-900">${escapeHtml(meta.activityText)}</div>
-          </div>
-          <div class="rounded-xl bg-white/80 px-3 py-2.5 ring-1 ring-slate-100">
-            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Zustand</div>
-            <div class="gardena-status-line mt-1 text-sm font-bold text-slate-900">${escapeHtml(meta.stateText)}</div>
-          </div>
-        </div>
-        <div class="mt-4 flex flex-wrap gap-3">
-          ${meta.showStart ? `
-            <button
-              type="button"
-              class="flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-              data-gardena-action="open-modal"
-              data-service-id="${escapeHtml(valve.serviceId || '')}"
-              data-valve-name="${escapeHtml(valve.name || `Ventil ${valve.slot || ''}`)}"
-              ${startDisabledAttr}
-            >
-              Starten
-            </button>
-          ` : ''}
-          ${meta.showStop ? `
-            <button
-              type="button"
-              class="flex-1 rounded-xl bg-rose-600 px-4 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center"
-              data-gardena-action="stop"
-              data-service-id="${escapeHtml(valve.serviceId || '')}"
-              ${stopDisabledAttr}
-            >
-              <span class="button-text" style="display:${isPending ? 'none' : 'inline-block'}">Stoppen</span>
-              <span class="loading-spinner" style="display:${isPending ? 'inline-block' : 'none'}"></span>
-            </button>
-          ` : ''}
-          ${!meta.showStart && !meta.showStop ? `
-            <div class="w-full rounded-xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-600">
-              Derzeit ist keine Aktion verfügbar.
-            </div>
-          ` : ''}
+        <div class="rounded-lg bg-white/80 px-2.5 py-2 ring-1 ring-slate-100">
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Zustand</div>
+          <div class="gardena-status-line mt-0.5 text-xs font-bold text-slate-900">${escapeHtml(meta.stateText)}</div>
         </div>
       </div>
-    `;
-  }).join('');
+      <div class="mt-2 flex flex-wrap gap-2">
+        ${meta.showStart ? `
+          <button
+            type="button"
+            class="flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-extrabold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            data-gardena-action="open-modal"
+            data-service-id="${escapeHtml(valve.serviceId || '')}"
+            data-valve-name="${escapeHtml(valve.name || `Ventil ${valve.slot || ''}`)}"
+            ${startDisabledAttr}
+          >
+            Starten
+          </button>
+        ` : ''}
+        ${meta.showStop ? `
+          <button
+            type="button"
+            class="flex-1 rounded-lg bg-rose-600 px-3 py-2 text-xs font-extrabold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center"
+            data-gardena-action="stop"
+            data-service-id="${escapeHtml(valve.serviceId || '')}"
+            ${stopDisabledAttr}
+          >
+            <span class="button-text" style="display:${isPending ? 'none' : 'inline-block'}">Stoppen</span>
+            <span class="loading-spinner" style="display:${isPending ? 'inline-block' : 'none'}"></span>
+          </button>
+        ` : ''}
+        ${!meta.showStart && !meta.showStop ? `
+          <div class="w-full rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
+            Derzeit ist keine Aktion verfügbar.
+          </div>
+        ` : ''}
+      </div>
+    </div>
+  `;
 }
 
 function renderStatusMeta() {
-  const { toggleButton, details, locationBadge, error, loading } = getElements();
+  const { details, locationBadge, error, loading } = getElements();
 
   if (locationBadge) {
     locationBadge.textContent = state.status?.location?.name ? `Ort: ${state.status.location.name}` : 'Ort: GARDENA';
   }
 
-  if (toggleButton) {
-    toggleButton.setAttribute('aria-expanded', state.expanded ? 'true' : 'false');
-  }
-
   if (details) {
-    details.classList.toggle('hidden', !state.expanded);
+    details.classList.toggle('hidden', !state.activeDeviceKey);
   }
 
   if (error) {
@@ -638,10 +659,13 @@ function renderModal() {
 }
 
 function render() {
+  const entries = getGardenaSummaryEntries();
+  syncActiveDeviceSelection(entries);
+  const activeEntry = getActiveGardenaEntry(entries);
   renderStatusMeta();
-  renderSummaryGrid();
-  renderMowerCard();
-  renderValveCards();
+  renderSummaryGrid(entries);
+  renderMowerCard(activeEntry);
+  renderValveCards(activeEntry);
   renderModal();
 }
 
@@ -808,10 +832,14 @@ function bindListeners() {
   if (state.listenersBound) return;
   state.listenersBound = true;
 
-  const { toggleButton, mowerHost, valveGrid, presetButtons, durationInput, confirmButton, modal, refreshButton } = getElements();
+  const { summaryGrid, mowerHost, valveGrid, presetButtons, durationInput, confirmButton, modal, refreshButton } = getElements();
 
-  toggleButton?.addEventListener('click', () => {
-    state.expanded = !state.expanded;
+  summaryGrid?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-gardena-device-key]');
+    if (!button) return;
+
+    const nextKey = button.getAttribute('data-gardena-device-key') || '';
+    state.activeDeviceKey = state.activeDeviceKey === nextKey ? '' : nextKey;
     render();
   });
 
