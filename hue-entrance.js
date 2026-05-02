@@ -636,13 +636,6 @@ function bindListeners() {
     }
   });
 
-  if (elements.refreshButton) {
-    elements.refreshButton.addEventListener('click', () => {
-      if (!isHueViewVisible()) return;
-      fetchStatus(true).catch(() => {});
-    });
-  }
-
   elements.summaryGrid?.addEventListener('input', (event) => {
     const target = event.target instanceof Element ? event.target.closest('[data-hue-brightness-input]') : null;
     if (!target) return;
@@ -685,4 +678,12 @@ export function initializeHueEntranceControls(options = {}) {
   if (!state.loading && isHueViewVisible()) {
     fetchStatus(true).catch(() => {});
   }
+}
+
+export async function refreshHueEntranceControls(options = {}) {
+  if (!getElements().section || !isHueViewVisible()) {
+    return;
+  }
+
+  await fetchStatus(options.showLoading !== false);
 }

@@ -349,9 +349,7 @@ function getValveMeta(valve) {
       stateText: activeByDuration ? 'Aktiv' : translateGardenaCode(status, 'Aktiv'),
       showStart: false,
       showStop: true,
-      ledClass: activity === 'SCHEDULED_WATERING'
-        ? 'gardena-led gardena-led--amber gardena-led--blink'
-        : 'gardena-led gardena-led--green gardena-led--blink',
+      ledClass: 'gardena-led gardena-led--green gardena-led--blink',
     };
   }
 
@@ -828,7 +826,7 @@ function bindListeners() {
   if (state.listenersBound) return;
   state.listenersBound = true;
 
-  const { summaryGrid, presetButtons, durationInput, confirmButton, modal, refreshButton } = getElements();
+  const { summaryGrid, presetButtons, durationInput, confirmButton, modal } = getElements();
 
   summaryGrid?.addEventListener('click', (event) => {
     const actionButton = event.target.closest('[data-gardena-action]');
@@ -897,11 +895,6 @@ function bindListeners() {
       closeDurationModal();
     }
   });
-
-  refreshButton?.addEventListener('click', () => {
-    if (!isGardenaViewVisible()) return;
-    fetchStatus();
-  });
 }
 
 export function initializeGardenaEntranceControls(options = {}) {
@@ -917,4 +910,12 @@ export function initializeGardenaEntranceControls(options = {}) {
   if (!state.loading && isGardenaViewVisible()) {
     fetchStatus();
   }
+}
+
+export async function refreshGardenaEntranceControls() {
+  if (!getElements().section || !isGardenaViewVisible()) {
+    return;
+  }
+
+  await fetchStatus();
 }

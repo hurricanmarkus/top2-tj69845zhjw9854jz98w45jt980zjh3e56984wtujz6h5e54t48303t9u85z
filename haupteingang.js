@@ -37,8 +37,8 @@ import { initializeAbbuchungsberechner, stopAbbuchungsberechnerListeners } from 
 import { initializeGeschenkemanagement, listenForGeschenke, stopGeschenkemanagementListeners } from './geschenkemanagement.js';
 import { initializeSendungsverwaltungView, listenForSendungen, stopSendungsverwaltungListeners } from './sendungsverwaltung.js';
 import { initializeEinkaufsliste, stopEinkaufslisteListeners } from './einkaufsliste.js';
-import { initializeGardenaEntranceControls } from './gardena-entrance.js';
-import { initializeHueEntranceControls } from './hue-entrance.js';
+import { initializeGardenaEntranceControls, refreshGardenaEntranceControls } from './gardena-entrance.js';
+import { initializeHueEntranceControls, refreshHueEntranceControls } from './hue-entrance.js';
 import { ensureNachrichtencenterSelfContact } from './notfall.js';
 import { initializeNotizen, stopNotizenListeners } from './notizen.js';
 import { initializeMitarbeiterkarte, stopMitarbeiterkarteListeners } from './ma-karte.js';
@@ -1842,6 +1842,26 @@ export function alertUser(message, type) {
     }, duration);
 }
 
+let entranceRefreshBound = false;
+
+function bindEntranceRefreshButton() {
+    if (entranceRefreshBound) return;
+
+    const refreshButton = document.getElementById('hueRefreshButton');
+    if (!refreshButton) return;
+
+    entranceRefreshBound = true;
+    refreshButton.addEventListener('click', async () => {
+        const entranceView = document.getElementById(views.entrance.id);
+        if (!entranceView || !entranceView.classList.contains('active')) return;
+
+        await Promise.allSettled([
+            refreshGardenaEntranceControls(),
+            refreshHueEntranceControls({ showLoading: true }),
+        ]);
+    });
+}
+
 
 // HINZUFÜGEN zu haupteingang.js (z.B. nach der alertUser Funktion)
 export function cleanUrlParams() {
@@ -2991,6 +3011,7 @@ export function navigate(targetViewName, options = {}) {
     }
 
     if (targetViewName === 'entrance') {
+        bindEntranceRefreshButton();
         initializeGardenaEntranceControls({ alertUser });
         initializeHueEntranceControls({ alertUser });
     }

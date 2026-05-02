@@ -1,14 +1,24 @@
 {
-  "version": "1.14.1",
-  "buildId": "20260502-4",
+  "version": "1.14.2",
+  "buildId": "20260502-5",
   "releaseDate": "2026-05-02",
-  "releaseTime": "14:50",
+  "releaseTime": "15:14",
   "bereich": "Eingang",
   "timezone": "Europe/Vienna",
-  "note": "Smart Top2 zeigt den Seitentitel jetzt in der Zurück-Zeile, verdichtet die Karten weiter und öffnet Gardena- sowie Hue-Details direkt inline unter dem angeklickten Gerät; der Aktualisieren-Button sitzt fest im App-Fenster über dem Footer.",
-  "commitId": "701bcdf",
+  "note": "Der Aktualisieren-Button lädt Smart Top2 jetzt zentral für Gardena und Hue komplett neu, und aktive Gardena-Geräte blinken konsistent grün statt gelb.",
+  "commitId": "4df1447",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.14.2",
+      "buildId": "20260502-5",
+      "releaseDate": "2026-05-02",
+      "releaseTime": "15:14",
+      "bereich": "Eingang",
+      "note": "Der Aktualisieren-Button lädt Smart Top2 jetzt zentral für Gardena und Hue komplett neu, und aktive Gardena-Geräte blinken konsistent grün statt gelb.",
+      "commitId": "4df1447",
+      "obligation": "false"
+    },
     {
       "version": "1.14.1",
       "buildId": "20260502-4",
