@@ -24,15 +24,15 @@
     <meta name="application-name" content="TOP 2 App">
     <meta name="apple-mobile-web-app-title" content="TOP2">
     <meta name="theme-color" content="#4f46e5" />
-    <meta name="top2-app-version" content="1.14.3" />
-    <meta name="top2-build-id" content="20260502-6" />
+    <meta name="top2-app-version" content="1.15.0" />
+    <meta name="top2-build-id" content="20260502-7" />
     <meta name="msapplication-navbutton-color" content="#4f46e5">
     <meta name="apple-mobile-app-status-bar-style" content="black-translucent">
     <link rel="icon" type="image/png" sizes="192x192" href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
     <link rel="apple-touch-icon" type="image/png" sizes="192x192"
         href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
 
-    <link rel="manifest" href="manifest.json?v=20260502-6">
+    <link rel="manifest" href="manifest.json?v=20260502-7">
 
     <link rel="stylesheet" href="style.css">
     
@@ -743,6 +743,34 @@
                                     </button>
                                 </div>
                                 <div id="hueEntranceDeviceGrid" class="grid grid-cols-1 gap-1"></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="homematicEntranceSection" class="mt-1 space-y-1" data-connected="false">
+                    <div class="rounded-xl bg-gradient-to-br from-cyan-600 via-sky-600 to-blue-700 p-[1px] shadow-md">
+                        <div class="rounded-[calc(0.75rem-1px)] bg-white/95 p-2 backdrop-blur">
+                            <div id="homematicEntranceToggle" class="w-full text-left">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="min-w-0 text-xs font-extrabold text-slate-900">Homematic IP Heizung</div>
+                                    <span id="homematicEntranceBadge" class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700">Access Point: lädt...</span>
+                                </div>
+                                <div id="homematicEntranceSummaryGrid" class="mt-1 grid grid-cols-2 gap-1"></div>
+                            </div>
+
+                            <div id="homematicEntranceLoading" class="hidden items-center justify-center gap-2 rounded-lg bg-slate-50 px-2 py-3 text-slate-600 ring-1 ring-slate-200">
+                                <svg class="h-4 w-4 animate-spin text-cyan-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                                </svg>
+                                <span class="text-xs font-semibold">Homematic lädt...</span>
+                            </div>
+
+                            <div id="homematicEntranceError" class="hidden rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs font-semibold text-red-700"></div>
+
+                            <div id="homematicEntranceDetails" class="hidden space-y-1">
+                                <div id="homematicEntranceInfo"></div>
                             </div>
                         </div>
                     </div>

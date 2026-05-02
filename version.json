@@ -1,14 +1,24 @@
 {
-  "version": "1.14.3",
-  "buildId": "20260502-6",
+  "version": "1.15.0",
+  "buildId": "20260502-7",
   "releaseDate": "2026-05-02",
-  "releaseTime": "15:36",
-  "bereich": "Eingang",
+  "releaseTime": "17:48",
+  "bereich": "Smart Top2",
   "timezone": "Europe/Vienna",
-  "note": "Smart Top2 zeigt Gardena und Hue jetzt auch auf schmalen Displays in zwei Spalten; rote LEDs leuchten statisch, grüne pulsieren weiter, und Hue-Farben lassen sich direkt per Presets oder Farbwähler ohne extra Button setzen.",
-  "commitId": "983335d",
+  "note": "Smart Top2 enthält jetzt unter Philips Hue eine globale Homematic-IP-Heizungsbox mit sicherem Backend, Temperatur-, Boost- und Modussteuerung sowie zentralem Refresh für alle berechtigten Nutzer.",
+  "commitId": "7dac4e2",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.15.0",
+      "buildId": "20260502-7",
+      "releaseDate": "2026-05-02",
+      "releaseTime": "17:48",
+      "bereich": "Smart Top2",
+      "note": "Smart Top2 enthält jetzt unter Philips Hue eine globale Homematic-IP-Heizungsbox mit sicherem Backend, Temperatur-, Boost- und Modussteuerung sowie zentralem Refresh für alle berechtigten Nutzer.",
+      "commitId": "7dac4e2",
+      "obligation": "false"
+    },
     {
       "version": "1.14.3",
       "buildId": "20260502-6",

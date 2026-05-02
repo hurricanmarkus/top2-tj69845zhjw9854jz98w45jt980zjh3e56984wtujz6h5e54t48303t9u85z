@@ -39,6 +39,7 @@ import { initializeSendungsverwaltungView, listenForSendungen, stopSendungsverwa
 import { initializeEinkaufsliste, stopEinkaufslisteListeners } from './einkaufsliste.js';
 import { initializeGardenaEntranceControls, refreshGardenaEntranceControls } from './gardena-entrance.js';
 import { initializeHueEntranceControls, refreshHueEntranceControls } from './hue-entrance.js';
+import { initializeHomematicEntranceControls, refreshHomematicEntranceControls } from './homematic-entrance.js';
 import { ensureNachrichtencenterSelfContact } from './notfall.js';
 import { initializeNotizen, stopNotizenListeners } from './notizen.js';
 import { initializeMitarbeiterkarte, stopMitarbeiterkarteListeners } from './ma-karte.js';
@@ -1858,6 +1859,7 @@ function bindEntranceRefreshButton() {
         await Promise.allSettled([
             refreshGardenaEntranceControls(),
             refreshHueEntranceControls({ showLoading: true }),
+            refreshHomematicEntranceControls({ showLoading: true }),
         ]);
     });
 }
@@ -3014,6 +3016,7 @@ export function navigate(targetViewName, options = {}) {
         bindEntranceRefreshButton();
         initializeGardenaEntranceControls({ alertUser });
         initializeHueEntranceControls({ alertUser });
+        initializeHomematicEntranceControls({ alertUser });
     }
 
     if (targetViewName === 'userSettings') {
