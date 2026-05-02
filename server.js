@@ -292,6 +292,7 @@ function parseLocationStatus(payload, resolvedLocationId = '') {
 
   const mower = {
     deviceId: mowerDevice?.deviceId || MOWER_DEVICE_ID,
+    serviceId: mowerService?.id || '',
     name: mowerDevice?.name || 'eSusi',
     activity: getAttributeValue(mowerService, 'activity'),
     state: getAttributeValue(mowerService, 'state') || getAttributeValue(mowerCommon, 'state'),
@@ -350,6 +351,7 @@ function parseLocationStatus(payload, resolvedLocationId = '') {
 
 function validateCommandBody(body) {
   const serviceId = String(body?.serviceId || '').trim();
+  const targetType = String(body?.targetType || 'VALVE').trim().toUpperCase();
   const command = String(body?.command || '').trim().toUpperCase();
   const seconds = Number(body?.seconds);
 
@@ -357,15 +359,25 @@ function validateCommandBody(body) {
     throw createConfigError('serviceId fehlt.', 400);
   }
 
-  if (!/:(?:[1-6])$/.test(serviceId)) {
-    throw createConfigError('Ungültige Ventil-serviceId.', 400);
+  if (!['VALVE', 'MOWER'].includes(targetType)) {
+    throw createConfigError('Ungültiger targetType.', 400);
   }
 
-  if (!['START_SECONDS_TO_OVERRIDE', 'STOP_UNTIL_NEXT_TASK'].includes(command)) {
-    throw createConfigError('Ungültiger Command.', 400);
+  if (targetType === 'VALVE') {
+    if (!/:(?:[1-6])$/.test(serviceId)) {
+      throw createConfigError('Ungültige Ventil-serviceId.', 400);
+    }
+
+    if (!['START_SECONDS_TO_OVERRIDE', 'STOP_UNTIL_NEXT_TASK'].includes(command)) {
+      throw createConfigError('Ungültiger Ventil-Command.', 400);
+    }
+  } else {
+    if (!['START_DONT_OVERRIDE', 'PARK_UNTIL_NEXT_TASK'].includes(command)) {
+      throw createConfigError('Ungültiger Mäher-Command.', 400);
+    }
   }
 
-  if (command === 'START_SECONDS_TO_OVERRIDE') {
+  if (targetType === 'VALVE' && command === 'START_SECONDS_TO_OVERRIDE') {
     if (!Number.isInteger(seconds) || seconds < 60) {
       throw createConfigError('seconds muss eine Ganzzahl ab 60 sein.', 400);
     }
@@ -374,7 +386,7 @@ function validateCommandBody(body) {
     }
   }
 
-  return { serviceId, command, seconds };
+  return { serviceId, targetType, command, seconds };
 }
 
 app.use(express.json({ limit: '100kb' }));
@@ -421,14 +433,14 @@ app.post('/api/command', async (req, res) => {
       throw createConfigError(`Fehlende .env-Werte: ${getMissingEnvKeys().join(', ')}`, 500);
     }
 
-    const { serviceId, command, seconds } = validateCommandBody(req.body);
+    const { serviceId, targetType, command, seconds } = validateCommandBody(req.body);
     const body = {
       data: {
         id: `request-${Date.now()}`,
-        type: 'VALVE_CONTROL',
+        type: targetType === 'MOWER' ? 'MOWER_CONTROL' : 'VALVE_CONTROL',
         attributes: {
           command,
-          ...(command === 'START_SECONDS_TO_OVERRIDE' ? { seconds } : {}),
+          ...(targetType === 'VALVE' && command === 'START_SECONDS_TO_OVERRIDE' ? { seconds } : {}),
         },
       },
     };
@@ -442,6 +454,7 @@ app.post('/api/command', async (req, res) => {
     res.json({
       ok: true,
       serviceId,
+      targetType,
       command,
       accepted: true,
       payload,

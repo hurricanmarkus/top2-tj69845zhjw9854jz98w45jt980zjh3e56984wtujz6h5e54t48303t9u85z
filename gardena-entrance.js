@@ -4,6 +4,7 @@ const DEFAULT_BACKEND_ORIGIN = 'http://localhost:3000';
 const DEFAULT_FUNCTIONS_API_BASE = 'https://europe-west1-top2-e9ac0.cloudfunctions.net/gardenaApi';
 const PRESET_MINUTES = [5, 10, 15, 30];
 const ACTIVE_VALVE_CODES = new Set(['MANUAL_CONTROL', 'SCHEDULED_WATERING', 'START_SECONDS_TO_OVERRIDE', 'OPEN', 'ACTIVE', 'RUNNING', 'WATERING']);
+const ACTIVE_MOWER_CODES = new Set(['LEAVING', 'MOWING', 'GOING_HOME', 'START_DONT_OVERRIDE']);
 const GARDENA_TEXTS = {
   ONLINE: 'Online',
   OFFLINE: 'Offline',
@@ -44,6 +45,7 @@ const state = {
   modalServiceId: '',
   modalValveName: '',
   selectedMinutes: 10,
+  expanded: false,
   postActionRefreshTimer: null,
 };
 
@@ -109,11 +111,13 @@ function isHtmlLikeResponse(value = '') {
 function getElements() {
   return {
     section: document.getElementById('gardenaEntranceSection'),
+    toggleButton: document.getElementById('gardenaEntranceToggle'),
     loading: document.getElementById('gardenaEntranceLoading'),
     error: document.getElementById('gardenaEntranceError'),
+    details: document.getElementById('gardenaEntranceDetails'),
+    summaryGrid: document.getElementById('gardenaEntranceSummaryGrid'),
     mowerHost: document.getElementById('gardenaEntranceMowerHost'),
     valveGrid: document.getElementById('gardenaEntranceValveGrid'),
-    updatedBadge: document.getElementById('gardenaEntranceUpdatedBadge'),
     locationBadge: document.getElementById('gardenaEntranceLocationBadge'),
     refreshButton: document.getElementById('hueRefreshButton'),
     modal: document.getElementById('gardenaDurationModal'),
@@ -252,6 +256,12 @@ function formatTimestamp(isoString) {
   }
 }
 
+function isMowerActive(mower) {
+  const activity = normalizeGardenaCode(mower?.activity || '');
+  const stateCode = normalizeGardenaCode(mower?.state || '');
+  return ACTIVE_MOWER_CODES.has(activity) || ACTIVE_MOWER_CODES.has(stateCode);
+}
+
 function getMowerMeta(mower) {
   if (!mower) {
     return {
@@ -260,6 +270,9 @@ function getMowerMeta(mower) {
       activityText: 'Keine Daten verfügbar',
       batteryText: '—',
       batteryStateText: '—',
+      showStart: false,
+      showStop: false,
+      ledClass: 'gardena-led gardena-led--slate',
     };
   }
 
@@ -270,15 +283,23 @@ function getMowerMeta(mower) {
       activityText: translateGardenaCode(mower.activity || mower.state || 'OFFLINE', 'Offline'),
       batteryText: mower.batteryLevel ?? '—',
       batteryStateText: translateGardenaCode(mower.batteryState, '—'),
+      showStart: false,
+      showStop: false,
+      ledClass: 'gardena-led gardena-led--red gardena-led--blink',
     };
   }
 
+  const mowerActive = isMowerActive(mower);
+
   return {
-    badgeClass: 'bg-emerald-100 text-emerald-700',
-    badgeText: 'Online',
+    badgeClass: mowerActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700',
+    badgeText: mowerActive ? 'Aktiv' : 'Bereit',
     activityText: translateGardenaCode(mower.activity || mower.state || 'UNKNOWN'),
     batteryText: mower.batteryLevel ?? '—',
     batteryStateText: translateGardenaCode(mower.batteryState, '—'),
+    showStart: !mowerActive,
+    showStop: mowerActive,
+    ledClass: mowerActive ? 'gardena-led gardena-led--green gardena-led--blink' : 'gardena-led gardena-led--red gardena-led--blink',
   };
 }
 
@@ -347,18 +368,87 @@ function getValveMeta(valve) {
   };
 }
 
+function getSortedVisibleValves() {
+  const valves = Array.isArray(state.status?.valves) && state.status.valves.length
+    ? state.status.valves
+    : Array.from({ length: 6 }, (_, index) => createFallbackValve(index + 1));
+
+  return valves
+    .filter((valve) => !getValveMeta(valve).hidden)
+    .sort((left, right) => {
+      const leftActive = getValveMeta(left).showStop ? 1 : 0;
+      const rightActive = getValveMeta(right).showStop ? 1 : 0;
+      if (leftActive !== rightActive) {
+        return rightActive - leftActive;
+      }
+      return Number(left.slot || 0) - Number(right.slot || 0);
+    });
+}
+
+function renderSummaryGrid() {
+  const { summaryGrid } = getElements();
+  if (!summaryGrid) return;
+
+  const entries = [];
+  const mower = state.status?.mower;
+  if (mower?.name) {
+    const meta = getMowerMeta(mower);
+    entries.push({
+      label: mower.name || 'Mähroboter',
+      active: meta.showStop,
+      ledClass: meta.ledClass,
+    });
+  }
+
+  getSortedVisibleValves().forEach((valve) => {
+    const meta = getValveMeta(valve);
+    entries.push({
+      label: valve.name || `Ventil ${valve.slot || ''}`,
+      active: meta.showStop,
+      ledClass: meta.ledClass,
+    });
+  });
+
+  if (!entries.length) {
+    summaryGrid.innerHTML = '<div class="col-span-2 text-xs font-semibold text-slate-500">Keine Geräte verfügbar.</div>';
+    return;
+  }
+
+  summaryGrid.innerHTML = entries
+    .sort((left, right) => {
+      if (left.active !== right.active) {
+        return Number(right.active) - Number(left.active);
+      }
+      return String(left.label || '').localeCompare(String(right.label || ''), 'de', { sensitivity: 'base' });
+    })
+    .map((entry) => `
+      <div class="min-w-0 rounded-xl bg-white/80 px-2.5 py-2 text-[12px] font-semibold text-slate-700 ring-1 ring-black/5">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="${entry.ledClass}" aria-hidden="true"></span>
+          <span class="truncate">${escapeHtml(entry.label)}</span>
+        </div>
+      </div>
+    `)
+    .join('');
+}
+
 function renderMowerCard() {
   const { mowerHost } = getElements();
   if (!mowerHost) return;
 
   const meta = getMowerMeta(state.status?.mower);
   const mower = state.status?.mower || {};
+  const isPending = mower.serviceId && state.pendingServiceIds.has(mower.serviceId);
+  const actionDisabledAttr = isPending ? 'disabled' : '';
 
   mowerHost.innerHTML = `
     <div class="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-4 shadow-sm">
       <div class="flex items-start justify-between gap-3">
-        <div>
-          <p class="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-500">Mähroboter</p>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2 text-xs font-semibold text-indigo-600">
+            <span class="${meta.ledClass}" aria-hidden="true"></span>
+            <span>Mähroboter</span>
+          </div>
           <h4 class="text-xl font-extrabold text-slate-900">${escapeHtml(mower.name || 'eSusi')}</h4>
         </div>
         <span class="rounded-full px-3 py-1 text-xs font-bold ${meta.badgeClass}">${escapeHtml(meta.badgeText)}</span>
@@ -377,6 +467,31 @@ function renderMowerCard() {
           <div class="mt-1 text-sm font-bold text-slate-900 break-words">${escapeHtml(meta.batteryStateText)}</div>
         </div>
       </div>
+      <div class="mt-4 flex flex-wrap gap-3">
+        ${meta.showStart ? `
+          <button
+            type="button"
+            class="flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            data-gardena-action="mower-start"
+            data-service-id="${escapeHtml(mower.serviceId || '')}"
+            ${actionDisabledAttr}
+          >
+            Starten
+          </button>
+        ` : ''}
+        ${meta.showStop ? `
+          <button
+            type="button"
+            class="flex-1 rounded-xl bg-rose-600 px-4 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center"
+            data-gardena-action="mower-stop"
+            data-service-id="${escapeHtml(mower.serviceId || '')}"
+            ${actionDisabledAttr}
+          >
+            <span class="button-text" style="display:${isPending ? 'none' : 'inline-block'}">Beenden</span>
+            <span class="loading-spinner" style="display:${isPending ? 'inline-block' : 'none'}"></span>
+          </button>
+        ` : ''}
+      </div>
     </div>
   `;
 }
@@ -385,11 +500,7 @@ function renderValveCards() {
   const { valveGrid } = getElements();
   if (!valveGrid) return;
 
-  const valves = Array.isArray(state.status?.valves) && state.status.valves.length
-    ? state.status.valves
-    : Array.from({ length: 6 }, (_, index) => createFallbackValve(index + 1));
-
-  const visibleValves = valves.filter((valve) => !getValveMeta(valve).hidden);
+  const visibleValves = getSortedVisibleValves();
 
   if (!visibleValves.length) {
     valveGrid.innerHTML = `
@@ -465,14 +576,18 @@ function renderValveCards() {
 }
 
 function renderStatusMeta() {
-  const { updatedBadge, locationBadge, error, loading } = getElements();
-
-  if (updatedBadge) {
-    updatedBadge.textContent = state.lastLoadedAt ? `Aktualisiert: ${formatTimestamp(state.status?.fetchedAt)}` : 'Aktualisiert: —';
-  }
+  const { toggleButton, details, locationBadge, error, loading } = getElements();
 
   if (locationBadge) {
     locationBadge.textContent = state.status?.location?.name ? `Ort: ${state.status.location.name}` : 'Ort: GARDENA';
+  }
+
+  if (toggleButton) {
+    toggleButton.setAttribute('aria-expanded', state.expanded ? 'true' : 'false');
+  }
+
+  if (details) {
+    details.classList.toggle('hidden', !state.expanded);
   }
 
   if (error) {
@@ -524,6 +639,7 @@ function renderModal() {
 
 function render() {
   renderStatusMeta();
+  renderSummaryGrid();
   renderMowerCard();
   renderValveCards();
   renderModal();
@@ -645,9 +761,9 @@ function parseSelectedMinutes() {
   return minutes;
 }
 
-async function sendCommand(serviceId, command, seconds = null) {
+async function sendCommand(serviceId, command, seconds = null, targetType = 'VALVE') {
   if (!serviceId) {
-    alertUser('Für dieses Ventil ist keine serviceId verfügbar.', 'error');
+    alertUser(targetType === 'MOWER' ? 'Für den Mäher ist keine serviceId verfügbar.' : 'Für dieses Ventil ist keine serviceId verfügbar.', 'error');
     return;
   }
 
@@ -661,9 +777,12 @@ async function sendCommand(serviceId, command, seconds = null) {
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: JSON.stringify({ serviceId, command, seconds }),
+      body: JSON.stringify({ serviceId, targetType, command, seconds }),
     });
-    alertUser(command === 'STOP_UNTIL_NEXT_TASK' ? 'Ventil wird gestoppt.' : 'Ventil wird gestartet.', 'success');
+    const successMessage = targetType === 'MOWER'
+      ? (command === 'PARK_UNTIL_NEXT_TASK' ? 'Mäher wird beendet.' : 'Mäher wird gestartet.')
+      : (command === 'STOP_UNTIL_NEXT_TASK' ? 'Ventil wird gestoppt.' : 'Ventil wird gestartet.');
+    alertUser(successMessage, 'success');
     closeDurationModal();
     scheduleStatusRefresh(5000);
   } catch (error) {
@@ -689,7 +808,29 @@ function bindListeners() {
   if (state.listenersBound) return;
   state.listenersBound = true;
 
-  const { valveGrid, presetButtons, durationInput, confirmButton, modal, refreshButton } = getElements();
+  const { toggleButton, mowerHost, valveGrid, presetButtons, durationInput, confirmButton, modal, refreshButton } = getElements();
+
+  toggleButton?.addEventListener('click', () => {
+    state.expanded = !state.expanded;
+    render();
+  });
+
+  mowerHost?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-gardena-action]');
+    if (!button) return;
+
+    const action = button.dataset.gardenaAction;
+    const serviceId = button.dataset.serviceId || '';
+
+    if (action === 'mower-start') {
+      sendCommand(serviceId, 'START_DONT_OVERRIDE', null, 'MOWER');
+      return;
+    }
+
+    if (action === 'mower-stop') {
+      sendCommand(serviceId, 'PARK_UNTIL_NEXT_TASK', null, 'MOWER');
+    }
+  });
 
   valveGrid?.addEventListener('click', (event) => {
     const button = event.target.closest('[data-gardena-action]');
@@ -725,7 +866,7 @@ function bindListeners() {
   confirmButton?.addEventListener('click', async () => {
     try {
       const minutes = parseSelectedMinutes();
-      await sendCommand(state.modalServiceId, 'START_SECONDS_TO_OVERRIDE', minutes * 60);
+      await sendCommand(state.modalServiceId, 'START_SECONDS_TO_OVERRIDE', minutes * 60, 'VALVE');
     } catch (error) {
       alertUser(error.message || 'Bitte eine gültige Dauer wählen.', 'error');
     }

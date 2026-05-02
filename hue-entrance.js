@@ -4,7 +4,6 @@ const STATUS_ENDPOINT = '/api/status';
 const CONNECT_ENDPOINT = '/api/connect';
 const COMMAND_ENDPOINT = '/api/command';
 const DEFAULT_FUNCTIONS_API_BASE = 'https://europe-west1-top2-e9ac0.cloudfunctions.net/hueApi';
-const AUTO_REFRESH_INTERVAL_MS = 15000;
 
 const state = {
   listenersBound: false,
@@ -12,8 +11,8 @@ const state = {
   connectLoading: false,
   status: null,
   error: '',
-  autoRefreshTimer: null,
-  visibilityListenerBound: false,
+  expanded: false,
+  postActionRefreshTimer: null,
   pendingLightIds: new Set(),
 };
 
@@ -114,12 +113,12 @@ function alertUser(message, type = 'info') {
 function getElements() {
   return {
     section: document.getElementById('hueEntranceSection'),
+    toggleButton: document.getElementById('hueEntranceToggle'),
     loading: document.getElementById('hueEntranceLoading'),
     error: document.getElementById('hueEntranceError'),
     bridgeBadge: document.getElementById('hueEntranceBridgeBadge'),
-    updatedBadge: document.getElementById('hueEntranceUpdatedBadge'),
-    deviceBadge: document.getElementById('hueEntranceDeviceBadge'),
-    authNotice: document.getElementById('hueEntranceAuthNotice'),
+    summaryGrid: document.getElementById('hueEntranceSummaryGrid'),
+    details: document.getElementById('hueEntranceDetails'),
     connectButton: document.getElementById('hueConnectButton'),
     refreshButton: document.getElementById('hueRefreshButton'),
     deviceGrid: document.getElementById('hueEntranceDeviceGrid'),
@@ -206,6 +205,60 @@ function formatTimestamp(isoString) {
   }
 }
 
+function isHueViewVisible() {
+  const { section } = getElements();
+  if (!section) return false;
+
+  const view = section.closest('.view') || section;
+  if (!(view instanceof Element)) return false;
+
+  const computedStyle = window.getComputedStyle(view);
+  return computedStyle.display !== 'none' && computedStyle.visibility !== 'hidden';
+}
+
+function scheduleStatusRefresh(delayMs = 5000) {
+  if (state.postActionRefreshTimer) {
+    window.clearTimeout(state.postActionRefreshTimer);
+  }
+
+  state.postActionRefreshTimer = window.setTimeout(() => {
+    state.postActionRefreshTimer = null;
+    if (!isHueViewVisible()) return;
+    fetchStatus(false).catch(() => {});
+  }, delayMs);
+}
+
+function getHueLedClass(device) {
+  if (!device?.controllable) {
+    return 'gardena-led gardena-led--slate';
+  }
+  return device.on
+    ? 'gardena-led gardena-led--green gardena-led--blink'
+    : 'gardena-led gardena-led--red gardena-led--blink';
+}
+
+function getSortedDevices(devices = []) {
+  return [...devices].sort((left, right) => {
+    const leftOn = left?.on ? 1 : 0;
+    const rightOn = right?.on ? 1 : 0;
+    if (leftOn !== rightOn) {
+      return rightOn - leftOn;
+    }
+    return String(left?.name || '').localeCompare(String(right?.name || ''), 'de', { sensitivity: 'base' });
+  });
+}
+
+function applyLocalDevicePatch(lightId, patch = {}) {
+  if (!state.status || !Array.isArray(state.status.devices)) return;
+  state.status.devices = state.status.devices.map((device) => {
+    if (String(device?.lightId || '') !== String(lightId || '')) {
+      return device;
+    }
+    return { ...device, ...patch };
+  });
+  state.status.controllableDevices = state.status.devices.filter((device) => device?.controllable);
+}
+
 function renderStatus() {
   const elements = getElements();
   if (!elements.section) return;
@@ -214,7 +267,7 @@ function renderStatus() {
   const status = state.status;
   const connected = Boolean(status?.connected);
   const bridgeName = connected ? (status?.bridge?.name || 'Philips Hue Bridge') : 'Hue nicht verbunden';
-  const deviceCount = Array.isArray(status?.devices) ? status.devices.length : 0;
+  const devices = connected && Array.isArray(status?.devices) ? getSortedDevices(status.devices) : [];
 
   elements.section.dataset.connected = connected ? 'true' : 'false';
 
@@ -232,29 +285,35 @@ function renderStatus() {
     elements.bridgeBadge.textContent = `Bridge: ${bridgeName}`;
   }
 
-  if (elements.updatedBadge) {
-    elements.updatedBadge.textContent = `Aktualisiert: ${formatTimestamp(status?.fetchedAt)}`;
+  if (elements.toggleButton) {
+    elements.toggleButton.setAttribute('aria-expanded', state.expanded ? 'true' : 'false');
   }
 
-  if (elements.deviceBadge) {
-    elements.deviceBadge.textContent = `Geräte: ${deviceCount}`;
+  if (elements.details) {
+    elements.details.classList.toggle('hidden', !state.expanded);
   }
 
-  if (elements.authNotice) {
-    if (!isLoggedIn) {
-      elements.authNotice.className = 'rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800';
-      elements.authNotice.textContent = 'Bitte melde dich zuerst in der TOP2-App an, damit die gemeinsame Hue-Verbindung geladen werden kann.';
-    } else if (!connected) {
-      const needsReconnect = Boolean(status?.needsReconnect);
-      elements.authNotice.className = needsReconnect
-        ? 'rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700'
-        : 'rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-semibold text-sky-700';
-      elements.authNotice.textContent = needsReconnect
-        ? (status?.error || 'Hue muss erneut verbunden werden.')
-        : 'Verbinde jetzt die gemeinsame Philips-Hue-Bridge einmalig, damit alle berechtigten Nutzer die Lampen in Smart Top2 sehen und steuern können.';
+  if (elements.summaryGrid) {
+    if (!connected) {
+      elements.summaryGrid.innerHTML = `
+        <div class="min-w-0 rounded-xl bg-white/80 px-2.5 py-2 text-[12px] font-semibold text-slate-700 ring-1 ring-black/5 col-span-2">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="gardena-led gardena-led--red gardena-led--blink" aria-hidden="true"></span>
+            <span class="truncate">Hue nicht verbunden</span>
+          </div>
+        </div>
+      `;
+    } else if (!devices.length) {
+      elements.summaryGrid.innerHTML = '<div class="col-span-2 text-xs font-semibold text-slate-500">Keine Geräte verfügbar.</div>';
     } else {
-      elements.authNotice.className = 'rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700';
-      elements.authNotice.textContent = `Hue ist verbunden. ${status?.controllableDevices?.length || 0} Geräte können direkt geschaltet werden.`;
+      elements.summaryGrid.innerHTML = devices.map((device) => `
+        <div class="min-w-0 rounded-xl bg-white/80 px-2.5 py-2 text-[12px] font-semibold text-slate-700 ring-1 ring-black/5">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="${getHueLedClass(device)}" aria-hidden="true"></span>
+            <span class="truncate">${escapeHtml(device.name || 'Hue Gerät')}</span>
+          </div>
+        </div>
+      `).join('');
     }
   }
 
@@ -272,33 +331,83 @@ function renderStatus() {
   if (elements.deviceGrid) {
     if (!connected) {
       elements.deviceGrid.innerHTML = '';
-    } else if (!deviceCount) {
+    } else if (!devices.length) {
       elements.deviceGrid.innerHTML = '<div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-5 text-sm font-semibold text-slate-600">Es wurden noch keine Hue-Geräte gefunden.</div>';
     } else {
-      elements.deviceGrid.innerHTML = status.devices.map((device) => {
+      elements.deviceGrid.innerHTML = devices.map((device) => {
         const isBusy = state.pendingLightIds.has(device.lightId);
         const switchLabel = device.on ? 'Ausschalten' : 'Einschalten';
         const switchClass = device.on
           ? 'bg-slate-900 text-white hover:bg-slate-700'
           : 'bg-amber-500 text-slate-950 hover:bg-amber-400';
-        const badgeClass = device.controllable
-          ? (device.on ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700')
-          : 'bg-sky-100 text-sky-700';
-        const badgeText = device.controllable ? (device.on ? 'AN' : 'AUS') : 'Info';
         const brightnessText = Number.isFinite(device.brightness) ? `${device.brightness} %` : '—';
         const typeText = device.archetype || device.modelId || 'Unbekannt';
+        const brightnessControlHtml = device.controllable && device.supportsBrightness ? `
+          <div class="mt-3 grid grid-cols-[1fr_auto] gap-2">
+            <input
+              type="number"
+              min="1"
+              max="100"
+              step="1"
+              value="${escapeHtml(String(device.brightness || 100))}"
+              data-hue-brightness-input="${escapeHtml(device.lightId)}"
+              class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+            />
+            <button
+              type="button"
+              data-hue-action="brightness"
+              data-hue-light-id="${escapeHtml(device.lightId)}"
+              class="rounded-xl bg-violet-600 px-3 py-2 text-sm font-extrabold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+              ${isBusy ? 'disabled' : ''}
+            >
+              Helligkeit
+            </button>
+          </div>
+        ` : '';
+        const colorControlHtml = device.controllable && device.supportsColor ? `
+          <div class="mt-3 flex items-center gap-3">
+            <input
+              type="color"
+              value="${escapeHtml(device.colorHex || '#FFFFFF')}"
+              data-hue-color-input="${escapeHtml(device.lightId)}"
+              class="h-11 w-16 rounded-xl border border-slate-200 bg-white p-1"
+            />
+            <button
+              type="button"
+              data-hue-action="color"
+              data-hue-light-id="${escapeHtml(device.lightId)}"
+              class="rounded-xl bg-fuchsia-600 px-3 py-2 text-sm font-extrabold text-white transition hover:bg-fuchsia-700 disabled:cursor-not-allowed disabled:opacity-50"
+              ${isBusy ? 'disabled' : ''}
+            >
+              Farbe
+            </button>
+          </div>
+        ` : '';
         const controlHtml = device.controllable
-          ? `<button type="button" data-hue-light-id="${escapeHtml(device.lightId)}" data-hue-next-on="${device.on ? 'false' : 'true'}" class="inline-flex items-center justify-center rounded-2xl px-4 py-3 text-sm font-extrabold transition ${switchClass}" ${isBusy ? 'disabled' : ''}>${isBusy ? 'Sende...' : switchLabel}</button>`
+          ? `
+            <button
+              type="button"
+              data-hue-action="toggle"
+              data-hue-light-id="${escapeHtml(device.lightId)}"
+              data-hue-next-on="${device.on ? 'false' : 'true'}"
+              class="inline-flex items-center justify-center rounded-2xl px-4 py-3 text-sm font-extrabold transition ${switchClass}"
+              ${isBusy ? 'disabled' : ''}
+            >
+              ${isBusy ? 'Sende...' : switchLabel}
+            </button>
+            ${brightnessControlHtml}
+            ${colorControlHtml}
+          `
           : '<div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500">Dieses Gerät ist sichtbar, aber in Smart Top2 derzeit nicht direkt schaltbar.</div>';
 
         return `<article class="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <div class="text-xs font-semibold uppercase tracking-[0.18em] text-violet-600">${escapeHtml(device.roomName || 'Ohne Raum')}</div>
+          <div class="flex items-start gap-3">
+            <span class="${getHueLedClass(device)} mt-1" aria-hidden="true"></span>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-semibold text-violet-600">${escapeHtml(device.roomName || 'Ohne Raum')}</div>
               <h4 class="mt-1 text-lg font-extrabold text-slate-900">${escapeHtml(device.name)}</h4>
               <p class="mt-1 text-sm text-slate-600">${escapeHtml(device.productName || 'Hue Gerät')}</p>
             </div>
-            <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-bold ${badgeClass}">${badgeText}</span>
           </div>
           <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
             <div class="rounded-2xl bg-slate-50 px-3 py-2">
@@ -369,18 +478,21 @@ async function startHueConnect() {
   }
 }
 
-async function toggleHueLight(lightId, nextOn) {
+async function sendHueCommand(lightId, body, patch = {}, errorMessage = 'Hue-Gerät konnte nicht aktualisiert werden.') {
   if (!lightId) return;
   state.pendingLightIds.add(lightId);
   renderStatus();
+
   try {
     await requestApi(COMMAND_ENDPOINT, {
       method: 'POST',
-      body: { lightId, on: nextOn },
+      body: { lightId, ...body },
     });
-    await fetchStatus(false);
+    applyLocalDevicePatch(lightId, patch);
+    state.error = '';
+    scheduleStatusRefresh(5000);
   } catch (error) {
-    state.error = extractErrorMessage(error, 'Hue-Gerät konnte nicht geschaltet werden.');
+    state.error = extractErrorMessage(error, errorMessage);
     renderStatus();
     alertUser(state.error, 'error');
   } finally {
@@ -389,58 +501,81 @@ async function toggleHueLight(lightId, nextOn) {
   }
 }
 
-function stopAutoRefresh() {
-  if (state.autoRefreshTimer) {
-    window.clearInterval(state.autoRefreshTimer);
-    state.autoRefreshTimer = null;
-  }
+async function toggleHueLight(lightId, nextOn) {
+  await sendHueCommand(lightId, { on: nextOn }, { on: nextOn }, 'Hue-Gerät konnte nicht geschaltet werden.');
 }
 
-function startAutoRefresh() {
-  stopAutoRefresh();
-  state.autoRefreshTimer = window.setInterval(() => {
-    const entranceView = document.getElementById('entranceView');
-    const isActive = entranceView?.classList.contains('active');
-    if (isActive && !state.loading && currentUser.mode && currentUser.mode !== GUEST_MODE) {
-      fetchStatus(false).catch(() => {});
-    }
-  }, AUTO_REFRESH_INTERVAL_MS);
+async function updateHueBrightness(lightId, brightness) {
+  await sendHueCommand(
+    lightId,
+    { brightness },
+    { brightness, on: true },
+    'Hue-Helligkeit konnte nicht gesetzt werden.'
+  );
 }
 
-function bindVisibilityRefresh() {
-  if (state.visibilityListenerBound) return;
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && currentUser.mode && currentUser.mode !== GUEST_MODE) {
-      fetchStatus(false).catch(() => {});
-    }
-  });
-  state.visibilityListenerBound = true;
+async function updateHueColor(lightId, color) {
+  await sendHueCommand(
+    lightId,
+    { color },
+    { colorHex: color, on: true },
+    'Hue-Farbe konnte nicht gesetzt werden.'
+  );
 }
 
 function bindListeners() {
   if (state.listenersBound) return;
   const elements = getElements();
-  const section = elements.section;
-  if (!section && !elements.refreshButton) return;
+  if (!elements.section && !elements.refreshButton) return;
 
-  if (section) {
-    section.addEventListener('click', (event) => {
-      const target = event.target instanceof Element ? event.target.closest('[data-hue-light-id], #hueConnectButton') : null;
-      if (!target) return;
+  elements.toggleButton?.addEventListener('click', () => {
+    state.expanded = !state.expanded;
+    renderStatus();
+  });
 
-      if (target.id === 'hueConnectButton') {
-        startHueConnect().catch(() => {});
-        return;
-      }
+  elements.connectButton?.addEventListener('click', () => {
+    startHueConnect().catch(() => {});
+  });
 
-      const lightId = target.getAttribute('data-hue-light-id') || '';
+  elements.deviceGrid?.addEventListener('click', (event) => {
+    const target = event.target instanceof Element ? event.target.closest('[data-hue-action]') : null;
+    if (!target) return;
+
+    const action = String(target.getAttribute('data-hue-action') || '').trim();
+    const lightId = target.getAttribute('data-hue-light-id') || '';
+    if (!lightId) return;
+
+    if (action === 'toggle') {
       const nextOn = String(target.getAttribute('data-hue-next-on') || '').trim() === 'true';
       toggleHueLight(lightId, nextOn).catch(() => {});
-    });
-  }
+      return;
+    }
+
+    if (action === 'brightness') {
+      const input = elements.deviceGrid.querySelector(`[data-hue-brightness-input="${CSS.escape(lightId)}"]`);
+      const brightness = Number(input?.value || '0');
+      if (!Number.isInteger(brightness) || brightness < 1 || brightness > 100) {
+        alertUser('Bitte eine Helligkeit zwischen 1 und 100 eingeben.', 'error');
+        return;
+      }
+      updateHueBrightness(lightId, brightness).catch(() => {});
+      return;
+    }
+
+    if (action === 'color') {
+      const input = elements.deviceGrid.querySelector(`[data-hue-color-input="${CSS.escape(lightId)}"]`);
+      const color = String(input?.value || '').trim();
+      if (!/^#[0-9A-Fa-f]{6}$/.test(color)) {
+        alertUser('Bitte eine gültige Farbe wählen.', 'error');
+        return;
+      }
+      updateHueColor(lightId, color.toUpperCase()).catch(() => {});
+    }
+  });
 
   if (elements.refreshButton) {
     elements.refreshButton.addEventListener('click', () => {
+      if (!isHueViewVisible()) return;
       fetchStatus(true).catch(() => {});
     });
   }
@@ -451,8 +586,9 @@ function bindListeners() {
 export function initializeHueEntranceControls(options = {}) {
   helperAlertUser = typeof options.alertUser === 'function' ? options.alertUser : helperAlertUser;
   bindListeners();
-  bindVisibilityRefresh();
-  startAutoRefresh();
   renderStatus();
-  fetchStatus(true).catch(() => {});
+
+  if (!state.loading && isHueViewVisible()) {
+    fetchStatus(true).catch(() => {});
+  }
 }

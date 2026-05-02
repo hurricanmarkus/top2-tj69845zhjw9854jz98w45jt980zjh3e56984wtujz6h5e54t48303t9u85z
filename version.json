@@ -1,14 +1,24 @@
 {
-  "version": "1.13.8",
-  "buildId": "20260502-1",
+  "version": "1.13.9",
+  "buildId": "20260502-2",
   "releaseDate": "2026-05-02",
-  "releaseTime": "11:39",
+  "releaseTime": "13:40",
   "bereich": "Eingang",
   "timezone": "Europe/Vienna",
-  "note": "Gardena aktualisiert jetzt nur noch beim Öffnen von Smart Top2, 5 Sekunden nach einer Aktion und per manuellem Refresh-Klick statt im Intervall.",
-  "commitId": "1d86aa2",
+  "note": "Smart Top2 zeigt Gardena und Philips Hue jetzt kompakt als aufklappbare 2-Spalten-Listen mit Aktiv-vor-Inaktiv-Sortierung; Hue steuert zusätzlich Helligkeit und Farbe, Gardena den Mäher per Start/Stop.",
+  "commitId": "a2a516b",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.13.9",
+      "buildId": "20260502-2",
+      "releaseDate": "2026-05-02",
+      "releaseTime": "13:40",
+      "bereich": "Eingang",
+      "note": "Smart Top2 zeigt Gardena und Philips Hue jetzt kompakt als aufklappbare 2-Spalten-Listen mit Aktiv-vor-Inaktiv-Sortierung; Hue steuert zusätzlich Helligkeit und Farbe, Gardena den Mäher per Start/Stop.",
+      "commitId": "a2a516b",
+      "obligation": "false"
+    },
     {
       "version": "1.13.8",
       "buildId": "20260502-1",
