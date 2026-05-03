@@ -108,29 +108,8 @@ const PERMISSION_PARENT_MAP = {
     ENTRANCE_HOMEMATIC_CONTROL: ['ENTRANCE_HOMEMATIC'],
 };
 
-const SMART_TOP2_SECTION_PERMISSIONS = [
-    'ENTRANCE_DOOR',
-    'ENTRANCE_GARDENA',
-    'ENTRANCE_HUE',
-    'ENTRANCE_HOMEMATIC'
-];
-
-const SMART_TOP2_CONTROL_PERMISSIONS = [
-    'ENTRANCE_GARDENA_CONTROL',
-    'ENTRANCE_HUE_CONTROL',
-    'ENTRANCE_HOMEMATIC_CONTROL'
-];
-
 export function resolvePermissionList(permissionList = []) {
     const resolved = new Set(Array.isArray(permissionList) ? permissionList.filter(Boolean) : []);
-
-    const hasLegacySmartTop2Only = resolved.has('ENTRANCE')
-        && !SMART_TOP2_SECTION_PERMISSIONS.some((perm) => resolved.has(perm))
-        && !SMART_TOP2_CONTROL_PERMISSIONS.some((perm) => resolved.has(perm));
-
-    if (hasLegacySmartTop2Only) {
-        [...SMART_TOP2_SECTION_PERMISSIONS, ...SMART_TOP2_CONTROL_PERMISSIONS].forEach((perm) => resolved.add(perm));
-    }
 
     let changed = true;
 

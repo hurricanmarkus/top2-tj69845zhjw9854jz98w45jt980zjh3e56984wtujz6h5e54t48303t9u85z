@@ -1,14 +1,24 @@
 {
-  "version": "1.15.4",
-  "buildId": "20260503-1",
+  "version": "1.15.5",
+  "buildId": "20260503-2",
   "releaseDate": "2026-05-03",
-  "releaseTime": "12:29",
+  "releaseTime": "12:49",
   "bereich": "Smart Top2",
   "timezone": "Europe/Vienna",
-  "note": "Smart Top2 nutzt jetzt feinere Unterrechte pro Bereich (Türöffner, Gardena, Hue, Homematic) und erlaubt Geräte-Steuerung nur noch mit explizitem CONTROL-Recht; ohne CONTROL bleibt die reine Statussicht aktiv.",
+  "note": "Smart Top2 greift Berechtigungen aus Rollenverwaltung und Benutzersteuerung jetzt strikt durch: keine implizite ENTRANCE-Vollfreigabe mehr und individuelle Rechteänderungen mit Auto-Approve wirken sofort.",
   "commitId": "",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.15.5",
+      "buildId": "20260503-2",
+      "releaseDate": "2026-05-03",
+      "releaseTime": "12:49",
+      "bereich": "Smart Top2",
+      "note": "Smart Top2 greift Berechtigungen aus Rollenverwaltung und Benutzersteuerung jetzt strikt durch: keine implizite ENTRANCE-Vollfreigabe mehr und individuelle Rechteänderungen mit Auto-Approve wirken sofort.",
+      "commitId": "",
+      "obligation": "false"
+    },
     {
       "version": "1.15.4",
       "buildId": "20260503-1",

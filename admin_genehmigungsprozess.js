@@ -43,7 +43,37 @@ export async function createApprovalRequest(type, userId, details = {}) {
         
         // KORREKTUR: Schreibt in die korrekte Sammlung, auf die der Bot hört.
         // ALT: await addDoc(roleChangeRequestsCollectionRef, requestData);
-        await addDoc(approvalRequestsCollectionRef, requestData); // <-- KORREKT
+        const createdRequestRef = await addDoc(approvalRequestsCollectionRef, requestData); // <-- KORREKT
+
+        if (details.autoApprove === true && type === 'CHANGE_PERMISSION_TYPE') {
+            let updateData = {};
+            if (details.type === 'role') {
+                updateData = {
+                    permissionType: 'role',
+                    role: details.newRole,
+                    customPermissions: [],
+                    displayRole: null,
+                };
+            } else {
+                const derivedRole = details.displayRole || 'NO_RIGHTS';
+                updateData = {
+                    permissionType: 'individual',
+                    role: derivedRole,
+                    customPermissions: details.customPermissions || [],
+                    displayRole: details.displayRole || null,
+                };
+            }
+
+            const batch = writeBatch(db);
+            batch.update(doc(usersCollectionRef, userId), updateData);
+            batch.update(createdRequestRef, {
+                status: 'approved',
+                actionTakenByName: currentUser.displayName,
+                actionTakenAt: serverTimestamp(),
+                autoApproved: true,
+            });
+            await batch.commit();
+        }
 
         // KORREKTUR: Angepasste Erfolgsmeldung, je nachdem, ob die
         // Aktion sofort (autoApprove) oder später (pending) ausgeführt wird.
