@@ -89,6 +89,38 @@ export function setupPermissionDependencies(container) {
         ]
     );
 
+    // 3b. Logik für SMART TOP2 (Hauptansicht -> Bereiche)
+    setupToggleLogic(
+        '[data-perm="ENTRANCE"]',
+        [
+            '[data-perm="ENTRANCE_DOOR"]',
+            '[data-perm="ENTRANCE_GARDENA"]',
+            '[data-perm="ENTRANCE_HUE"]',
+            '[data-perm="ENTRANCE_HOMEMATIC"]'
+        ]
+    );
+
+    setupToggleLogic(
+        '[data-perm="ENTRANCE_GARDENA"]',
+        [
+            '[data-perm="ENTRANCE_GARDENA_CONTROL"]'
+        ]
+    );
+
+    setupToggleLogic(
+        '[data-perm="ENTRANCE_HUE"]',
+        [
+            '[data-perm="ENTRANCE_HUE_CONTROL"]'
+        ]
+    );
+
+    setupToggleLogic(
+        '[data-perm="ENTRANCE_HOMEMATIC"]',
+        [
+            '[data-perm="ENTRANCE_HOMEMATIC_CONTROL"]'
+        ]
+    );
+
     setupToggleLogic(
         '[data-perm="PUSHOVER"]',
         [

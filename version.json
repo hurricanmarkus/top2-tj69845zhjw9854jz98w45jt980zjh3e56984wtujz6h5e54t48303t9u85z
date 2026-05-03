@@ -1,14 +1,24 @@
 {
-  "version": "1.15.3",
-  "buildId": "20260502-10",
-  "releaseDate": "2026-05-02",
-  "releaseTime": "23:36",
+  "version": "1.15.4",
+  "buildId": "20260503-1",
+  "releaseDate": "2026-05-03",
+  "releaseTime": "12:29",
   "bereich": "Smart Top2",
   "timezone": "Europe/Vienna",
-  "note": "Hue-Geräte senden die Helligkeit in Smart Top2 jetzt direkt beim Loslassen des Reglers, ohne zusätzlichen OK-Button.",
-  "commitId": "3d10b02",
+  "note": "Smart Top2 nutzt jetzt feinere Unterrechte pro Bereich (Türöffner, Gardena, Hue, Homematic) und erlaubt Geräte-Steuerung nur noch mit explizitem CONTROL-Recht; ohne CONTROL bleibt die reine Statussicht aktiv.",
+  "commitId": "",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.15.4",
+      "buildId": "20260503-1",
+      "releaseDate": "2026-05-03",
+      "releaseTime": "12:29",
+      "bereich": "Smart Top2",
+      "note": "Smart Top2 nutzt jetzt feinere Unterrechte pro Bereich (Türöffner, Gardena, Hue, Homematic) und erlaubt Geräte-Steuerung nur noch mit explizitem CONTROL-Recht; ohne CONTROL bleibt die reine Statussicht aktiv.",
+      "commitId": "",
+      "obligation": "false"
+    },
     {
       "version": "1.15.3",
       "buildId": "20260502-10",

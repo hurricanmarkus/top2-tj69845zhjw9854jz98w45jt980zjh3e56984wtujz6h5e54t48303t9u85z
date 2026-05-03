@@ -1,3 +1,5 @@
+import { currentUser, GUEST_MODE } from './haupteingang.js';
+
 const STATUS_ENDPOINT = '/api/status';
 const COMMAND_ENDPOINT = '/api/command';
 const DEFAULT_BACKEND_ORIGIN = 'http://localhost:3000';
@@ -51,6 +53,18 @@ const state = {
 
 let helperAlertUser = null;
 
+function hasGardenaControlPermission() {
+  if (!currentUser.mode || currentUser.mode === GUEST_MODE) return false;
+  if (currentUser.role === 'SYSTEMADMIN') return true;
+  return Array.isArray(currentUser.permissions) && currentUser.permissions.includes('ENTRANCE_GARDENA_CONTROL');
+}
+
+function hasGardenaViewPermission() {
+  if (!currentUser.mode || currentUser.mode === GUEST_MODE) return false;
+  if (currentUser.role === 'SYSTEMADMIN') return true;
+  return Array.isArray(currentUser.permissions) && currentUser.permissions.includes('ENTRANCE_GARDENA');
+}
+
 function escapeHtml(value = '') {
   return String(value).replace(/[&<>"']/g, (char) => ({
     '&': '&amp;',
@@ -59,6 +73,14 @@ function escapeHtml(value = '') {
     '"': '&quot;',
     "'": '&#39;',
   }[char] || char));
+}
+
+async function sendMowerCommand(serviceId, command) {
+  await sendCommand(serviceId, command, null, 'MOWER');
+}
+
+async function sendValveCommand(serviceId, command) {
+  await sendCommand(serviceId, command, null, 'VALVE');
 }
 
 function normalizeGardenaCode(value = '') {
@@ -572,6 +594,7 @@ function renderGardenaInlineDetail(activeEntry) {
 function renderSummaryGrid(entries = [], activeEntry = null) {
   const { summaryGrid } = getElements();
   if (!summaryGrid) return;
+  const canControl = hasGardenaControlPermission();
 
   if (!entries.length) {
     summaryGrid.innerHTML = '<div class="col-span-2 text-xs font-semibold text-slate-500">Keine Geräte verfügbar.</div>';
@@ -584,14 +607,15 @@ function renderSummaryGrid(entries = [], activeEntry = null) {
         type="button"
         data-gardena-device-key="${escapeHtml(entry.key)}"
         aria-expanded="${entry.key === state.activeDeviceKey ? 'true' : 'false'}"
-        class="min-w-0 rounded-lg px-2 py-1.5 text-[11px] font-semibold text-slate-700 ring-1 transition ${entry.key === state.activeDeviceKey ? 'bg-emerald-50 ring-emerald-300' : 'bg-white/80 ring-black/5 hover:bg-emerald-50/70'}"
+        class="min-w-0 rounded-lg px-2 py-1.5 text-[11px] font-semibold text-slate-700 ring-1 transition ${entry.key === state.activeDeviceKey ? 'bg-emerald-50 ring-emerald-300' : (canControl ? 'bg-white/80 ring-black/5 hover:bg-emerald-50/70' : 'bg-white/80 ring-black/5')} ${canControl ? '' : 'cursor-default'}"
+        ${canControl ? '' : 'disabled'}
       >
         <div class="flex items-center gap-2 min-w-0">
           <span class="${escapeHtml(entry.ledClass)}" aria-hidden="true"></span>
           <span class="truncate">${escapeHtml(entry.label)}</span>
         </div>
       </button>
-      ${entry.key === state.activeDeviceKey ? `<div class="col-span-2 sm:col-span-2 -mt-px">${renderGardenaInlineDetail(activeEntry)}</div>` : ''}
+      ${canControl && entry.key === state.activeDeviceKey ? `<div class="col-span-2 sm:col-span-2 -mt-px">${renderGardenaInlineDetail(activeEntry)}</div>` : ''}
     `)
     .join('');
 }
@@ -628,6 +652,10 @@ function renderModal() {
   const { modal, modalTitle, durationInput, presetButtons, confirmButton, confirmButtonText, confirmButtonSpinner } = getElements();
   if (!modal) return;
 
+  if (!hasGardenaControlPermission()) {
+    state.modalOpen = false;
+  }
+
   const show = state.modalOpen;
   modal.classList.toggle('hidden', !show);
   modal.classList.toggle('flex', show);
@@ -655,6 +683,12 @@ function renderModal() {
 }
 
 function render() {
+  const canControl = hasGardenaControlPermission();
+  if (!canControl) {
+    state.activeDeviceKey = '';
+    state.modalOpen = false;
+  }
+
   const entries = getGardenaSummaryEntries();
   syncActiveDeviceSelection(entries);
   const activeEntry = getActiveGardenaEntry(entries);
@@ -722,6 +756,16 @@ async function requestApi(endpoint, options = {}) {
 async function fetchStatus() {
   if (state.loading) return;
 
+  if (!hasGardenaViewPermission()) {
+    state.status = null;
+    state.error = '';
+    state.loading = false;
+    state.activeDeviceKey = '';
+    state.modalOpen = false;
+    render();
+    return;
+  }
+
   state.loading = true;
   state.error = '';
   render();
@@ -780,6 +824,11 @@ function parseSelectedMinutes() {
 }
 
 async function sendCommand(serviceId, command, seconds = null, targetType = 'VALVE') {
+  if (!hasGardenaControlPermission()) {
+    alertUser('Nur Status sichtbar. Geräte einstellen ist nicht freigeschaltet.', 'error');
+    return;
+  }
+
   if (!serviceId) {
     alertUser(targetType === 'MOWER' ? 'Für den Mäher ist keine serviceId verfügbar.' : 'Für dieses Ventil ist keine serviceId verfügbar.', 'error');
     return;
@@ -814,12 +863,17 @@ async function sendCommand(serviceId, command, seconds = null, targetType = 'VAL
 function isGardenaViewVisible() {
   const { section } = getElements();
   if (!section) return false;
+  if (!hasGardenaViewPermission()) return false;
 
   const view = section.closest('.view') || section;
   if (!(view instanceof Element)) return false;
 
+  const sectionStyle = window.getComputedStyle(section);
   const computedStyle = window.getComputedStyle(view);
-  return computedStyle.display !== 'none' && computedStyle.visibility !== 'hidden';
+  return computedStyle.display !== 'none'
+    && computedStyle.visibility !== 'hidden'
+    && sectionStyle.display !== 'none'
+    && sectionStyle.visibility !== 'hidden';
 }
 
 function bindListeners() {
@@ -831,6 +885,10 @@ function bindListeners() {
   summaryGrid?.addEventListener('click', (event) => {
     const actionButton = event.target.closest('[data-gardena-action]');
     if (actionButton) {
+      if (!hasGardenaControlPermission()) {
+        return;
+      }
+
       const action = actionButton.dataset.gardenaAction;
       const serviceId = actionButton.dataset.serviceId || '';
 
@@ -847,10 +905,7 @@ function bindListeners() {
       }
 
       if (action === 'open-modal') {
-        state.modalServiceId = serviceId;
-        state.modalValveName = actionButton.dataset.valveName || 'Ventil';
-        state.modalOpen = true;
-        renderModal();
+        openDurationModal(serviceId, actionButton.dataset.valveName || 'Ventil');
         return;
       }
 
@@ -862,6 +917,10 @@ function bindListeners() {
 
     const button = event.target.closest('[data-gardena-device-key]');
     if (!button) return;
+
+    if (!hasGardenaControlPermission()) {
+      return;
+    }
 
     const nextKey = button.getAttribute('data-gardena-device-key') || '';
     state.activeDeviceKey = state.activeDeviceKey === nextKey ? '' : nextKey;

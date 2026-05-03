@@ -55,6 +55,13 @@ export const escapeHtml = (s = '') => String(s).replace(/[&<>"']/g, (m) => ({ '&
 // Zentrale Berechtigungen-Konfiguration (für admin_benutzersteuerung.js und admin_rollenverwaltung.js)
 export const PERMISSIONS_CONFIG = {
     'ENTRANCE': { label: 'Smart Top2', indent: false },
+    'ENTRANCE_DOOR': { label: '-> Türöffner', indent: true },
+    'ENTRANCE_GARDENA': { label: '-> Gardena', indent: true },
+    'ENTRANCE_GARDENA_CONTROL': { label: '-> -> Geräte einstellen', indent: true },
+    'ENTRANCE_HUE': { label: '-> Hue', indent: true },
+    'ENTRANCE_HUE_CONTROL': { label: '-> -> Geräte einstellen', indent: true },
+    'ENTRANCE_HOMEMATIC': { label: '-> Homematic', indent: true },
+    'ENTRANCE_HOMEMATIC_CONTROL': { label: '-> -> Geräte einstellen', indent: true },
     'PUSHOVER': { label: 'Push-Nachricht senden', indent: false },
     'PUSHMAIL_CENTER': { label: 'PUSHMAIL-Center', indent: false },
     'PUSHOVER_SETTINGS_GRANTS': { label: '-> Einstellungen-Button zum Berechtigungen anlegen', indent: true },
@@ -90,6 +97,58 @@ export const PERMISSIONS_CONFIG = {
     'EINKAUFSLISTE_MANAGE': { label: '-> Verwaltung öffnen', indent: true },
     'EINKAUFSLISTE_MANAGE_WRITE': { label: '-> -> Verwaltung bearbeiten', indent: true },
 };
+
+const PERMISSION_PARENT_MAP = {
+    ENTRANCE_DOOR: ['ENTRANCE'],
+    ENTRANCE_GARDENA: ['ENTRANCE'],
+    ENTRANCE_GARDENA_CONTROL: ['ENTRANCE_GARDENA'],
+    ENTRANCE_HUE: ['ENTRANCE'],
+    ENTRANCE_HUE_CONTROL: ['ENTRANCE_HUE'],
+    ENTRANCE_HOMEMATIC: ['ENTRANCE'],
+    ENTRANCE_HOMEMATIC_CONTROL: ['ENTRANCE_HOMEMATIC'],
+};
+
+const SMART_TOP2_SECTION_PERMISSIONS = [
+    'ENTRANCE_DOOR',
+    'ENTRANCE_GARDENA',
+    'ENTRANCE_HUE',
+    'ENTRANCE_HOMEMATIC'
+];
+
+const SMART_TOP2_CONTROL_PERMISSIONS = [
+    'ENTRANCE_GARDENA_CONTROL',
+    'ENTRANCE_HUE_CONTROL',
+    'ENTRANCE_HOMEMATIC_CONTROL'
+];
+
+export function resolvePermissionList(permissionList = []) {
+    const resolved = new Set(Array.isArray(permissionList) ? permissionList.filter(Boolean) : []);
+
+    const hasLegacySmartTop2Only = resolved.has('ENTRANCE')
+        && !SMART_TOP2_SECTION_PERMISSIONS.some((perm) => resolved.has(perm))
+        && !SMART_TOP2_CONTROL_PERMISSIONS.some((perm) => resolved.has(perm));
+
+    if (hasLegacySmartTop2Only) {
+        [...SMART_TOP2_SECTION_PERMISSIONS, ...SMART_TOP2_CONTROL_PERMISSIONS].forEach((perm) => resolved.add(perm));
+    }
+
+    let changed = true;
+
+    while (changed) {
+        changed = false;
+        for (const permission of [...resolved]) {
+            const parents = PERMISSION_PARENT_MAP[permission] || [];
+            for (const parent of parents) {
+                if (!resolved.has(parent)) {
+                    resolved.add(parent);
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    return [...resolved];
+}
 
 // BEGINN-ZIKA: LET-BEFEHLE IMMER NACH IMPORT-BEFEHLE //
 export let USERS = {};
@@ -1752,10 +1811,20 @@ async function seedInitialData() {
         const rolesSnapshot = await getDocs(rolesCollectionRef);
         if (rolesSnapshot.empty) {
             const batch = writeBatch(db);
+            const smartTop2DefaultPerms = [
+                'ENTRANCE',
+                'ENTRANCE_DOOR',
+                'ENTRANCE_GARDENA',
+                'ENTRANCE_GARDENA_CONTROL',
+                'ENTRANCE_HUE',
+                'ENTRANCE_HUE_CONTROL',
+                'ENTRANCE_HOMEMATIC',
+                'ENTRANCE_HOMEMATIC_CONTROL',
+            ];
             const defaultRoles = {
-                SYSTEMADMIN: { name: 'Systemadmin', permissions: ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG', 'TOOLS', 'ZAHLUNGSVERWALTUNG', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG', 'REZEPTE', 'EINKAUFSLISTE', 'EINKAUFSLISTE_CREATE', 'EINKAUFSLISTE_MANAGE', 'EINKAUFSLISTE_MANAGE_WRITE'], deletable: false },
-                ADMIN: { name: 'Admin', permissions: ['ENTRANCE', 'PUSHOVER', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG', 'REZEPTE', 'EINKAUFSLISTE', 'EINKAUFSLISTE_CREATE', 'EINKAUFSLISTE_MANAGE', 'EINKAUFSLISTE_MANAGE_WRITE'], deletable: false },
-                ANGEMELDET: { name: 'Angemeldet', permissions: ['ENTRANCE', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG', 'REZEPTE', 'EINKAUFSLISTE'], deletable: true },
+                SYSTEMADMIN: { name: 'Systemadmin', permissions: [...smartTop2DefaultPerms, 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG', 'TOOLS', 'ZAHLUNGSVERWALTUNG', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG', 'REZEPTE', 'EINKAUFSLISTE', 'EINKAUFSLISTE_CREATE', 'EINKAUFSLISTE_MANAGE', 'EINKAUFSLISTE_MANAGE_WRITE'], deletable: false },
+                ADMIN: { name: 'Admin', permissions: [...smartTop2DefaultPerms, 'PUSHOVER', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG', 'REZEPTE', 'EINKAUFSLISTE', 'EINKAUFSLISTE_CREATE', 'EINKAUFSLISTE_MANAGE', 'EINKAUFSLISTE_MANAGE_WRITE'], deletable: false },
+                ANGEMELDET: { name: 'Angemeldet', permissions: [...smartTop2DefaultPerms, 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG', 'REZEPTE', 'EINKAUFSLISTE'], deletable: true },
                 NO_RIGHTS: { name: '- Keine Rechte -', permissions: [], deletable: false }
             };
             Object.keys(defaultRoles).forEach(roleId => batch.set(doc(rolesCollectionRef, roleId), defaultRoles[roleId]));
@@ -1773,7 +1842,20 @@ async function seedInitialData() {
             if (systemAdminRoleSnap.exists()) {
                 const roleData = systemAdminRoleSnap.data() || {};
                 const rolePerms = Array.isArray(roleData.permissions) ? roleData.permissions : [];
-                const requiredSystemPerms = ['TOOLS', 'EINKAUFSLISTE', 'EINKAUFSLISTE_CREATE', 'EINKAUFSLISTE_MANAGE', 'EINKAUFSLISTE_MANAGE_WRITE'];
+                const requiredSystemPerms = [
+                    'ENTRANCE_DOOR',
+                    'ENTRANCE_GARDENA',
+                    'ENTRANCE_GARDENA_CONTROL',
+                    'ENTRANCE_HUE',
+                    'ENTRANCE_HUE_CONTROL',
+                    'ENTRANCE_HOMEMATIC',
+                    'ENTRANCE_HOMEMATIC_CONTROL',
+                    'TOOLS',
+                    'EINKAUFSLISTE',
+                    'EINKAUFSLISTE_CREATE',
+                    'EINKAUFSLISTE_MANAGE',
+                    'EINKAUFSLISTE_MANAGE_WRITE'
+                ];
                 const nextSystemPerms = Array.from(new Set([...rolePerms, ...requiredSystemPerms]));
                 if (nextSystemPerms.length !== rolePerms.length) {
                     await updateDoc(systemAdminRoleDoc, { permissions: nextSystemPerms });
@@ -1785,7 +1867,19 @@ async function seedInitialData() {
             if (adminRoleSnap.exists()) {
                 const roleData = adminRoleSnap.data() || {};
                 const rolePerms = Array.isArray(roleData.permissions) ? roleData.permissions : [];
-                const requiredAdminPerms = ['EINKAUFSLISTE', 'EINKAUFSLISTE_CREATE', 'EINKAUFSLISTE_MANAGE', 'EINKAUFSLISTE_MANAGE_WRITE'];
+                const requiredAdminPerms = [
+                    'ENTRANCE_DOOR',
+                    'ENTRANCE_GARDENA',
+                    'ENTRANCE_GARDENA_CONTROL',
+                    'ENTRANCE_HUE',
+                    'ENTRANCE_HUE_CONTROL',
+                    'ENTRANCE_HOMEMATIC',
+                    'ENTRANCE_HOMEMATIC_CONTROL',
+                    'EINKAUFSLISTE',
+                    'EINKAUFSLISTE_CREATE',
+                    'EINKAUFSLISTE_MANAGE',
+                    'EINKAUFSLISTE_MANAGE_WRITE'
+                ];
                 const nextAdminPerms = Array.from(new Set([...rolePerms, ...requiredAdminPerms]));
                 if (nextAdminPerms.length !== rolePerms.length) {
                     await updateDoc(adminRoleDoc, { permissions: nextAdminPerms });
@@ -1797,7 +1891,17 @@ async function seedInitialData() {
             if (angemeldetRoleSnap.exists()) {
                 const roleData = angemeldetRoleSnap.data() || {};
                 const rolePerms = Array.isArray(roleData.permissions) ? roleData.permissions : [];
-                const nextAngemeldetPerms = Array.from(new Set([...rolePerms, 'EINKAUFSLISTE']));
+                const nextAngemeldetPerms = Array.from(new Set([
+                    ...rolePerms,
+                    'ENTRANCE_DOOR',
+                    'ENTRANCE_GARDENA',
+                    'ENTRANCE_GARDENA_CONTROL',
+                    'ENTRANCE_HUE',
+                    'ENTRANCE_HUE_CONTROL',
+                    'ENTRANCE_HOMEMATIC',
+                    'ENTRANCE_HOMEMATIC_CONTROL',
+                    'EINKAUFSLISTE'
+                ]));
                 if (nextAngemeldetPerms.length !== rolePerms.length) {
                     await updateDoc(angemeldetRoleDoc, { permissions: nextAngemeldetPerms });
                 }
@@ -4373,6 +4477,12 @@ export function setupEventListeners() {
     // --- Entrance View Buttons ---
     document.querySelectorAll('#entranceView .action-button').forEach(button => {
         button.addEventListener('click', e => {
+            const hasDoorPermission = currentUser.role === 'SYSTEMADMIN' || (currentUser.permissions || []).includes('ENTRANCE_DOOR');
+            if (!hasDoorPermission) {
+                alertUser('Zugriff verweigert (Smart Top2 -> Türöffner).', 'error');
+                return;
+            }
+
             const buttonEl = e.currentTarget;
             const delay = parseInt(buttonEl.dataset.delay, 10);
             const buttonTextEl = buttonEl.querySelector('.button-text');

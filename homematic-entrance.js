@@ -23,6 +23,18 @@ const state = {
 
 let helperAlertUser = null;
 
+function hasHomematicControlPermission() {
+  if (!currentUser.mode || currentUser.mode === GUEST_MODE) return false;
+  if (currentUser.role === 'SYSTEMADMIN') return true;
+  return Array.isArray(currentUser.permissions) && currentUser.permissions.includes('ENTRANCE_HOMEMATIC_CONTROL');
+}
+
+function hasHomematicViewPermission() {
+  if (!currentUser.mode || currentUser.mode === GUEST_MODE) return false;
+  if (currentUser.role === 'SYSTEMADMIN') return true;
+  return Array.isArray(currentUser.permissions) && currentUser.permissions.includes('ENTRANCE_HOMEMATIC');
+}
+
 function escapeHtml(value = '') {
   return String(value).replace(/[&<>"']/g, (char) => ({
     '&': '&amp;',
@@ -199,12 +211,17 @@ function formatTimestamp(isoString) {
 function isHomematicViewVisible() {
   const { section } = getElements();
   if (!section) return false;
+  if (!hasHomematicViewPermission()) return false;
 
   const view = section.closest('.view') || section;
   if (!(view instanceof Element)) return false;
 
+  const sectionStyle = window.getComputedStyle(section);
   const computedStyle = window.getComputedStyle(view);
-  return computedStyle.display !== 'none' && computedStyle.visibility !== 'hidden';
+  return computedStyle.display !== 'none'
+    && computedStyle.visibility !== 'hidden'
+    && sectionStyle.display !== 'none'
+    && sectionStyle.visibility !== 'hidden';
 }
 
 function scheduleStatusRefresh(delayMs = 4000) {
@@ -416,10 +433,14 @@ function renderStatus() {
   if (!elements.section) return;
 
   const isLoggedIn = currentUser.mode && currentUser.mode !== GUEST_MODE;
+  const canControl = hasHomematicControlPermission();
   const status = state.status;
   const configured = Boolean(status?.configured);
   const connected = Boolean(status?.connected);
   const devices = configured && connected && Array.isArray(status?.devices) ? getSortedDevices(status.devices) : [];
+  if (!canControl) {
+    state.activeGroupId = '';
+  }
   syncSelectedDevice(devices);
   const selectedDevice = getSelectedDevice(devices);
   const badgeText = !configured
@@ -483,7 +504,8 @@ function renderStatus() {
           type="button"
           data-homematic-select-group-id="${escapeHtml(device.groupId)}"
           aria-expanded="${String(device.groupId) === String(state.activeGroupId || '') ? 'true' : 'false'}"
-          class="min-w-0 rounded-lg px-2 py-1.5 text-[11px] font-semibold text-slate-700 ring-1 transition ${String(device.groupId) === String(state.activeGroupId || '') ? 'bg-cyan-50 ring-cyan-300' : 'bg-white/80 ring-black/5 hover:bg-cyan-50/70'}"
+          class="min-w-0 rounded-lg px-2 py-1.5 text-[11px] font-semibold text-slate-700 ring-1 transition ${String(device.groupId) === String(state.activeGroupId || '') ? 'bg-cyan-50 ring-cyan-300' : (canControl ? 'bg-white/80 ring-black/5 hover:bg-cyan-50/70' : 'bg-white/80 ring-black/5')} ${canControl ? '' : 'cursor-default'}"
+          ${canControl ? '' : 'disabled'}
         >
           <div class="flex items-center gap-2 min-w-0">
             <span class="${getHomematicLedClass(device)}" aria-hidden="true"></span>
@@ -491,7 +513,7 @@ function renderStatus() {
           </div>
           <div class="mt-0.5 truncate text-left text-[10px] text-slate-500">${escapeHtml(formatTemperature(device.setPointTemperature))} / ${escapeHtml(formatTemperature(device.actualTemperature))}</div>
         </button>
-        ${String(device.groupId) === String(state.activeGroupId || '') ? `<div class="col-span-2 -mt-px">${renderDeviceCard(selectedDevice)}</div>` : ''}
+        ${canControl && String(device.groupId) === String(state.activeGroupId || '') ? `<div class="col-span-2 -mt-px">${renderDeviceCard(selectedDevice)}</div>` : ''}
       `).join('');
     }
   }
@@ -500,6 +522,15 @@ function renderStatus() {
 async function fetchStatus(showLoading = true) {
   const elements = getElements();
   if (!elements.section) return;
+
+  if (!hasHomematicViewPermission()) {
+    state.status = null;
+    state.error = '';
+    state.loading = false;
+    state.activeGroupId = '';
+    renderStatus();
+    return;
+  }
 
   if (!currentUser.mode || currentUser.mode === GUEST_MODE) {
     state.status = null;
@@ -528,6 +559,10 @@ async function fetchStatus(showLoading = true) {
 
 async function sendHomematicCommand(groupId, body, patch = {}, errorMessage = 'HomeMatic-Gerät konnte nicht aktualisiert werden.') {
   if (!groupId) return;
+  if (!hasHomematicControlPermission()) {
+    alertUser('Nur Status sichtbar. Geräte einstellen ist nicht freigeschaltet.', 'error');
+    return;
+  }
   state.pendingGroupIds.add(groupId);
   renderStatus();
 
@@ -589,6 +624,10 @@ function bindListeners() {
   elements.summaryGrid?.addEventListener('click', (event) => {
     const actionTarget = event.target instanceof Element ? event.target.closest('[data-homematic-action]') : null;
     if (actionTarget) {
+      if (!hasHomematicControlPermission()) {
+        return;
+      }
+
       const action = String(actionTarget.getAttribute('data-homematic-action') || '');
       const groupId = String(actionTarget.getAttribute('data-homematic-group-id') || '');
       if (!groupId) return;
@@ -622,12 +661,20 @@ function bindListeners() {
     const target = event.target instanceof Element ? event.target.closest('[data-homematic-select-group-id]') : null;
     if (!target) return;
 
+    if (!hasHomematicControlPermission()) {
+      return;
+    }
+
     const groupId = target.getAttribute('data-homematic-select-group-id') || '';
     state.activeGroupId = state.activeGroupId === groupId ? '' : groupId;
     renderStatus();
   });
 
   elements.summaryGrid?.addEventListener('input', (event) => {
+    if (!hasHomematicControlPermission()) {
+      return;
+    }
+
     const target = event.target instanceof Element ? event.target.closest('[data-homematic-temperature-input]') : null;
     if (!target) return;
 

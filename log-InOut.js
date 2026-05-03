@@ -1,6 +1,6 @@
 // // @ts-check 
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 //
-import { db, usersCollectionRef, setButtonLoading, adminSectionsState, modalUserButtons, ADMIN_ROLES, adminRolesCollectionRef, rolesCollectionRef, ROLES, alertUser, initialAuthCheckDone, currentUser, GUEST_MODE, adminSettings, CHECKLISTS, ADMIN_STORAGE_KEY, USERS, navigate, auth, stopAllUserDependentListeners, escapeHtml } from './haupteingang.js';
+import { db, usersCollectionRef, setButtonLoading, adminSectionsState, modalUserButtons, ADMIN_ROLES, adminRolesCollectionRef, rolesCollectionRef, ROLES, alertUser, initialAuthCheckDone, currentUser, GUEST_MODE, adminSettings, CHECKLISTS, ADMIN_STORAGE_KEY, USERS, navigate, auth, stopAllUserDependentListeners, escapeHtml, resolvePermissionList } from './haupteingang.js';
 import { renderModalUserButtons } from './admin_benutzersteuerung.js';
 import { doc, getDoc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { listenForMyVotes, stopMyVotesListener } from './terminplaner.js';
@@ -312,15 +312,22 @@ export async function checkCurrentUserValidity() {
         // --- TEIL 1: Lade BENUTZER-Rechte ---
         if (user.permissionType === 'role') {
             if (effectiveRole && ROLES[effectiveRole]) {
-                userPermissions = [...(ROLES[effectiveRole].permissions || [])];
+                userPermissions = resolvePermissionList([...(ROLES[effectiveRole].permissions || [])]);
             }
         } 
         else if (user.permissionType === 'individual') {
-            userPermissions = [...(user.customPermissions || [])];
+            userPermissions = resolvePermissionList([...(user.customPermissions || [])]);
         }
         if (effectiveRole === 'SYSTEMADMIN') {
-            userPermissions = [
+            userPermissions = resolvePermissionList([
                 'ENTRANCE',
+                'ENTRANCE_DOOR',
+                'ENTRANCE_GARDENA',
+                'ENTRANCE_GARDENA_CONTROL',
+                'ENTRANCE_HUE',
+                'ENTRANCE_HUE_CONTROL',
+                'ENTRANCE_HOMEMATIC',
+                'ENTRANCE_HOMEMATIC_CONTROL',
                 'PUSHOVER',
                 'PUSHOVER_SETTINGS_GRANTS',
                 'PUSHOVER_NOTRUF_SETTINGS',
@@ -336,7 +343,7 @@ export async function checkCurrentUserValidity() {
                 'EINKAUFSLISTE_CREATE',
                 'EINKAUFSLISTE_MANAGE',
                 'EINKAUFSLISTE_MANAGE_WRITE'
-            ];
+            ]);
         }
 
         // --- TEIL 2: Lade ADMIN-Rechte ---
@@ -537,6 +544,21 @@ export function updateUIForMode() {
 
     const userPermissions = currentUser.permissions || [];
     const isAllowedBySysadmin = currentUser.role === 'SYSTEMADMIN';
+
+    const entranceDoorSection = document.getElementById('entranceDoorSection');
+    const gardenaEntranceSection = document.getElementById('gardenaEntranceSection');
+    const hueEntranceSection = document.getElementById('hueEntranceSection');
+    const homematicEntranceSection = document.getElementById('homematicEntranceSection');
+
+    const canSeeEntranceDoor = isAllowedBySysadmin || userPermissions.includes('ENTRANCE_DOOR');
+    const canSeeGardena = isAllowedBySysadmin || userPermissions.includes('ENTRANCE_GARDENA');
+    const canSeeHue = isAllowedBySysadmin || userPermissions.includes('ENTRANCE_HUE');
+    const canSeeHomematic = isAllowedBySysadmin || userPermissions.includes('ENTRANCE_HOMEMATIC');
+
+    if (entranceDoorSection) entranceDoorSection.style.display = canSeeEntranceDoor ? '' : 'none';
+    if (gardenaEntranceSection) gardenaEntranceSection.style.display = canSeeGardena ? '' : 'none';
+    if (hueEntranceSection) hueEntranceSection.style.display = canSeeHue ? '' : 'none';
+    if (homematicEntranceSection) homematicEntranceSection.style.display = canSeeHomematic ? '' : 'none';
 
     const pushoverSettingsToggleButton = document.getElementById('pushoverSettingsToggleButton');
     const canSeePushoverSettings = isAllowedBySysadmin || userPermissions.includes('PUSHOVER_SETTINGS_GRANTS');

@@ -478,7 +478,11 @@ export function renderUserManagement() {
             const allPermissionsHTML = Object.keys(PERMISSIONS_CONFIG).map(permKey => {
                 const perm = PERMISSIONS_CONFIG[permKey];
                 let marginLeft = '';
-                if (permKey.startsWith('PUSHOVER_NOTRUF_SETTINGS_')) {
+                if (
+                    permKey.startsWith('PUSHOVER_NOTRUF_SETTINGS_')
+                    || (permKey.startsWith('ENTRANCE_') && permKey.endsWith('_CONTROL'))
+                    || permKey === 'EINKAUFSLISTE_MANAGE_WRITE'
+                ) {
                     marginLeft = 'pl-12';
                 } else {
                     marginLeft = perm.indent ? 'pl-6' : '';

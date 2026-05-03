@@ -156,11 +156,18 @@ export function renderRoleManagement() {
         </div>`;
     roleManagementArea.appendChild(userRolesContainer);
 
+    const getPermissionIndentClass = (permKey, perm) => {
+        if (permKey.startsWith('PUSHOVER_NOTRUF_SETTINGS_')) return 'pl-12';
+        if (permKey.startsWith('ENTRANCE_') && permKey.endsWith('_CONTROL')) return 'pl-12';
+        if (permKey === 'EINKAUFSLISTE_MANAGE_WRITE') return 'pl-12';
+        return perm.indent ? 'pl-6' : '';
+    };
+
     // Berechtigungen aus zentraler Konfiguration (PERMISSIONS_CONFIG aus haupteingang.js)
     const newRolePermsContainer = document.getElementById('newRolePermissions');
     Object.keys(PERMISSIONS_CONFIG).forEach(permKey => {
         const perm = PERMISSIONS_CONFIG[permKey];
-        const marginLeft = permKey.startsWith('PUSHOVER_NOTRUF_SETTINGS_') ? 'pl-12' : (perm.indent ? 'pl-6' : '');
+        const marginLeft = getPermissionIndentClass(permKey, perm);
         const isDisabled = perm.indent ? 'disabled' : ''; 
         
         newRolePermsContainer.innerHTML += `
@@ -188,6 +195,10 @@ export function renderRoleManagement() {
             const isHaushaltszahlungenEnabled = role.permissions?.includes('HAUSHALTSZAHLUNGEN');
             const isGeschenkemanagementEnabled = role.permissions?.includes('GESCHENKEMANAGEMENT');
             const isEinkaufslisteEnabled = role.permissions?.includes('EINKAUFSLISTE');
+            const isEntranceEnabled = role.permissions?.includes('ENTRANCE');
+            const isEntranceGardenaEnabled = role.permissions?.includes('ENTRANCE_GARDENA');
+            const isEntranceHueEnabled = role.permissions?.includes('ENTRANCE_HUE');
+            const isEntranceHomematicEnabled = role.permissions?.includes('ENTRANCE_HOMEMATIC');
             
             permissionsCheckboxesHTML = Object.keys(PERMISSIONS_CONFIG).map(permKey => {
                 const perm = PERMISSIONS_CONFIG[permKey];
@@ -218,8 +229,26 @@ export function renderRoleManagement() {
                 if (permKey.startsWith('EINKAUFSLISTE_') && !isEinkaufslisteEnabled) {
                     isDisabled = true;
                 }
+                if (
+                    (permKey === 'ENTRANCE_DOOR'
+                        || permKey === 'ENTRANCE_GARDENA'
+                        || permKey === 'ENTRANCE_HUE'
+                        || permKey === 'ENTRANCE_HOMEMATIC')
+                    && !isEntranceEnabled
+                ) {
+                    isDisabled = true;
+                }
+                if (permKey === 'ENTRANCE_GARDENA_CONTROL' && !isEntranceGardenaEnabled) {
+                    isDisabled = true;
+                }
+                if (permKey === 'ENTRANCE_HUE_CONTROL' && !isEntranceHueEnabled) {
+                    isDisabled = true;
+                }
+                if (permKey === 'ENTRANCE_HOMEMATIC_CONTROL' && !isEntranceHomematicEnabled) {
+                    isDisabled = true;
+                }
                 
-                const marginLeft = permKey.startsWith('PUSHOVER_NOTRUF_SETTINGS_') ? 'pl-12' : (perm.indent ? 'pl-6' : '');
+                const marginLeft = getPermissionIndentClass(permKey, perm);
                 return `
                     <label class="flex items-center gap-2 ${canEditThisRole ? 'cursor-pointer' : ''} ${marginLeft} ${isDisabled ? 'opacity-50' : ''}">
                         <input type="checkbox" class="role-perm-toggle" data-roleid="${role.id}" data-perm="${permKey}" ${isChecked} ${isDisabled ? 'disabled' : ''}> 
@@ -268,6 +297,10 @@ export function renderRoleManagement() {
         };
 
         setupPair('CHECKLIST', ['CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS']);
+        setupPair('ENTRANCE', ['ENTRANCE_DOOR', 'ENTRANCE_GARDENA', 'ENTRANCE_HUE', 'ENTRANCE_HOMEMATIC']);
+        setupPair('ENTRANCE_GARDENA', ['ENTRANCE_GARDENA_CONTROL']);
+        setupPair('ENTRANCE_HUE', ['ENTRANCE_HUE_CONTROL']);
+        setupPair('ENTRANCE_HOMEMATIC', ['ENTRANCE_HOMEMATIC_CONTROL']);
         setupPair('PUSHOVER', ['PUSHOVER_SETTINGS_GRANTS', 'PUSHOVER_NOTRUF_SETTINGS']);
         setupPair('PUSHOVER_NOTRUF_SETTINGS', ['PUSHOVER_NOTRUF_SETTINGS_FLIC', 'PUSHOVER_NOTRUF_SETTINGS_NACHRICHTENCENTER', 'PUSHOVER_NOTRUF_SETTINGS_ALARM_PROGRAMME']);
         setupPair('TERMINPLANER', ['TERMINPLANER_CREATE']);
