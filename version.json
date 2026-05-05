@@ -1,14 +1,34 @@
 {
-  "version": "1.16.3",
-  "buildId": "20260505-7",
+  "version": "1.16.5",
+  "buildId": "20260505-9",
   "releaseDate": "2026-05-05",
-  "releaseTime": "13:34",
+  "releaseTime": "13:58",
   "bereich": "Smart Top2",
   "timezone": "Europe/Vienna",
-  "note": "SwitchBot zeigt jetzt klare Gerätezustände inkl. Bot-Drücken-Flow und roter Aktionsbuttons; HomeMatic fängt Host-Lookup-Fehler robuster ab und liefert konsistenten Offline-Status.",
+  "note": "SwitchBot-Feinschliff: Bot bleibt außerhalb laufender Aktion neutral, 'Aktiv' erscheint nur während Drücken, alle Geräte-LEDs folgen der finalen Rot/Grün-Regel und die Liste startet ohne aufgeklappten Eintrag.",
   "commitId": "0ae7df4",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.16.5",
+      "buildId": "20260505-9",
+      "releaseDate": "2026-05-05",
+      "releaseTime": "13:58",
+      "bereich": "Smart Top2",
+      "note": "SwitchBot-Feinschliff: Bot bleibt außerhalb laufender Aktion neutral, 'Aktiv' erscheint nur während Drücken, alle Geräte-LEDs folgen der finalen Rot/Grün-Regel und die Liste startet ohne aufgeklappten Eintrag.",
+      "commitId": "0ae7df4",
+      "obligation": "false"
+    },
+    {
+      "version": "1.16.4",
+      "buildId": "20260505-8",
+      "releaseDate": "2026-05-05",
+      "releaseTime": "13:56",
+      "bereich": "Smart Top2",
+      "note": "SwitchBot zeigt WoIOSensor als Temp/Luft, startet ohne vorausgeklapptes Gerät, erlaubt vollständiges Zuklappen und nutzt die neuen LED-Regeln (rot/aktiv-grün) inkl. Bot-Status 'Aktiv' nur während Drücken.",
+      "commitId": "0ae7df4",
+      "obligation": "false"
+    },
     {
       "version": "1.16.3",
       "buildId": "20260505-7",

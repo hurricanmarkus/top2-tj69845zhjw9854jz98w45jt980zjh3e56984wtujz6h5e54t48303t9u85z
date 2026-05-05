@@ -237,13 +237,8 @@ function syncSelectedDevice(devices = []) {
     return;
   }
 
-  if (!state.activeDeviceId) {
-    state.activeDeviceId = normalizeText(devices[0]?.deviceId);
-    return;
-  }
-
   if (!devices.some((device) => String(device.deviceId) === String(state.activeDeviceId))) {
-    state.activeDeviceId = normalizeText(devices[0]?.deviceId);
+    state.activeDeviceId = '';
   }
 }
 
@@ -252,31 +247,57 @@ function getSelectedDevice(devices = []) {
   return devices.find((device) => String(device.deviceId) === String(state.activeDeviceId)) || null;
 }
 
+function parseStateToken(value) {
+  return normalizeText(value).toLowerCase();
+}
+
+function isContactOrWaterAlarmActive(device) {
+  const status = device?.status && typeof device.status === 'object' ? device.status : {};
+  const tokens = [
+    device?.openState,
+    device?.lockState,
+    device?.movement,
+    status?.openState,
+    status?.doorState,
+    status?.contactState,
+    status?.waterLeakStatus,
+    status?.leakState,
+    status?.alarm,
+    status?.leak,
+    status?.waterLeak,
+    status?.power,
+  ].map(parseStateToken).filter(Boolean);
+
+  if (tokens.some((token) => ['1', 'true', 'open', 'opened', 'opening', 'alarm', 'leak', 'wet', 'detected', 'active', 'on'].includes(token))) {
+    return true;
+  }
+
+  if (typeof status?.waterLeakStatus === 'boolean') {
+    return status.waterLeakStatus;
+  }
+
+  if (typeof status?.alarm === 'boolean') {
+    return status.alarm;
+  }
+
+  return false;
+}
+
 function getDeviceLedClass(device) {
   const normalizedType = normalizeText(device?.deviceType).toLowerCase();
-  const isBot = normalizedType.includes('bot');
+  const isContact = normalizedType.includes('contact');
+  const isWater = normalizedType.includes('water') || normalizedType.includes('leak');
   const isPending = state.pendingDeviceIds.has(String(device?.deviceId || ''));
 
-  if (isBot) {
-    if (isPending) {
-      return 'gardena-led gardena-led--green gardena-led--blink';
-    }
-    return 'gardena-led gardena-led--red';
-  }
-
   if (isPending) {
-    return 'gardena-led gardena-led--amber gardena-led--blink';
-  }
-  if (device?.reachable === false || device?.cloudEnabled === false) {
-    return 'gardena-led gardena-led--red';
-  }
-  if (device?.isOn === true) {
     return 'gardena-led gardena-led--green gardena-led--blink';
   }
-  if (device?.isOn === false) {
-    return 'gardena-led gardena-led--slate';
+
+  if ((isContact || isWater) && isContactOrWaterAlarmActive(device)) {
+    return 'gardena-led gardena-led--green';
   }
-  return 'gardena-led gardena-led--amber';
+
+  return 'gardena-led gardena-led--red';
 }
 
 function getActionButtonClass(action, device) {
@@ -317,6 +338,9 @@ function getActionLabel(action) {
 
 function actionPatch(action) {
   const normalized = normalizeText(action).toUpperCase();
+  if (normalized === 'PRESS') {
+    return {};
+  }
   if (normalized === 'ON' || normalized === 'OPEN' || normalized === 'UNLOCK') {
     return { isOn: true, summaryText: `${getActionLabel(action)} gesendet` };
   }
@@ -328,7 +352,7 @@ function actionPatch(action) {
 
 function getDeviceSummaryFallback(device) {
   const normalizedType = normalizeText(device?.deviceType).toLowerCase();
-  if (normalizedType.includes('meter') || normalizedType.includes('thermometer')) {
+  if (normalizedType.includes('meter') || normalizedType.includes('thermometer') || normalizedType.includes('woiosensor') || normalizedType.includes('woi sensor')) {
     return 'Temp: - | Luft: -';
   }
   if (normalizedType.includes('wallet finder') || normalizedType.includes('wallet card')) {
@@ -364,7 +388,10 @@ function renderDeviceCard(device, canControl) {
 
   const actions = normalizeActionsForDevice(device, Array.isArray(device.supportedActions) ? device.supportedActions : []);
   const isPending = state.pendingDeviceIds.has(String(device.deviceId || ''));
-  const summaryText = normalizeText(device.summaryText, getDeviceSummaryFallback(device));
+  const isBot = normalizeText(device?.deviceType).toLowerCase().includes('bot');
+  const summaryText = isBot
+    ? (isPending ? 'Aktiv' : normalizeText(device.summaryText, getDeviceSummaryFallback(device)))
+    : normalizeText(device.summaryText, getDeviceSummaryFallback(device));
 
   const chips = [
     device.deviceType ? `<span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">Typ: ${escapeHtml(device.deviceType)}</span>` : '',
@@ -481,7 +508,10 @@ function renderStatus() {
     } else {
       elements.summaryGrid.innerHTML = devices.map((device) => {
         const isSelected = String(device.deviceId) === String(state.activeDeviceId || '');
-        const summaryText = normalizeText(device.summaryText, normalizeText(device.deviceType, getDeviceSummaryFallback(device)));
+        const isBot = normalizeText(device?.deviceType).toLowerCase().includes('bot');
+        const summaryText = isBot
+          ? (state.pendingDeviceIds.has(String(device?.deviceId || '')) ? 'Aktiv' : normalizeText(device.summaryText, getDeviceSummaryFallback(device)))
+          : normalizeText(device.summaryText, normalizeText(device.deviceType, getDeviceSummaryFallback(device)));
         return `
           <button
             type="button"
