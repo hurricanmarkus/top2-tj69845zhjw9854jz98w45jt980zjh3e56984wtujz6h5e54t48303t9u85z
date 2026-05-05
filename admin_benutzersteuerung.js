@@ -619,6 +619,160 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             container.dataset.permissionDepsInitialized = 'true';
         }
     };
+
+    const permissionSaveStateByUser = new Map();
+
+    const normalizePermList = (permissions = []) => {
+        return [...new Set((Array.isArray(permissions) ? permissions : []).filter(Boolean))].sort();
+    };
+
+    const isSamePermList = (left = [], right = []) => {
+        if (left.length !== right.length) return false;
+        return left.every((value, index) => value === right[index]);
+    };
+
+    const buildPermissionChangePayload = (permContainer, originalUser) => {
+        if (!permContainer || !originalUser) {
+            throw new Error('Benutzerdaten konnten nicht gelesen werden.');
+        }
+
+        const typeRadio = permContainer.querySelector('input[name^="perm-type-"]:checked');
+        if (!typeRadio) {
+            throw new Error('Berechtigungstyp konnte nicht gelesen werden.');
+        }
+
+        const selectedType = typeRadio.value;
+        let detailsForRequest = { type: selectedType };
+        let nextRole = originalUser.role || 'NO_RIGHTS';
+        let nextDisplayRole = originalUser.displayRole || null;
+        let nextCustomPermissions = [];
+
+        if (selectedType === 'role') {
+            const roleSelect = permContainer.querySelector('.user-role-select');
+            if (!roleSelect) {
+                throw new Error('Rollen-Auswahl konnte nicht gelesen werden.');
+            }
+
+            nextRole = roleSelect.value;
+            if (nextRole === 'SYSTEMADMIN' && currentUser.role !== 'SYSTEMADMIN') {
+                throw new Error('Nur Systemadmins dürfen die Rolle SYSTEMADMIN zuweisen.');
+            }
+
+            nextDisplayRole = null;
+            nextCustomPermissions = [];
+            detailsForRequest.newRole = nextRole;
+        } else {
+            const individualPermsArea = permContainer.querySelector('.individual-perms-area');
+            if (individualPermsArea) {
+                ensurePermissionDependencies(individualPermsArea);
+            }
+
+            nextCustomPermissions = Array.from(
+                permContainer.querySelectorAll('.custom-perm-checkbox:checked')
+            ).map((cb) => cb.dataset.perm).filter(Boolean);
+
+            const displayRoleSelect = permContainer.querySelector('.display-role-select');
+            if (!displayRoleSelect) {
+                throw new Error('Angezeigter Status konnte nicht gelesen werden.');
+            }
+
+            const selectedDisplayRole = displayRoleSelect.value || 'NO_RIGHTS';
+            nextDisplayRole = selectedDisplayRole !== 'NO_RIGHTS' ? selectedDisplayRole : null;
+
+            if (selectedDisplayRole === 'ADMIN') {
+                nextRole = 'ADMIN';
+            } else if (selectedDisplayRole === 'SYSTEMADMIN') {
+                nextRole = 'SYSTEMADMIN';
+            } else if (selectedDisplayRole === 'NO_RIGHTS') {
+                nextRole = 'NO_RIGHTS';
+            } else {
+                nextRole = selectedDisplayRole;
+            }
+
+            detailsForRequest.customPermissions = nextCustomPermissions;
+            detailsForRequest.displayRole = nextDisplayRole;
+        }
+
+        const wasAdmin = (originalUser.role === 'ADMIN') || (originalUser.displayRole === 'ADMIN');
+        const willBeAdmin = (nextRole === 'ADMIN') || (nextDisplayRole === 'ADMIN');
+        const approvalRules = currentUser.adminPermissions?.approvalRequired || {};
+        const needsApproval = willBeAdmin && !wasAdmin
+            ? approvalRules['setAdminStatus'] === true
+            : approvalRules['canChangeUserPermissionType'] === true;
+
+        const autoApproveFlag = !needsApproval;
+        detailsForRequest.autoApprove = autoApproveFlag;
+
+        const currentType = originalUser.permissionType || 'role';
+        const currentRole = originalUser.role || 'NO_RIGHTS';
+        const currentDisplayRole = originalUser.displayRole || null;
+        const currentCustomPermissions = normalizePermList(originalUser.customPermissions || []);
+        const normalizedNextCustomPermissions = normalizePermList(nextCustomPermissions);
+
+        const hasChanges = currentType !== selectedType
+            || currentRole !== nextRole
+            || currentDisplayRole !== nextDisplayRole
+            || !isSamePermList(currentCustomPermissions, normalizedNextCustomPermissions);
+
+        return {
+            detailsForRequest,
+            autoApproveFlag,
+            hasChanges,
+        };
+    };
+
+    const submitPermissionChange = async (userId, permContainer) => {
+        const originalUser = USERS[userId];
+        if (!originalUser) return;
+
+        const payload = buildPermissionChangePayload(permContainer, originalUser);
+        if (!payload.hasChanges) return;
+
+        rememberAdminScroll();
+        await createApprovalRequest('CHANGE_PERMISSION_TYPE', userId, payload.detailsForRequest);
+
+        if (payload.autoApproveFlag) {
+            await logAdminAction('user_perms_updated_autoapproved', `Berechtigungen für ${originalUser.name} geändert (Auto-Approve).`);
+        } else {
+            await logAdminAction('user_perms_updated_pending', `Antrag auf Berechtigungsänderung für ${originalUser.name} eingereicht.`);
+        }
+
+        const saveBtnContainer = permContainer.querySelector('.save-perms-container');
+        if (saveBtnContainer) {
+            saveBtnContainer.classList.add('hidden');
+        }
+    };
+
+    const queuePermissionAutoSave = (userId, permContainer) => {
+        const stateEntry = permissionSaveStateByUser.get(userId) || { running: false, queued: false, container: permContainer };
+        stateEntry.container = permContainer;
+
+        if (stateEntry.running) {
+            stateEntry.queued = true;
+            permissionSaveStateByUser.set(userId, stateEntry);
+            return;
+        }
+
+        stateEntry.running = true;
+        stateEntry.queued = false;
+        permissionSaveStateByUser.set(userId, stateEntry);
+
+        (async () => {
+            try {
+                do {
+                    stateEntry.queued = false;
+                    await submitPermissionChange(userId, stateEntry.container);
+                } while (stateEntry.queued);
+            } catch (error) {
+                console.error(`[AUTO-SAVE] FEHLER bei Berechtigungsänderung für User ${userId}:`, error);
+                alertUser(`Fehler beim direkten Speichern: ${error.message || error.toString()}`, 'error');
+            } finally {
+                stateEntry.running = false;
+                permissionSaveStateByUser.set(userId, stateEntry);
+            }
+        })();
+    };
+
     console.log("addAdminUserManagementListeners: Hänge primären Listener an userManagementArea an.");
 
     // --- CLICK Listener ---
@@ -942,87 +1096,8 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 console.error(`[CLICK] Konnte Berechtigungs-Container für User ${userId} nicht finden!`);
                 return;
             }
-
-            const typeRadio = permContainer.querySelector('input[name^="perm-type-"]:checked');
-            if (!typeRadio) { console.error(`[CLICK] Konnte Berechtigungstyp-Radiobutton für User ${userId} nicht lesen!`); return; }
-            const selectedType = typeRadio.value;
-
-            rememberAdminScroll();
-
-            let detailsForRequest = { type: selectedType };
-
-            let newRole = originalUser.role;
-            let newDisplayRole = originalUser.displayRole;
-            let customPermissions = originalUser.customPermissions;
-
-            if (selectedType === 'role') {
-                const roleSelect = permContainer.querySelector('.user-role-select');
-                if (!roleSelect) { console.error(`[CLICK] Konnte Rollen-Select für User ${userId} nicht finden!`); return; }
-                newRole = roleSelect.value;
-                newDisplayRole = null;
-                customPermissions = [];
-
-                if (newRole === 'SYSTEMADMIN' && currentUser.role !== 'SYSTEMADMIN') {
-                    return alertUser("Nur Systemadmins dürfen die Rolle SYSTEMADMIN zuweisen.", "error");
-                }
-
-                detailsForRequest.newRole = newRole;
-
-            } else { // type === 'individual'
-                customPermissions = Array.from(permContainer.querySelectorAll('.custom-perm-checkbox:checked')).map(cb => cb.dataset.perm);
-                const displayRoleSelect = permContainer.querySelector('.display-role-select');
-                if (!displayRoleSelect) { console.error(`[CLICK] Konnte Display-Rollen-Select für User ${userId} nicht finden!`); return; }
-                newDisplayRole = displayRoleSelect.value || 'NO_RIGHTS';
-
-                // Leite die *echte* Rolle vom *Display* ab
-                if (newDisplayRole === 'ADMIN') {
-                    newRole = 'ADMIN';
-                } else if (newDisplayRole === 'SYSTEMADMIN') {
-                    newRole = 'SYSTEMADMIN';
-                } else if (newDisplayRole === 'NO_RIGHTS') {
-                    newRole = 'NO_RIGHTS';
-                } else {
-                    newRole = newDisplayRole;
-                }
-
-                detailsForRequest.customPermissions = customPermissions;
-                detailsForRequest.displayRole = newDisplayRole !== 'NO_RIGHTS' ? newDisplayRole : null;
-            }
-
-            // Prüfen ob Beförderung zum Admin stattfindet
-            const wasAdmin = (originalUser.role === 'ADMIN') || (originalUser.displayRole === 'ADMIN');
-            const willBeAdmin = (newRole === 'ADMIN') || (newDisplayRole === 'ADMIN');
-
-            const approvalRules = currentUser.adminPermissions?.approvalRequired || {};
-            let needsApproval = false;
-
-            if (willBeAdmin && !wasAdmin) {
-                // Beförderung zum Admin
-                needsApproval = approvalRules['setAdminStatus'] === true;
-            } else {
-                // Normale Änderung
-                needsApproval = approvalRules['canChangeUserPermissionType'] === true;
-            }
-
-            const autoApproveFlag = !needsApproval;
-            detailsForRequest.autoApprove = autoApproveFlag;
-
             try {
-                await createApprovalRequest(
-                    'CHANGE_PERMISSION_TYPE',
-                    userId,
-                    detailsForRequest
-                );
-
-                if (autoApproveFlag) {
-                    await logAdminAction('user_perms_updated_autoapproved', `Berechtigungen für ${originalUser.name} geändert (Auto-Approve).`);
-                } else {
-                    await logAdminAction('user_perms_updated_pending', `Antrag auf Berechtigungsänderung für ${originalUser.name} eingereicht.`);
-                }
-
-                const saveBtnContainer = permContainer.querySelector('.save-perms-container');
-                if (saveBtnContainer) saveBtnContainer.classList.add('hidden');
-
+                await submitPermissionChange(userId, permContainer);
             } catch (error) {
                 console.error(`[CLICK] FEHLER beim Senden der Berechtigungs-Anfrage für User ${userId}:`, error);
                 alertUser(`Fehler beim Senden der Anfrage: ${error.message}`, "error");
@@ -1117,11 +1192,6 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                     }
                 }
 
-                const saveBtnContainer = container.querySelector('.save-perms-container');
-                if (saveBtnContainer) {
-                    saveBtnContainer.classList.remove('hidden');
-                }
-
                 // 3. Wenn eine Checkbox geändert wird, Abhängigkeiten prüfen
                 if (target.classList.contains('custom-perm-checkbox') && target.closest('.individual-perms-area')) {
                     const individualPermsArea = container.querySelector('.individual-perms-area');
@@ -1129,6 +1199,8 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                         ensurePermissionDependencies(individualPermsArea);
                     }
                 }
+
+                queuePermissionAutoSave(userId, container);
                 return;
             }
 

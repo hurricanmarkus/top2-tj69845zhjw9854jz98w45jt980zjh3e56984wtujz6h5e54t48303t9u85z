@@ -1,14 +1,24 @@
 {
-  "version": "1.15.6",
-  "buildId": "20260505-1",
+  "version": "1.15.7",
+  "buildId": "20260505-2",
   "releaseDate": "2026-05-05",
-  "releaseTime": "10:34",
+  "releaseTime": "10:42",
   "bereich": "Smart Top2",
   "timezone": "Europe/Vienna",
-  "note": "Gardena-Stop-Aktionen reagieren jetzt zuverlässig (kein stilles Ignorieren bei fehlender serviceId) und laufen über ein eigenes Bestätigungsmodal 'Wirklich beenden? Ja/Nein'.",
+  "note": "Benutzersteuerung speichert Berechtigungsänderungen jetzt direkt bei jeder Checkbox-/Auswahländerung; Rollen-/Rechte-Updates werden live aus Firestore angewendet, ohne erzwungenen Re-Login bei Token-Rollenmismatch.",
   "commitId": "",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.15.7",
+      "buildId": "20260505-2",
+      "releaseDate": "2026-05-05",
+      "releaseTime": "10:42",
+      "bereich": "Smart Top2",
+      "note": "Benutzersteuerung speichert Berechtigungsänderungen jetzt direkt bei jeder Checkbox-/Auswahländerung; Rollen-/Rechte-Updates werden live aus Firestore angewendet, ohne erzwungenen Re-Login bei Token-Rollenmismatch.",
+      "commitId": "",
+      "obligation": "false"
+    },
     {
       "version": "1.15.6",
       "buildId": "20260505-1",

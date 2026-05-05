@@ -89,6 +89,7 @@ export function clearAllUserData() {
 
 // Globales Objekt für gecachte Benutzereinstellungen
 export let userSettings = {};
+let roleMismatchInfoShownForUserId = null;
 
 /**
  * Speichert eine Benutzereinstellung in Firebase
@@ -278,19 +279,13 @@ export async function checkCurrentUserValidity() {
         // 4. Vergleiche!
         //    Wir ignorieren den Fall, wo beide 'null' sind (z.B. bei 'not_registered')
         if (tokenRole !== firestoreRole && (tokenRole || firestoreRole)) {
-            console.warn(`CHECK-MISMATCH! Rolle im Token: '${tokenRole}', Rolle in Firestore: '${firestoreRole}'`);
-            
-            // 5. Erzwinge Logout, damit der Benutzer sich neu anmelden MUSS,
-            //    um ein korrektes Token (neuen "Ausweis") zu bekommen.
-            switchToGuestMode(
-                true, 
-                "Ihre Benutzer-Berechtigungen wurden von einem Admin geändert. Bitte melden Sie sich erneut an, um die Änderungen zu übernehmen.", 
-                "info" // "info" ist besser als "error"
-            );
-            
-            // WICHTIG: Hier abbrechen, damit der Rest der Funktion nicht
-            // die UI mit falschen Rechten (halb alt, halb neu) aufbaut.
-            return; 
+            console.warn(`CHECK-MISMATCH! Rolle im Token: '${tokenRole}', Rolle in Firestore: '${firestoreRole}'. Firestore-Rolle wird live angewendet.`);
+            if (roleMismatchInfoShownForUserId !== storedAppUserId) {
+                roleMismatchInfoShownForUserId = storedAppUserId;
+                alertUser('Ihre Berechtigungen wurden aktualisiert und sind sofort aktiv.', 'info');
+            }
+        } else if (roleMismatchInfoShownForUserId === storedAppUserId) {
+            roleMismatchInfoShownForUserId = null;
         }
         
         // =========================================================
