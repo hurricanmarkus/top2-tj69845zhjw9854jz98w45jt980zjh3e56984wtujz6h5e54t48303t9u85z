@@ -48,7 +48,8 @@ function canUseEntranceRefreshButton() {
   return permissions.includes('ENTRANCE_GARDENA')
     || permissions.includes('ENTRANCE_HUE')
     || permissions.includes('ENTRANCE_HOMEMATIC')
-    || permissions.includes('ENTRANCE_SWITCHBOT');
+    || permissions.includes('ENTRANCE_SWITCHBOT')
+    || permissions.includes('ENTRANCE_SMARTLIFE');
 }
 
 function escapeHtml(value = '') {

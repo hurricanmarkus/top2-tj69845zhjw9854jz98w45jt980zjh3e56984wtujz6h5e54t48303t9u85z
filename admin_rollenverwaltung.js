@@ -200,6 +200,7 @@ export function renderRoleManagement() {
             const isEntranceHueEnabled = role.permissions?.includes('ENTRANCE_HUE');
             const isEntranceHomematicEnabled = role.permissions?.includes('ENTRANCE_HOMEMATIC');
             const isEntranceSwitchbotEnabled = role.permissions?.includes('ENTRANCE_SWITCHBOT');
+            const isEntranceSmartlifeEnabled = role.permissions?.includes('ENTRANCE_SMARTLIFE');
             
             permissionsCheckboxesHTML = Object.keys(PERMISSIONS_CONFIG).map(permKey => {
                 const perm = PERMISSIONS_CONFIG[permKey];
@@ -235,7 +236,8 @@ export function renderRoleManagement() {
                         || permKey === 'ENTRANCE_GARDENA'
                         || permKey === 'ENTRANCE_HUE'
                         || permKey === 'ENTRANCE_HOMEMATIC'
-                        || permKey === 'ENTRANCE_SWITCHBOT')
+                        || permKey === 'ENTRANCE_SWITCHBOT'
+                        || permKey === 'ENTRANCE_SMARTLIFE')
                     && !isEntranceEnabled
                 ) {
                     isDisabled = true;
@@ -250,6 +252,9 @@ export function renderRoleManagement() {
                     isDisabled = true;
                 }
                 if (permKey === 'ENTRANCE_SWITCHBOT_CONTROL' && !isEntranceSwitchbotEnabled) {
+                    isDisabled = true;
+                }
+                if (permKey === 'ENTRANCE_SMARTLIFE_CONTROL' && !isEntranceSmartlifeEnabled) {
                     isDisabled = true;
                 }
                 
@@ -302,11 +307,12 @@ export function renderRoleManagement() {
         };
 
         setupPair('CHECKLIST', ['CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS']);
-        setupPair('ENTRANCE', ['ENTRANCE_DOOR', 'ENTRANCE_GARDENA', 'ENTRANCE_HUE', 'ENTRANCE_HOMEMATIC', 'ENTRANCE_SWITCHBOT']);
+        setupPair('ENTRANCE', ['ENTRANCE_DOOR', 'ENTRANCE_GARDENA', 'ENTRANCE_HUE', 'ENTRANCE_HOMEMATIC', 'ENTRANCE_SWITCHBOT', 'ENTRANCE_SMARTLIFE']);
         setupPair('ENTRANCE_GARDENA', ['ENTRANCE_GARDENA_CONTROL']);
         setupPair('ENTRANCE_HUE', ['ENTRANCE_HUE_CONTROL']);
         setupPair('ENTRANCE_HOMEMATIC', ['ENTRANCE_HOMEMATIC_CONTROL']);
         setupPair('ENTRANCE_SWITCHBOT', ['ENTRANCE_SWITCHBOT_CONTROL']);
+        setupPair('ENTRANCE_SMARTLIFE', ['ENTRANCE_SMARTLIFE_CONTROL']);
         setupPair('PUSHOVER', ['PUSHOVER_SETTINGS_GRANTS', 'PUSHOVER_NOTRUF_SETTINGS']);
         setupPair('PUSHOVER_NOTRUF_SETTINGS', ['PUSHOVER_NOTRUF_SETTINGS_FLIC', 'PUSHOVER_NOTRUF_SETTINGS_NACHRICHTENCENTER', 'PUSHOVER_NOTRUF_SETTINGS_ALARM_PROGRAMME']);
         setupPair('TERMINPLANER', ['TERMINPLANER_CREATE']);

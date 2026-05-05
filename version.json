@@ -1,14 +1,24 @@
 {
-  "version": "1.16.6",
-  "buildId": "20260505-10",
+  "version": "1.16.7",
+  "buildId": "20260505-11",
   "releaseDate": "2026-05-05",
-  "releaseTime": "14:16",
+  "releaseTime": "20:15",
   "bereich": "Smart Top2",
   "timezone": "Europe/Vienna",
-  "note": "SwitchBot-Sicherheitsupdate: Bot bleibt bei 'Drücken' mindestens 5 Sekunden aktiv/grün blinkend; Keypad Vision und Smart Lock Ultra werden in Frontend und API vollständig blockiert und nicht mehr ausgeliefert.",
+  "note": "SmartLife ist jetzt vollständig im Smart Top2 integriert: neue Tuya-Cloud-Function mit Status/Schalten über Secrets, neue Entrance-Box inkl. Rechtekette, Rollenlogik und zentralem Refresh sowie Versions-Cache-Update.",
   "commitId": "0ae7df4",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.16.7",
+      "buildId": "20260505-11",
+      "releaseDate": "2026-05-05",
+      "releaseTime": "20:15",
+      "bereich": "Smart Top2",
+      "note": "SmartLife ist jetzt vollständig im Smart Top2 integriert: neue Tuya-Cloud-Function mit Status/Schalten über Secrets, neue Entrance-Box inkl. Rechtekette, Rollenlogik und zentralem Refresh sowie Versions-Cache-Update.",
+      "commitId": "0ae7df4",
+      "obligation": "false"
+    },
     {
       "version": "1.16.6",
       "buildId": "20260505-10",

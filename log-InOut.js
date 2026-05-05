@@ -325,6 +325,8 @@ export async function checkCurrentUserValidity() {
                 'ENTRANCE_HOMEMATIC_CONTROL',
                 'ENTRANCE_SWITCHBOT',
                 'ENTRANCE_SWITCHBOT_CONTROL',
+                'ENTRANCE_SMARTLIFE',
+                'ENTRANCE_SMARTLIFE_CONTROL',
                 'PUSHOVER',
                 'PUSHOVER_SETTINGS_GRANTS',
                 'PUSHOVER_NOTRUF_SETTINGS',
@@ -547,18 +549,21 @@ export function updateUIForMode() {
     const hueEntranceSection = document.getElementById('hueEntranceSection');
     const homematicEntranceSection = document.getElementById('homematicEntranceSection');
     const switchbotEntranceSection = document.getElementById('switchbotEntranceSection');
+    const smartlifeEntranceSection = document.getElementById('smartlifeEntranceSection');
 
     const canSeeEntranceDoor = isAllowedBySysadmin || userPermissions.includes('ENTRANCE_DOOR');
     const canSeeGardena = isAllowedBySysadmin || userPermissions.includes('ENTRANCE_GARDENA');
     const canSeeHue = isAllowedBySysadmin || userPermissions.includes('ENTRANCE_HUE');
     const canSeeHomematic = isAllowedBySysadmin || userPermissions.includes('ENTRANCE_HOMEMATIC');
     const canSeeSwitchbot = isAllowedBySysadmin || userPermissions.includes('ENTRANCE_SWITCHBOT');
+    const canSeeSmartlife = isAllowedBySysadmin || userPermissions.includes('ENTRANCE_SMARTLIFE');
 
     if (entranceDoorSection) entranceDoorSection.style.display = canSeeEntranceDoor ? '' : 'none';
     if (gardenaEntranceSection) gardenaEntranceSection.style.display = canSeeGardena ? '' : 'none';
     if (hueEntranceSection) hueEntranceSection.style.display = canSeeHue ? '' : 'none';
     if (homematicEntranceSection) homematicEntranceSection.style.display = canSeeHomematic ? '' : 'none';
     if (switchbotEntranceSection) switchbotEntranceSection.style.display = canSeeSwitchbot ? '' : 'none';
+    if (smartlifeEntranceSection) smartlifeEntranceSection.style.display = canSeeSmartlife ? '' : 'none';
 
     const pushoverSettingsToggleButton = document.getElementById('pushoverSettingsToggleButton');
     const canSeePushoverSettings = isAllowedBySysadmin || userPermissions.includes('PUSHOVER_SETTINGS_GRANTS');

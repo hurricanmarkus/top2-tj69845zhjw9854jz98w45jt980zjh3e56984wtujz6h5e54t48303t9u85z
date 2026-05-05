@@ -41,6 +41,7 @@ import { initializeGardenaEntranceControls, refreshGardenaEntranceControls } fro
 import { initializeHueEntranceControls, refreshHueEntranceControls } from './hue-entrance.js';
 import { initializeHomematicEntranceControls, refreshHomematicEntranceControls } from './homematic-entrance.js';
 import { initializeSwitchbotEntranceControls, refreshSwitchbotEntranceControls } from './switchbot-entrance.js';
+import { initializeSmartlifeEntranceControls, refreshSmartlifeEntranceControls } from './smartlife-entrance.js';
 import { ensureNachrichtencenterSelfContact } from './notfall.js';
 import { initializeNotizen, stopNotizenListeners } from './notizen.js';
 import { initializeMitarbeiterkarte, stopMitarbeiterkarteListeners } from './ma-karte.js';
@@ -65,6 +66,8 @@ export const PERMISSIONS_CONFIG = {
     'ENTRANCE_HOMEMATIC_CONTROL': { label: '-> -> Geräte einstellen', indent: true },
     'ENTRANCE_SWITCHBOT': { label: '-> SwitchBot', indent: true },
     'ENTRANCE_SWITCHBOT_CONTROL': { label: '-> -> Geräte einstellen', indent: true },
+    'ENTRANCE_SMARTLIFE': { label: '-> SmartLife', indent: true },
+    'ENTRANCE_SMARTLIFE_CONTROL': { label: '-> -> Geräte einstellen', indent: true },
     'PUSHOVER': { label: 'Push-Nachricht senden', indent: false },
     'PUSHMAIL_CENTER': { label: 'PUSHMAIL-Center', indent: false },
     'PUSHOVER_SETTINGS_GRANTS': { label: '-> Einstellungen-Button zum Berechtigungen anlegen', indent: true },
@@ -111,6 +114,8 @@ const PERMISSION_PARENT_MAP = {
     ENTRANCE_HOMEMATIC_CONTROL: ['ENTRANCE_HOMEMATIC'],
     ENTRANCE_SWITCHBOT: ['ENTRANCE'],
     ENTRANCE_SWITCHBOT_CONTROL: ['ENTRANCE_SWITCHBOT'],
+    ENTRANCE_SMARTLIFE: ['ENTRANCE'],
+    ENTRANCE_SMARTLIFE_CONTROL: ['ENTRANCE_SMARTLIFE'],
 };
 
 export function resolvePermissionList(permissionList = []) {
@@ -1804,6 +1809,10 @@ async function seedInitialData() {
                 'ENTRANCE_HUE_CONTROL',
                 'ENTRANCE_HOMEMATIC',
                 'ENTRANCE_HOMEMATIC_CONTROL',
+                'ENTRANCE_SWITCHBOT',
+                'ENTRANCE_SWITCHBOT_CONTROL',
+                'ENTRANCE_SMARTLIFE',
+                'ENTRANCE_SMARTLIFE_CONTROL',
             ];
             const defaultRoles = {
                 SYSTEMADMIN: { name: 'Systemadmin', permissions: [...smartTop2DefaultPerms, 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG', 'TOOLS', 'ZAHLUNGSVERWALTUNG', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG', 'REZEPTE', 'EINKAUFSLISTE', 'EINKAUFSLISTE_CREATE', 'EINKAUFSLISTE_MANAGE', 'EINKAUFSLISTE_MANAGE_WRITE'], deletable: false },
@@ -1834,6 +1843,10 @@ async function seedInitialData() {
                     'ENTRANCE_HUE_CONTROL',
                     'ENTRANCE_HOMEMATIC',
                     'ENTRANCE_HOMEMATIC_CONTROL',
+                    'ENTRANCE_SWITCHBOT',
+                    'ENTRANCE_SWITCHBOT_CONTROL',
+                    'ENTRANCE_SMARTLIFE',
+                    'ENTRANCE_SMARTLIFE_CONTROL',
                     'TOOLS',
                     'EINKAUFSLISTE',
                     'EINKAUFSLISTE_CREATE',
@@ -1859,6 +1872,10 @@ async function seedInitialData() {
                     'ENTRANCE_HUE_CONTROL',
                     'ENTRANCE_HOMEMATIC',
                     'ENTRANCE_HOMEMATIC_CONTROL',
+                    'ENTRANCE_SWITCHBOT',
+                    'ENTRANCE_SWITCHBOT_CONTROL',
+                    'ENTRANCE_SMARTLIFE',
+                    'ENTRANCE_SMARTLIFE_CONTROL',
                     'EINKAUFSLISTE',
                     'EINKAUFSLISTE_CREATE',
                     'EINKAUFSLISTE_MANAGE',
@@ -1884,6 +1901,10 @@ async function seedInitialData() {
                     'ENTRANCE_HUE_CONTROL',
                     'ENTRANCE_HOMEMATIC',
                     'ENTRANCE_HOMEMATIC_CONTROL',
+                    'ENTRANCE_SWITCHBOT',
+                    'ENTRANCE_SWITCHBOT_CONTROL',
+                    'ENTRANCE_SMARTLIFE',
+                    'ENTRANCE_SMARTLIFE_CONTROL',
                     'EINKAUFSLISTE'
                 ]));
                 if (nextAngemeldetPerms.length !== rolePerms.length) {
@@ -1952,6 +1973,7 @@ function bindEntranceRefreshButton() {
             refreshHueEntranceControls({ showLoading: true }),
             refreshHomematicEntranceControls({ showLoading: true }),
             refreshSwitchbotEntranceControls({ showLoading: true }),
+            refreshSmartlifeEntranceControls({ showLoading: true }),
         ]);
     });
 }
@@ -3110,6 +3132,7 @@ export function navigate(targetViewName, options = {}) {
         initializeHueEntranceControls({ alertUser });
         initializeHomematicEntranceControls({ alertUser });
         initializeSwitchbotEntranceControls({ alertUser });
+        initializeSmartlifeEntranceControls({ alertUser });
     }
 
     if (targetViewName === 'userSettings') {

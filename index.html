@@ -24,15 +24,15 @@
     <meta name="application-name" content="TOP 2 App">
     <meta name="apple-mobile-web-app-title" content="TOP2">
     <meta name="theme-color" content="#4f46e5" />
-    <meta name="top2-app-version" content="1.16.6" />
-    <meta name="top2-build-id" content="20260505-10" />
+    <meta name="top2-app-version" content="1.16.7" />
+    <meta name="top2-build-id" content="20260505-11" />
     <meta name="msapplication-navbutton-color" content="#4f46e5">
     <meta name="apple-mobile-app-status-bar-style" content="black-translucent">
     <link rel="icon" type="image/png" sizes="192x192" href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
     <link rel="apple-touch-icon" type="image/png" sizes="192x192"
         href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
 
-    <link rel="manifest" href="manifest.json?v=20260505-10">
+    <link rel="manifest" href="manifest.json?v=20260505-11">
 
     <link rel="stylesheet" href="style.css">
     
@@ -799,6 +799,34 @@
 
                             <div id="switchbotEntranceDetails" class="hidden space-y-1">
                                 <div id="switchbotEntranceInfo"></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="smartlifeEntranceSection" class="mt-1 space-y-1" data-connected="false">
+                    <div class="rounded-xl bg-gradient-to-br from-amber-500 via-orange-500 to-red-600 p-[1px] shadow-md">
+                        <div class="rounded-[calc(0.75rem-1px)] bg-white/95 p-2 backdrop-blur">
+                            <div id="smartlifeEntranceToggle" class="w-full text-left">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="min-w-0 text-xs font-extrabold text-slate-900">SmartLife</div>
+                                    <span id="smartlifeEntranceBadge" class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700">Cloud: lädt...</span>
+                                </div>
+                                <div id="smartlifeEntranceSummaryGrid" class="mt-1 grid grid-cols-2 gap-1"></div>
+                            </div>
+
+                            <div id="smartlifeEntranceLoading" class="hidden items-center justify-center gap-2 rounded-lg bg-slate-50 px-2 py-3 text-slate-600 ring-1 ring-slate-200">
+                                <svg class="h-4 w-4 animate-spin text-amber-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                                </svg>
+                                <span class="text-xs font-semibold">SmartLife lädt...</span>
+                            </div>
+
+                            <div id="smartlifeEntranceError" class="hidden rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs font-semibold text-red-700"></div>
+
+                            <div id="smartlifeEntranceDetails" class="hidden space-y-1">
+                                <div id="smartlifeEntranceInfo"></div>
                             </div>
                         </div>
                     </div>
