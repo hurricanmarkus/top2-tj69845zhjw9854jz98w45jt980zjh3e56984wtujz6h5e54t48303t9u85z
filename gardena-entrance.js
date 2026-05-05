@@ -49,6 +49,11 @@ const state = {
   selectedMinutes: 10,
   activeDeviceKey: '',
   postActionRefreshTimer: null,
+  stopConfirmOpen: false,
+  stopConfirmServiceId: '',
+  stopConfirmTargetType: 'VALVE',
+  stopConfirmCommand: '',
+  stopConfirmLabel: '',
 };
 
 let helperAlertUser = null;
@@ -149,6 +154,12 @@ function getElements() {
     confirmButtonText: document.querySelector('#gardenaDurationConfirmButton .button-text'),
     confirmButtonSpinner: document.querySelector('#gardenaDurationConfirmButton .loading-spinner'),
     presetButtons: Array.from(document.querySelectorAll('[data-gardena-preset-minutes]')),
+    stopModal: document.getElementById('gardenaStopConfirmModal'),
+    stopModalTitle: document.getElementById('gardenaStopConfirmModalTitle'),
+    stopModalText: document.getElementById('gardenaStopConfirmModalText'),
+    stopConfirmYesButton: document.getElementById('gardenaStopConfirmYesButton'),
+    stopConfirmYesButtonText: document.querySelector('#gardenaStopConfirmYesButton .button-text'),
+    stopConfirmYesButtonSpinner: document.querySelector('#gardenaStopConfirmYesButton .loading-spinner'),
   };
 }
 
@@ -461,7 +472,8 @@ function renderMowerCard(activeEntry) {
   const meta = activeEntry.meta || getMowerMeta(activeEntry.mower);
   const mower = activeEntry.mower || {};
   const isPending = mower.serviceId && state.pendingServiceIds.has(mower.serviceId);
-  const actionDisabledAttr = isPending ? 'disabled' : '';
+  const hasServiceId = Boolean(String(mower.serviceId || '').trim());
+  const actionDisabledAttr = isPending || !hasServiceId ? 'disabled' : '';
 
   return `
     <div class="rounded-xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-2 shadow-sm">
@@ -507,11 +519,17 @@ function renderMowerCard(activeEntry) {
             class="flex-1 rounded-lg bg-rose-600 px-2.5 py-1.5 text-[11px] font-extrabold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center"
             data-gardena-action="mower-stop"
             data-service-id="${escapeHtml(mower.serviceId || '')}"
+            data-device-name="${escapeHtml(mower.name || 'Mähroboter')}"
             ${actionDisabledAttr}
           >
             <span class="button-text" style="display:${isPending ? 'none' : 'inline-block'}">Beenden</span>
             <span class="loading-spinner" style="display:${isPending ? 'inline-block' : 'none'}"></span>
           </button>
+        ` : ''}
+        ${(meta.showStart || meta.showStop) && !hasServiceId ? `
+          <div class="w-full rounded-lg bg-amber-100 px-2.5 py-1 text-[10px] font-semibold text-amber-800">
+            Steuerung momentan nicht möglich (serviceId fehlt).
+          </div>
         ` : ''}
       </div>
     </div>
@@ -570,6 +588,7 @@ function renderValveCards(activeEntry) {
             class="flex-1 rounded-lg bg-rose-600 px-2.5 py-1.5 text-[11px] font-extrabold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center"
             data-gardena-action="stop"
             data-service-id="${escapeHtml(valve.serviceId || '')}"
+            data-valve-name="${escapeHtml(valve.name || `Ventil ${valve.slot || ''}`)}"
             ${stopDisabledAttr}
           >
             <span class="button-text" style="display:${isPending ? 'none' : 'inline-block'}">Stoppen</span>
@@ -682,11 +701,64 @@ function renderModal() {
   setButtonBusy(confirmButton, confirmButtonText, confirmButtonSpinner, isBusy);
 }
 
+function closeStopConfirmModal() {
+  state.stopConfirmOpen = false;
+  state.stopConfirmServiceId = '';
+  state.stopConfirmTargetType = 'VALVE';
+  state.stopConfirmCommand = '';
+  state.stopConfirmLabel = '';
+  renderStopConfirmModal();
+}
+
+function openStopConfirmModal(serviceId, targetType, command, label = '') {
+  state.stopConfirmServiceId = String(serviceId || '').trim();
+  state.stopConfirmTargetType = String(targetType || 'VALVE').trim().toUpperCase();
+  state.stopConfirmCommand = String(command || '').trim().toUpperCase();
+  state.stopConfirmLabel = String(label || '').trim();
+  state.stopConfirmOpen = true;
+  renderStopConfirmModal();
+}
+
+function renderStopConfirmModal() {
+  const {
+    stopModal,
+    stopModalTitle,
+    stopModalText,
+    stopConfirmYesButton,
+    stopConfirmYesButtonText,
+    stopConfirmYesButtonSpinner,
+  } = getElements();
+  if (!stopModal) return;
+
+  if (!hasGardenaControlPermission()) {
+    state.stopConfirmOpen = false;
+  }
+
+  const show = state.stopConfirmOpen;
+  stopModal.classList.toggle('hidden', !show);
+  stopModal.classList.toggle('flex', show);
+
+  const isMower = state.stopConfirmTargetType === 'MOWER';
+  const targetLabel = state.stopConfirmLabel || (isMower ? 'Mähroboter' : 'Ventil');
+
+  if (stopModalTitle) {
+    stopModalTitle.textContent = 'Wirklich beenden?';
+  }
+
+  if (stopModalText) {
+    stopModalText.textContent = `${targetLabel} wird bis zum nächsten Plan gestoppt.`;
+  }
+
+  const isBusy = state.stopConfirmServiceId && state.pendingServiceIds.has(state.stopConfirmServiceId);
+  setButtonBusy(stopConfirmYesButton, stopConfirmYesButtonText, stopConfirmYesButtonSpinner, isBusy);
+}
+
 function render() {
   const canControl = hasGardenaControlPermission();
   if (!canControl) {
     state.activeDeviceKey = '';
     state.modalOpen = false;
+    state.stopConfirmOpen = false;
   }
 
   const entries = getGardenaSummaryEntries();
@@ -695,6 +767,7 @@ function render() {
   renderStatusMeta();
   renderSummaryGrid(entries, activeEntry);
   renderModal();
+  renderStopConfirmModal();
 }
 
 async function readJsonResponse(response) {
@@ -762,6 +835,7 @@ async function fetchStatus() {
     state.loading = false;
     state.activeDeviceKey = '';
     state.modalOpen = false;
+    state.stopConfirmOpen = false;
     render();
     return;
   }
@@ -851,6 +925,7 @@ async function sendCommand(serviceId, command, seconds = null, targetType = 'VAL
       : (command === 'STOP_UNTIL_NEXT_TASK' ? 'Ventil wird gestoppt.' : 'Ventil wird gestartet.');
     alertUser(successMessage, 'success');
     closeDurationModal();
+    closeStopConfirmModal();
     scheduleStatusRefresh(5000);
   } catch (error) {
     alertUser(extractErrorMessage(error, 'Befehl konnte nicht gesendet werden.'), 'error_long');
@@ -880,7 +955,7 @@ function bindListeners() {
   if (state.listenersBound) return;
   state.listenersBound = true;
 
-  const { summaryGrid, presetButtons, durationInput, confirmButton, modal } = getElements();
+  const { summaryGrid, presetButtons, durationInput, confirmButton, modal, stopModal, stopConfirmYesButton } = getElements();
 
   summaryGrid?.addEventListener('click', (event) => {
     const actionButton = event.target.closest('[data-gardena-action]');
@@ -890,9 +965,16 @@ function bindListeners() {
       }
 
       const action = actionButton.dataset.gardenaAction;
-      const serviceId = actionButton.dataset.serviceId || '';
+      const serviceId = String(actionButton.dataset.serviceId || '').trim();
 
-      if (!serviceId) return;
+      if (!serviceId) {
+        if (action === 'mower-start' || action === 'mower-stop') {
+          alertUser('Für den Mäher ist keine serviceId verfügbar.', 'error');
+        } else {
+          alertUser('Für dieses Ventil ist keine serviceId verfügbar.', 'error');
+        }
+        return;
+      }
 
       if (action === 'mower-start') {
         sendMowerCommand(serviceId, 'START_DONT_OVERRIDE').catch(() => {});
@@ -900,7 +982,7 @@ function bindListeners() {
       }
 
       if (action === 'mower-stop') {
-        sendMowerCommand(serviceId, 'PARK_UNTIL_NEXT_TASK').catch(() => {});
+        openStopConfirmModal(serviceId, 'MOWER', 'PARK_UNTIL_NEXT_TASK', actionButton.dataset.deviceName || 'Mähroboter');
         return;
       }
 
@@ -910,7 +992,7 @@ function bindListeners() {
       }
 
       if (action === 'stop') {
-        sendValveCommand(serviceId, 'STOP_UNTIL_NEXT_TASK').catch(() => {});
+        openStopConfirmModal(serviceId, 'VALVE', 'STOP_UNTIL_NEXT_TASK', actionButton.dataset.valveName || 'Ventil');
       }
       return;
     }
@@ -949,9 +1031,27 @@ function bindListeners() {
     }
   });
 
+  stopConfirmYesButton?.addEventListener('click', () => {
+    if (!state.stopConfirmServiceId || !state.stopConfirmCommand) {
+      return;
+    }
+    sendCommand(
+      state.stopConfirmServiceId,
+      state.stopConfirmCommand,
+      null,
+      state.stopConfirmTargetType,
+    ).catch(() => {});
+  });
+
   modal?.addEventListener('click', (event) => {
     if (event.target.closest('[data-gardena-modal-close]')) {
       closeDurationModal();
+    }
+  });
+
+  stopModal?.addEventListener('click', (event) => {
+    if (event.target.closest('[data-gardena-stop-modal-close]')) {
+      closeStopConfirmModal();
     }
   });
 }

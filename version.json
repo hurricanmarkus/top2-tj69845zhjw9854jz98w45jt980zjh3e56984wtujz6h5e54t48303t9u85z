@@ -1,14 +1,24 @@
 {
-  "version": "1.15.5",
-  "buildId": "20260503-2",
-  "releaseDate": "2026-05-03",
-  "releaseTime": "12:49",
+  "version": "1.15.6",
+  "buildId": "20260505-1",
+  "releaseDate": "2026-05-05",
+  "releaseTime": "10:34",
   "bereich": "Smart Top2",
   "timezone": "Europe/Vienna",
-  "note": "Smart Top2 greift Berechtigungen aus Rollenverwaltung und Benutzersteuerung jetzt strikt durch: keine implizite ENTRANCE-Vollfreigabe mehr und individuelle Rechteänderungen mit Auto-Approve wirken sofort.",
+  "note": "Gardena-Stop-Aktionen reagieren jetzt zuverlässig (kein stilles Ignorieren bei fehlender serviceId) und laufen über ein eigenes Bestätigungsmodal 'Wirklich beenden? Ja/Nein'.",
   "commitId": "",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.15.6",
+      "buildId": "20260505-1",
+      "releaseDate": "2026-05-05",
+      "releaseTime": "10:34",
+      "bereich": "Smart Top2",
+      "note": "Gardena-Stop-Aktionen reagieren jetzt zuverlässig (kein stilles Ignorieren bei fehlender serviceId) und laufen über ein eigenes Bestätigungsmodal 'Wirklich beenden? Ja/Nein'.",
+      "commitId": "",
+      "obligation": "false"
+    },
     {
       "version": "1.15.5",
       "buildId": "20260503-2",
