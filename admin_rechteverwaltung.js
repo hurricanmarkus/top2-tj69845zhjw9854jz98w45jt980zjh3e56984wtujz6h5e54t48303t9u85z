@@ -96,7 +96,8 @@ export function setupPermissionDependencies(container) {
             '[data-perm="ENTRANCE_DOOR"]',
             '[data-perm="ENTRANCE_GARDENA"]',
             '[data-perm="ENTRANCE_HUE"]',
-            '[data-perm="ENTRANCE_HOMEMATIC"]'
+            '[data-perm="ENTRANCE_HOMEMATIC"]',
+            '[data-perm="ENTRANCE_SWITCHBOT"]'
         ]
     );
 
@@ -118,6 +119,13 @@ export function setupPermissionDependencies(container) {
         '[data-perm="ENTRANCE_HOMEMATIC"]',
         [
             '[data-perm="ENTRANCE_HOMEMATIC_CONTROL"]'
+        ]
+    );
+
+    setupToggleLogic(
+        '[data-perm="ENTRANCE_SWITCHBOT"]',
+        [
+            '[data-perm="ENTRANCE_SWITCHBOT_CONTROL"]'
         ]
     );
 

@@ -41,6 +41,16 @@ function hasHueViewPermission() {
   return Array.isArray(currentUser.permissions) && currentUser.permissions.includes('ENTRANCE_HUE');
 }
 
+function canUseEntranceRefreshButton() {
+  if (!currentUser.mode || currentUser.mode === GUEST_MODE) return false;
+  if (currentUser.role === 'SYSTEMADMIN') return true;
+  const permissions = Array.isArray(currentUser.permissions) ? currentUser.permissions : [];
+  return permissions.includes('ENTRANCE_GARDENA')
+    || permissions.includes('ENTRANCE_HUE')
+    || permissions.includes('ENTRANCE_HOMEMATIC')
+    || permissions.includes('ENTRANCE_SWITCHBOT');
+}
+
 function escapeHtml(value = '') {
   return String(value).replace(/[&<>"']/g, (char) => ({
     '&': '&amp;',
@@ -488,7 +498,7 @@ function renderStatus() {
     elements.connectButton.style.display = isLoggedIn && canControl && !connected ? 'inline-flex' : 'none';
   }
   if (elements.refreshButton) {
-    elements.refreshButton.style.display = isLoggedIn && isHueViewVisible() ? 'inline-flex' : 'none';
+    elements.refreshButton.style.display = isLoggedIn && isHueViewVisible() && canUseEntranceRefreshButton() ? 'inline-flex' : 'none';
   }
 
   if (elements.deviceGrid) {

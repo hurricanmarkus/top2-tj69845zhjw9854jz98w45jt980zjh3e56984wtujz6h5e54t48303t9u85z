@@ -40,6 +40,7 @@ import { initializeEinkaufsliste, stopEinkaufslisteListeners } from './einkaufsl
 import { initializeGardenaEntranceControls, refreshGardenaEntranceControls } from './gardena-entrance.js';
 import { initializeHueEntranceControls, refreshHueEntranceControls } from './hue-entrance.js';
 import { initializeHomematicEntranceControls, refreshHomematicEntranceControls } from './homematic-entrance.js';
+import { initializeSwitchbotEntranceControls, refreshSwitchbotEntranceControls } from './switchbot-entrance.js';
 import { ensureNachrichtencenterSelfContact } from './notfall.js';
 import { initializeNotizen, stopNotizenListeners } from './notizen.js';
 import { initializeMitarbeiterkarte, stopMitarbeiterkarteListeners } from './ma-karte.js';
@@ -62,6 +63,8 @@ export const PERMISSIONS_CONFIG = {
     'ENTRANCE_HUE_CONTROL': { label: '-> -> Geräte einstellen', indent: true },
     'ENTRANCE_HOMEMATIC': { label: '-> Homematic', indent: true },
     'ENTRANCE_HOMEMATIC_CONTROL': { label: '-> -> Geräte einstellen', indent: true },
+    'ENTRANCE_SWITCHBOT': { label: '-> SwitchBot', indent: true },
+    'ENTRANCE_SWITCHBOT_CONTROL': { label: '-> -> Geräte einstellen', indent: true },
     'PUSHOVER': { label: 'Push-Nachricht senden', indent: false },
     'PUSHMAIL_CENTER': { label: 'PUSHMAIL-Center', indent: false },
     'PUSHOVER_SETTINGS_GRANTS': { label: '-> Einstellungen-Button zum Berechtigungen anlegen', indent: true },
@@ -106,6 +109,8 @@ const PERMISSION_PARENT_MAP = {
     ENTRANCE_HUE_CONTROL: ['ENTRANCE_HUE'],
     ENTRANCE_HOMEMATIC: ['ENTRANCE'],
     ENTRANCE_HOMEMATIC_CONTROL: ['ENTRANCE_HOMEMATIC'],
+    ENTRANCE_SWITCHBOT: ['ENTRANCE'],
+    ENTRANCE_SWITCHBOT_CONTROL: ['ENTRANCE_SWITCHBOT'],
 };
 
 export function resolvePermissionList(permissionList = []) {
@@ -1946,6 +1951,7 @@ function bindEntranceRefreshButton() {
             refreshGardenaEntranceControls(),
             refreshHueEntranceControls({ showLoading: true }),
             refreshHomematicEntranceControls({ showLoading: true }),
+            refreshSwitchbotEntranceControls({ showLoading: true }),
         ]);
     });
 }
@@ -3103,6 +3109,7 @@ export function navigate(targetViewName, options = {}) {
         initializeGardenaEntranceControls({ alertUser });
         initializeHueEntranceControls({ alertUser });
         initializeHomematicEntranceControls({ alertUser });
+        initializeSwitchbotEntranceControls({ alertUser });
     }
 
     if (targetViewName === 'userSettings') {

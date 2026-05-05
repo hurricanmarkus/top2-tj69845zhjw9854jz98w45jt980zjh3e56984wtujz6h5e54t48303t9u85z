@@ -1,14 +1,24 @@
 {
-  "version": "1.15.8",
-  "buildId": "20260505-3",
+  "version": "1.16.0",
+  "buildId": "20260505-4",
   "releaseDate": "2026-05-05",
-  "releaseTime": "10:52",
+  "releaseTime": "12:56",
   "bereich": "Smart Top2",
   "timezone": "Europe/Vienna",
-  "note": "Benutzersteuerung sammelt Rechteänderungen jetzt pro Benutzer ohne Sofort-Übertragung und zeigt eine fixe pulsierende Speicherleiste über der Fußzeile; Speichern erfolgt gesammelt per Button.",
-  "commitId": "",
+  "note": "Smart Top2 integriert jetzt SwitchBot mit eigener Cloud-Function-Proxy-API, neuer Gerätebox in der Entrance-Ansicht und vollständigen Rollen-/Rechte-Schaltern für Sicht und Steuerung.",
+  "commitId": "pending",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.16.0",
+      "buildId": "20260505-4",
+      "releaseDate": "2026-05-05",
+      "releaseTime": "12:56",
+      "bereich": "Smart Top2",
+      "note": "Smart Top2 integriert jetzt SwitchBot mit eigener Cloud-Function-Proxy-API, neuer Gerätebox in der Entrance-Ansicht und vollständigen Rollen-/Rechte-Schaltern für Sicht und Steuerung.",
+      "commitId": "pending",
+      "obligation": "false"
+    },
     {
       "version": "1.15.8",
       "buildId": "20260505-3",
