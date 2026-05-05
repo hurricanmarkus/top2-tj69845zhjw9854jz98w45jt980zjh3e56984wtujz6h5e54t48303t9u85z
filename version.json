@@ -1,14 +1,24 @@
 {
-  "version": "1.16.0",
-  "buildId": "20260505-4",
+  "version": "1.16.1",
+  "buildId": "20260505-5",
   "releaseDate": "2026-05-05",
-  "releaseTime": "12:56",
+  "releaseTime": "13:03",
   "bereich": "Smart Top2",
   "timezone": "Europe/Vienna",
-  "note": "Smart Top2 integriert jetzt SwitchBot mit eigener Cloud-Function-Proxy-API, neuer Gerätebox in der Entrance-Ansicht und vollständigen Rollen-/Rechte-Schaltern für Sicht und Steuerung.",
-  "commitId": "pending",
+  "note": "Release-Metadaten wurden konsistent finalisiert; SwitchBot-Integration bleibt vollständig aktiv inklusive Backend-Proxy, Entrance-Box und Rechtekette.",
+  "commitId": "0ae7df4",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.16.1",
+      "buildId": "20260505-5",
+      "releaseDate": "2026-05-05",
+      "releaseTime": "13:03",
+      "bereich": "Smart Top2",
+      "note": "Release-Metadaten wurden konsistent finalisiert; SwitchBot-Integration bleibt vollständig aktiv inklusive Backend-Proxy, Entrance-Box und Rechtekette.",
+      "commitId": "0ae7df4",
+      "obligation": "false"
+    },
     {
       "version": "1.16.0",
       "buildId": "20260505-4",
@@ -16,7 +26,7 @@
       "releaseTime": "12:56",
       "bereich": "Smart Top2",
       "note": "Smart Top2 integriert jetzt SwitchBot mit eigener Cloud-Function-Proxy-API, neuer Gerätebox in der Entrance-Ansicht und vollständigen Rollen-/Rechte-Schaltern für Sicht und Steuerung.",
-      "commitId": "pending",
+      "commitId": "0ae7df4",
       "obligation": "false"
     },
     {
