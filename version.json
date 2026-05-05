@@ -1,14 +1,24 @@
 {
-  "version": "1.15.7",
-  "buildId": "20260505-2",
+  "version": "1.15.8",
+  "buildId": "20260505-3",
   "releaseDate": "2026-05-05",
-  "releaseTime": "10:42",
+  "releaseTime": "10:52",
   "bereich": "Smart Top2",
   "timezone": "Europe/Vienna",
-  "note": "Benutzersteuerung speichert Berechtigungsänderungen jetzt direkt bei jeder Checkbox-/Auswahländerung; Rollen-/Rechte-Updates werden live aus Firestore angewendet, ohne erzwungenen Re-Login bei Token-Rollenmismatch.",
+  "note": "Benutzersteuerung sammelt Rechteänderungen jetzt pro Benutzer ohne Sofort-Übertragung und zeigt eine fixe pulsierende Speicherleiste über der Fußzeile; Speichern erfolgt gesammelt per Button.",
   "commitId": "",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.15.8",
+      "buildId": "20260505-3",
+      "releaseDate": "2026-05-05",
+      "releaseTime": "10:52",
+      "bereich": "Smart Top2",
+      "note": "Benutzersteuerung sammelt Rechteänderungen jetzt pro Benutzer ohne Sofort-Übertragung und zeigt eine fixe pulsierende Speicherleiste über der Fußzeile; Speichern erfolgt gesammelt per Button.",
+      "commitId": "",
+      "obligation": "false"
+    },
     {
       "version": "1.15.7",
       "buildId": "20260505-2",

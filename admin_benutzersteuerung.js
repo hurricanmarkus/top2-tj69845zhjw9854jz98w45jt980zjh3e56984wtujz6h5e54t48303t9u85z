@@ -11,6 +11,9 @@ import { createApprovalRequest } from './admin_genehmigungsprozess.js';
 import { renderRoleManagement } from './admin_rollenverwaltung.js'; // NEU: renderRoleManagement importiert
 // ENDE-ZIKA //
 
+const pendingUserPermissionChanges = new Set();
+let isBulkPermissionSaveRunning = false;
+
 // ERSETZE die Funktion "listenForUserUpdates" in admin_benutzersteuerung.js:
 
 export function listenForUserUpdates() {
@@ -56,8 +59,12 @@ export function listenForUserUpdates() {
                 // Benutzer-Liste aktualisieren (Das behebt Bug 2!)
                 // Wir prüfen, ob die Liste im DOM ist. Wenn ja -> Neu zeichnen.
                 if (document.getElementById('registeredUserList')) {
-                    console.log("Live-Update: Benutzerliste wird aktualisiert...");
-                    if (typeof renderUserManagement === 'function') renderUserManagement();
+                    if (pendingUserPermissionChanges.size > 0) {
+                        console.log('Live-Update: Benutzerliste wird wegen ungespeicherter Rechteentwürfe nicht neu gerendert.');
+                    } else {
+                        console.log("Live-Update: Benutzerliste wird aktualisiert...");
+                        if (typeof renderUserManagement === 'function') renderUserManagement();
+                    }
                 }
 
                 // Rollen-Liste aktualisieren
@@ -354,7 +361,45 @@ export function renderUserManagement() {
             </button>
             <div id="notRegisteredList" class="hidden mt-2 space-y-2 pl-4 border-l-2 border-gray-200">
                 </div>
+        </div>
+
+        <div id="user-perms-sticky-save-bar" class="hidden fixed left-1/2 bottom-12 z-30 w-[calc(100%-1rem)] max-w-[640px] -translate-x-1/2 rounded-xl border-t-4 border-red-400 bg-red-700 p-3 text-white shadow-2xl">
+            <div class="flex items-center justify-between gap-3">
+                <span id="user-perms-sticky-save-text" class="text-sm font-medium">Änderungen noch nicht gespeichert.</span>
+                <button id="user-perms-sticky-save-button" type="button" class="flex items-center rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-green-700 animate-pulse">
+                    <span class="button-text">Speichern</span>
+                    <div class="loading-spinner" style="display: none;"></div>
+                </button>
+            </div>
         </div>`;
+
+    const existingIds = new Set(Object.keys(USERS || {}));
+    [...pendingUserPermissionChanges].forEach((userId) => {
+        if (!existingIds.has(userId)) {
+            pendingUserPermissionChanges.delete(userId);
+        }
+    });
+
+    const stickySaveBar = userManagementArea.querySelector('#user-perms-sticky-save-bar');
+    const stickySaveText = userManagementArea.querySelector('#user-perms-sticky-save-text');
+    if (stickySaveBar) {
+        const hasPending = pendingUserPermissionChanges.size > 0;
+        stickySaveBar.classList.toggle('hidden', !hasPending);
+    }
+    if (stickySaveText) {
+        const pendingCount = pendingUserPermissionChanges.size;
+        stickySaveText.textContent = pendingCount > 1
+            ? `${pendingCount} Benutzer haben ungespeicherte Rechteänderungen.`
+            : 'Berechtigungsänderungen noch nicht gespeichert.';
+    }
+
+    [...pendingUserPermissionChanges].forEach((userId) => {
+        const configContainer = userManagementArea.querySelector(`.user-card[data-userid="${userId}"] .user-permission-config`);
+        const saveContainer = configContainer?.querySelector('.save-perms-container');
+        if (saveContainer) {
+            saveContainer.classList.remove('hidden');
+        }
+    });
 
     // Listener für "+ Benutzer anlegen" Button
     const addUserBtn = userManagementArea.querySelector('#showAddUserFormBtn');
@@ -495,7 +540,7 @@ export function renderUserManagement() {
             }).join('');
 
             permissionsHTML = `
-            <div class="mt-4 pt-3 border-t" data-userid="${userId}">
+            <div class="mt-4 pt-3 border-t user-permission-config" data-userid="${userId}">
                 <label class="block text-sm font-medium text-gray-700 mb-2">Berechtigungs-Typ</label>
                 <div class="flex items-center gap-4">
                     <label class="flex items-center"><input type="radio" name="perm-type-${userId}" value="role" class="perm-type-toggle h-4 w-4" ${permType === 'role' ? 'checked' : ''} ${!canChangePerms ? 'disabled' : ''}> <span class="ml-2">Rolle</span></label>
@@ -620,7 +665,42 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
         }
     };
 
-    const permissionSaveStateByUser = new Map();
+    const renderStickyPermissionSaveBar = () => {
+        const stickySaveBar = area.querySelector('#user-perms-sticky-save-bar');
+        const stickySaveText = area.querySelector('#user-perms-sticky-save-text');
+        const stickySaveButton = area.querySelector('#user-perms-sticky-save-button');
+
+        if (!stickySaveBar || !stickySaveText || !stickySaveButton) return;
+
+        const hasPending = pendingUserPermissionChanges.size > 0;
+        stickySaveBar.classList.toggle('hidden', !hasPending);
+
+        if (pendingUserPermissionChanges.size > 1) {
+            stickySaveText.textContent = `${pendingUserPermissionChanges.size} Benutzer haben ungespeicherte Rechteänderungen.`;
+        } else {
+            stickySaveText.textContent = 'Berechtigungsänderungen noch nicht gespeichert.';
+        }
+
+        stickySaveButton.classList.toggle('animate-pulse', hasPending && !isBulkPermissionSaveRunning);
+    };
+
+    const setUserPermissionPending = (userId, isPending, permContainer = null) => {
+        if (!userId) return;
+
+        if (isPending) {
+            pendingUserPermissionChanges.add(userId);
+        } else {
+            pendingUserPermissionChanges.delete(userId);
+        }
+
+        const container = permContainer || area.querySelector(`.user-card[data-userid="${userId}"] .user-permission-config`);
+        const saveBtnContainer = container?.querySelector('.save-perms-container');
+        if (saveBtnContainer) {
+            saveBtnContainer.classList.toggle('hidden', !isPending);
+        }
+
+        renderStickyPermissionSaveBar();
+    };
 
     const normalizePermList = (permissions = []) => {
         return [...new Set((Array.isArray(permissions) ? permissions : []).filter(Boolean))].sort();
@@ -726,7 +806,10 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
         if (!originalUser) return;
 
         const payload = buildPermissionChangePayload(permContainer, originalUser);
-        if (!payload.hasChanges) return;
+        if (!payload.hasChanges) {
+            setUserPermissionPending(userId, false, permContainer);
+            return;
+        }
 
         rememberAdminScroll();
         await createApprovalRequest('CHANGE_PERMISSION_TYPE', userId, payload.detailsForRequest);
@@ -741,42 +824,74 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
         if (saveBtnContainer) {
             saveBtnContainer.classList.add('hidden');
         }
+
+        setUserPermissionPending(userId, false, permContainer);
     };
 
-    const queuePermissionAutoSave = (userId, permContainer) => {
-        const stateEntry = permissionSaveStateByUser.get(userId) || { running: false, queued: false, container: permContainer };
-        stateEntry.container = permContainer;
+    const syncPermissionPendingState = (userId, permContainer) => {
+        const originalUser = USERS[userId];
+        if (!originalUser || !permContainer) return;
 
-        if (stateEntry.running) {
-            stateEntry.queued = true;
-            permissionSaveStateByUser.set(userId, stateEntry);
+        try {
+            const payload = buildPermissionChangePayload(permContainer, originalUser);
+            setUserPermissionPending(userId, payload.hasChanges, permContainer);
+        } catch (error) {
+            console.error(`[CHANGE] Konnte Pending-Status für User ${userId} nicht aktualisieren:`, error);
+            alertUser(error.message || 'Änderung konnte nicht verarbeitet werden.', 'error');
+        }
+    };
+
+    const saveAllPendingPermissionChanges = async (triggerButton) => {
+        if (isBulkPermissionSaveRunning) return;
+        if (!pendingUserPermissionChanges.size) {
+            renderStickyPermissionSaveBar();
             return;
         }
 
-        stateEntry.running = true;
-        stateEntry.queued = false;
-        permissionSaveStateByUser.set(userId, stateEntry);
+        isBulkPermissionSaveRunning = true;
+        setButtonLoading(triggerButton, true);
+        renderStickyPermissionSaveBar();
 
-        (async () => {
-            try {
-                do {
-                    stateEntry.queued = false;
-                    await submitPermissionChange(userId, stateEntry.container);
-                } while (stateEntry.queued);
-            } catch (error) {
-                console.error(`[AUTO-SAVE] FEHLER bei Berechtigungsänderung für User ${userId}:`, error);
-                alertUser(`Fehler beim direkten Speichern: ${error.message || error.toString()}`, 'error');
-            } finally {
-                stateEntry.running = false;
-                permissionSaveStateByUser.set(userId, stateEntry);
+        const userIdsToSave = [...pendingUserPermissionChanges];
+        const failedUsers = [];
+
+        try {
+            for (const changedUserId of userIdsToSave) {
+                const container = area.querySelector(`.user-card[data-userid="${changedUserId}"] .user-permission-config`);
+                if (!container) {
+                    failedUsers.push(changedUserId);
+                    continue;
+                }
+
+                try {
+                    await submitPermissionChange(changedUserId, container);
+                } catch (error) {
+                    failedUsers.push(changedUserId);
+                    console.error(`[BULK-SAVE] Fehler bei User ${changedUserId}:`, error);
+                    alertUser(`Fehler beim Speichern von ${USERS[changedUserId]?.name || 'einem Benutzer'}: ${error.message}`, 'error');
+                }
             }
-        })();
+
+            if (!failedUsers.length) {
+                alertUser('Alle Berechtigungsänderungen wurden gespeichert.', 'success');
+            }
+        } finally {
+            isBulkPermissionSaveRunning = false;
+            setButtonLoading(triggerButton, false);
+            renderStickyPermissionSaveBar();
+        }
     };
 
     console.log("addAdminUserManagementListeners: Hänge primären Listener an userManagementArea an.");
 
     // --- CLICK Listener ---
     area.addEventListener('click', async (e) => {
+        const stickySaveButton = e.target.closest('#user-perms-sticky-save-button');
+        if (stickySaveButton) {
+            await saveAllPendingPermissionChanges(stickySaveButton);
+            return;
+        }
+
         const userCard = e.target.closest('.user-card');
         const userId = userCard?.dataset.userid;
 
@@ -1200,7 +1315,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                     }
                 }
 
-                queuePermissionAutoSave(userId, container);
+                syncPermissionPendingState(userId, container);
                 return;
             }
 
@@ -1211,6 +1326,8 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
     area.querySelectorAll('.individual-perms-area').forEach(individualArea => {
         ensurePermissionDependencies(individualArea);
     });
+
+    renderStickyPermissionSaveBar();
 }
 
 
