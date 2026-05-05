@@ -1,14 +1,24 @@
 {
-  "version": "1.16.7",
-  "buildId": "20260505-11",
+  "version": "1.16.8",
+  "buildId": "20260505-12",
   "releaseDate": "2026-05-05",
-  "releaseTime": "20:15",
+  "releaseTime": "20:42",
   "bereich": "Smart Top2",
   "timezone": "Europe/Vienna",
-  "note": "SmartLife ist jetzt vollständig im Smart Top2 integriert: neue Tuya-Cloud-Function mit Status/Schalten über Secrets, neue Entrance-Box inkl. Rechtekette, Rollenlogik und zentralem Refresh sowie Versions-Cache-Update.",
+  "note": "SmartLife-Bugfix: Tuya-Geräteliste nutzt jetzt Endpoint-Fallbacks (inkl. Associated-Users), damit der Fehler 'device_ids param is illegal' nicht mehr den Cloud-Status auf offline setzt.",
   "commitId": "0ae7df4",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.16.8",
+      "buildId": "20260505-12",
+      "releaseDate": "2026-05-05",
+      "releaseTime": "20:42",
+      "bereich": "Smart Top2",
+      "note": "SmartLife-Bugfix: Tuya-Geräteliste nutzt jetzt Endpoint-Fallbacks (inkl. Associated-Users), damit der Fehler 'device_ids param is illegal' nicht mehr den Cloud-Status auf offline setzt.",
+      "commitId": "0ae7df4",
+      "obligation": "false"
+    },
     {
       "version": "1.16.7",
       "buildId": "20260505-11",
