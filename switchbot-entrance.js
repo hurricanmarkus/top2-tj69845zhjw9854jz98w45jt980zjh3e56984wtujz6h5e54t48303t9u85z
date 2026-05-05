@@ -253,7 +253,18 @@ function getSelectedDevice(devices = []) {
 }
 
 function getDeviceLedClass(device) {
-  if (state.pendingDeviceIds.has(String(device?.deviceId || ''))) {
+  const normalizedType = normalizeText(device?.deviceType).toLowerCase();
+  const isBot = normalizedType.includes('bot');
+  const isPending = state.pendingDeviceIds.has(String(device?.deviceId || ''));
+
+  if (isBot) {
+    if (isPending) {
+      return 'gardena-led gardena-led--green gardena-led--blink';
+    }
+    return 'gardena-led gardena-led--red';
+  }
+
+  if (isPending) {
     return 'gardena-led gardena-led--amber gardena-led--blink';
   }
   if (device?.reachable === false || device?.cloudEnabled === false) {
@@ -268,14 +279,26 @@ function getDeviceLedClass(device) {
   return 'gardena-led gardena-led--amber';
 }
 
-function getActionButtonClass(action) {
+function getActionButtonClass(action, device) {
   const normalized = normalizeText(action).toUpperCase();
+  const normalizedType = normalizeText(device?.deviceType).toLowerCase();
+  const isBot = normalizedType.includes('bot');
+  const isPending = state.pendingDeviceIds.has(String(device?.deviceId || ''));
+
+  if (isBot && normalized === 'PRESS') {
+    return isPending
+      ? 'bg-emerald-600 hover:bg-emerald-700'
+      : 'bg-red-600 hover:bg-red-700';
+  }
+
   if (normalized === 'OFF' || normalized === 'CLOSE' || normalized === 'LOCK') {
-    return 'bg-rose-600 hover:bg-rose-700';
+    return 'bg-red-600 hover:bg-red-700';
   }
+
   if (normalized === 'PAUSE' || normalized === 'PRESS') {
-    return 'bg-amber-500 hover:bg-amber-600';
+    return 'bg-red-600 hover:bg-red-700';
   }
+
   return 'bg-emerald-600 hover:bg-emerald-700';
 }
 
@@ -303,11 +326,45 @@ function actionPatch(action) {
   return { summaryText: `${getActionLabel(action)} gesendet` };
 }
 
+function getDeviceSummaryFallback(device) {
+  const normalizedType = normalizeText(device?.deviceType).toLowerCase();
+  if (normalizedType.includes('meter') || normalizedType.includes('thermometer')) {
+    return 'Temp: - | Luft: -';
+  }
+  if (normalizedType.includes('wallet finder') || normalizedType.includes('wallet card')) {
+    return 'Tracker bereit';
+  }
+  if (normalizedType.includes('hub')) {
+    return 'Hub online';
+  }
+  if (normalizedType.includes('contact')) {
+    return 'Kontakt: Unbekannt';
+  }
+  if (normalizedType.includes('water') || normalizedType.includes('leak')) {
+    return 'OK';
+  }
+  return 'Bereit';
+}
+
+function normalizeActionsForDevice(device, actions = []) {
+  const normalizedType = normalizeText(device?.deviceType).toLowerCase();
+  const normalizedActions = actions
+    .map((entry) => normalizeText(entry).toUpperCase())
+    .filter(Boolean);
+
+  if (normalizedType.includes('bot')) {
+    return ['PRESS'];
+  }
+
+  return [...new Set(normalizedActions)];
+}
+
 function renderDeviceCard(device, canControl) {
   if (!device) return '';
 
-  const actions = Array.isArray(device.supportedActions) ? device.supportedActions : [];
+  const actions = normalizeActionsForDevice(device, Array.isArray(device.supportedActions) ? device.supportedActions : []);
   const isPending = state.pendingDeviceIds.has(String(device.deviceId || ''));
+  const summaryText = normalizeText(device.summaryText, getDeviceSummaryFallback(device));
 
   const chips = [
     device.deviceType ? `<span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">Typ: ${escapeHtml(device.deviceType)}</span>` : '',
@@ -322,7 +379,7 @@ function renderDeviceCard(device, canControl) {
       <div class="flex items-center justify-between gap-2">
         <div class="min-w-0">
           <div class="truncate text-xs font-extrabold text-slate-900">${escapeHtml(device.name || 'SwitchBot-Gerät')}</div>
-          <div class="truncate text-[11px] font-semibold text-slate-500">${escapeHtml(device.summaryText || 'Status unbekannt')}</div>
+          <div class="truncate text-[11px] font-semibold text-slate-500">${escapeHtml(summaryText)}</div>
         </div>
         <span class="${getDeviceLedClass(device)}" aria-hidden="true"></span>
       </div>
@@ -334,7 +391,7 @@ function renderDeviceCard(device, canControl) {
               type="button"
               data-switchbot-action="${escapeHtml(action)}"
               data-switchbot-device-id="${escapeHtml(device.deviceId || '')}"
-              class="inline-flex items-center justify-center rounded-lg px-2 py-1.5 text-[11px] font-extrabold text-white shadow-sm transition ${getActionButtonClass(action)} ${isPending ? 'opacity-70' : ''}"
+              class="inline-flex items-center justify-center rounded-lg px-2 py-1.5 text-[11px] font-extrabold text-white shadow-sm transition ${getActionButtonClass(action, device)} ${isPending ? 'opacity-70' : ''}"
               ${isPending ? 'disabled' : ''}
             >
               ${escapeHtml(getActionLabel(action))}
@@ -342,7 +399,7 @@ function renderDeviceCard(device, canControl) {
           `).join('')}
         </div>`
         : ''}
-      ${!canControl ? '<div class="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200">Nur Status sichtbar. Steuerung ist nicht freigeschaltet.</div>' : ''}
+      ${!canControl ? '<div class="mt-2 rounded-lg bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-700 ring-1 ring-red-200">Nur Status sichtbar. Steuerung ist nicht freigeschaltet.</div>' : ''}
       ${device.statusError ? `<div class="mt-2 rounded-lg bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-700 ring-1 ring-red-200">${escapeHtml(device.statusError)}</div>` : ''}
     </div>
   `;
@@ -424,6 +481,7 @@ function renderStatus() {
     } else {
       elements.summaryGrid.innerHTML = devices.map((device) => {
         const isSelected = String(device.deviceId) === String(state.activeDeviceId || '');
+        const summaryText = normalizeText(device.summaryText, normalizeText(device.deviceType, getDeviceSummaryFallback(device)));
         return `
           <button
             type="button"
@@ -436,7 +494,7 @@ function renderStatus() {
               <span class="${getDeviceLedClass(device)}" aria-hidden="true"></span>
               <span class="truncate">${escapeHtml(device.name || 'SwitchBot')}</span>
             </div>
-            <div class="mt-0.5 truncate text-left text-[10px] text-slate-500">${escapeHtml(device.summaryText || device.deviceType || 'Status unbekannt')}</div>
+            <div class="mt-0.5 truncate text-left text-[10px] text-slate-500">${escapeHtml(summaryText)}</div>
           </button>
           ${canControl && isSelected ? `<div class="col-span-2 -mt-px">${renderDeviceCard(selectedDevice, canControl)}</div>` : ''}
         `;
