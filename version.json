@@ -1,14 +1,24 @@
 {
-  "version": "1.16.5",
-  "buildId": "20260505-9",
+  "version": "1.16.6",
+  "buildId": "20260505-10",
   "releaseDate": "2026-05-05",
-  "releaseTime": "13:58",
+  "releaseTime": "14:16",
   "bereich": "Smart Top2",
   "timezone": "Europe/Vienna",
-  "note": "SwitchBot-Feinschliff: Bot bleibt außerhalb laufender Aktion neutral, 'Aktiv' erscheint nur während Drücken, alle Geräte-LEDs folgen der finalen Rot/Grün-Regel und die Liste startet ohne aufgeklappten Eintrag.",
+  "note": "SwitchBot-Sicherheitsupdate: Bot bleibt bei 'Drücken' mindestens 5 Sekunden aktiv/grün blinkend; Keypad Vision und Smart Lock Ultra werden in Frontend und API vollständig blockiert und nicht mehr ausgeliefert.",
   "commitId": "0ae7df4",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.16.6",
+      "buildId": "20260505-10",
+      "releaseDate": "2026-05-05",
+      "releaseTime": "14:16",
+      "bereich": "Smart Top2",
+      "note": "SwitchBot-Sicherheitsupdate: Bot bleibt bei 'Drücken' mindestens 5 Sekunden aktiv/grün blinkend; Keypad Vision und Smart Lock Ultra werden in Frontend und API vollständig blockiert und nicht mehr ausgeliefert.",
+      "commitId": "0ae7df4",
+      "obligation": "false"
+    },
     {
       "version": "1.16.5",
       "buildId": "20260505-9",

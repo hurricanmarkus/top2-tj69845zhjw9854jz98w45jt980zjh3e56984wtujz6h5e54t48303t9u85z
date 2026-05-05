@@ -3,6 +3,8 @@ import { auth, currentUser, GUEST_MODE } from './haupteingang.js';
 const STATUS_ENDPOINT = '/api/status';
 const COMMAND_ENDPOINT = '/api/command';
 const DEFAULT_FUNCTIONS_API_BASE = 'https://europe-west1-top2-e9ac0.cloudfunctions.net/switchbotApi';
+const MIN_BOT_PRESS_PENDING_MS = 5000;
+const BLOCKED_SWITCHBOT_DEVICE_TYPE_TOKENS = ['keypad vision', 'keypadvision', 'smart lock ultra', 'smartlockultra'];
 
 const state = {
   listenersBound: false,
@@ -11,6 +13,7 @@ const state = {
   error: '',
   activeDeviceId: '',
   pendingDeviceIds: new Set(),
+  pendingReleaseTimers: new Map(),
   postActionRefreshTimer: null,
   viewObserverBound: false,
 };
@@ -42,6 +45,67 @@ function escapeHtml(value = '') {
 function normalizeText(value, fallback = '') {
   const normalized = String(value || '').trim();
   return normalized || fallback;
+}
+
+function normalizeDeviceType(value) {
+  return normalizeText(value).toLowerCase();
+}
+
+function isBlockedSwitchBotDeviceType(deviceType) {
+  const normalizedType = normalizeDeviceType(deviceType);
+  if (!normalizedType) return false;
+  return BLOCKED_SWITCHBOT_DEVICE_TYPE_TOKENS.some((token) => normalizedType.includes(token));
+}
+
+function filterAllowedSwitchbotDevices(devices = []) {
+  return devices.filter((device) => !isBlockedSwitchBotDeviceType(device?.deviceType));
+}
+
+function clearPendingReleaseTimer(deviceId) {
+  const key = String(deviceId || '');
+  const timerId = state.pendingReleaseTimers.get(key);
+  if (timerId) {
+    window.clearTimeout(timerId);
+  }
+  state.pendingReleaseTimers.delete(key);
+}
+
+function markDevicePending(deviceId) {
+  const key = String(deviceId || '');
+  if (!key) return;
+  clearPendingReleaseTimer(key);
+  state.pendingDeviceIds.add(key);
+}
+
+function releasePendingDevice(deviceId, delayMs = 0) {
+  const key = String(deviceId || '');
+  if (!key) return;
+
+  clearPendingReleaseTimer(key);
+  const safeDelay = Math.max(0, Number(delayMs) || 0);
+
+  if (safeDelay <= 0) {
+    state.pendingDeviceIds.delete(key);
+    renderStatus();
+    return;
+  }
+
+  const timerId = window.setTimeout(() => {
+    state.pendingReleaseTimers.delete(key);
+    state.pendingDeviceIds.delete(key);
+    renderStatus();
+  }, safeDelay);
+
+  state.pendingReleaseTimers.set(key, timerId);
+}
+
+function sanitizeStatusPayload(payload) {
+  if (!payload || typeof payload !== 'object') return payload;
+  const devices = Array.isArray(payload.devices) ? filterAllowedSwitchbotDevices(payload.devices) : [];
+  return {
+    ...payload,
+    devices,
+  };
 }
 
 function normalizeOrigin(value = '') {
@@ -284,7 +348,7 @@ function isContactOrWaterAlarmActive(device) {
 }
 
 function getDeviceLedClass(device) {
-  const normalizedType = normalizeText(device?.deviceType).toLowerCase();
+  const normalizedType = normalizeDeviceType(device?.deviceType);
   const isContact = normalizedType.includes('contact');
   const isWater = normalizedType.includes('water') || normalizedType.includes('leak');
   const isPending = state.pendingDeviceIds.has(String(device?.deviceId || ''));
@@ -302,7 +366,7 @@ function getDeviceLedClass(device) {
 
 function getActionButtonClass(action, device) {
   const normalized = normalizeText(action).toUpperCase();
-  const normalizedType = normalizeText(device?.deviceType).toLowerCase();
+  const normalizedType = normalizeDeviceType(device?.deviceType);
   const isBot = normalizedType.includes('bot');
   const isPending = state.pendingDeviceIds.has(String(device?.deviceId || ''));
 
@@ -351,7 +415,7 @@ function actionPatch(action) {
 }
 
 function getDeviceSummaryFallback(device) {
-  const normalizedType = normalizeText(device?.deviceType).toLowerCase();
+  const normalizedType = normalizeDeviceType(device?.deviceType);
   if (normalizedType.includes('meter') || normalizedType.includes('thermometer') || normalizedType.includes('woiosensor') || normalizedType.includes('woi sensor')) {
     return 'Temp: - | Luft: -';
   }
@@ -371,7 +435,7 @@ function getDeviceSummaryFallback(device) {
 }
 
 function normalizeActionsForDevice(device, actions = []) {
-  const normalizedType = normalizeText(device?.deviceType).toLowerCase();
+  const normalizedType = normalizeDeviceType(device?.deviceType);
   const normalizedActions = actions
     .map((entry) => normalizeText(entry).toUpperCase())
     .filter(Boolean);
@@ -385,10 +449,11 @@ function normalizeActionsForDevice(device, actions = []) {
 
 function renderDeviceCard(device, canControl) {
   if (!device) return '';
+  if (isBlockedSwitchBotDeviceType(device?.deviceType)) return '';
 
   const actions = normalizeActionsForDevice(device, Array.isArray(device.supportedActions) ? device.supportedActions : []);
   const isPending = state.pendingDeviceIds.has(String(device.deviceId || ''));
-  const isBot = normalizeText(device?.deviceType).toLowerCase().includes('bot');
+  const isBot = normalizeDeviceType(device?.deviceType).includes('bot');
   const summaryText = isBot
     ? (isPending ? 'Aktiv' : normalizeText(device.summaryText, getDeviceSummaryFallback(device)))
     : normalizeText(device.summaryText, getDeviceSummaryFallback(device));
@@ -441,7 +506,7 @@ function renderStatus() {
   const status = state.status;
   const configured = Boolean(status?.configured);
   const connected = Boolean(status?.connected);
-  const devices = configured && connected && Array.isArray(status?.devices) ? getSortedDevices(status.devices) : [];
+  const devices = configured && connected && Array.isArray(status?.devices) ? getSortedDevices(filterAllowedSwitchbotDevices(status.devices)) : [];
 
   if (!canControl) {
     state.activeDeviceId = '';
@@ -508,7 +573,7 @@ function renderStatus() {
     } else {
       elements.summaryGrid.innerHTML = devices.map((device) => {
         const isSelected = String(device.deviceId) === String(state.activeDeviceId || '');
-        const isBot = normalizeText(device?.deviceType).toLowerCase().includes('bot');
+        const isBot = normalizeDeviceType(device?.deviceType).includes('bot');
         const summaryText = isBot
           ? (state.pendingDeviceIds.has(String(device?.deviceId || '')) ? 'Aktiv' : normalizeText(device.summaryText, getDeviceSummaryFallback(device)))
           : normalizeText(device.summaryText, normalizeText(device.deviceType, getDeviceSummaryFallback(device)));
@@ -567,7 +632,7 @@ async function fetchStatus(showLoading = true) {
 
   try {
     const payload = await requestApi(STATUS_ENDPOINT);
-    state.status = payload;
+    state.status = sanitizeStatusPayload(payload);
     state.error = '';
   } catch (error) {
     state.error = extractErrorMessage(error, 'SwitchBot-Status konnte nicht geladen werden.');
@@ -607,7 +672,10 @@ async function sendSwitchbotCommand(deviceId, action) {
     return;
   }
 
-  state.pendingDeviceIds.add(String(deviceId));
+  const normalizedAction = normalizeText(action).toUpperCase();
+  const commandStartedAt = Date.now();
+
+  markDevicePending(deviceId);
   renderStatus();
 
   try {
@@ -631,8 +699,10 @@ async function sendSwitchbotCommand(deviceId, action) {
     renderStatus();
     alertUser(state.error, 'error');
   } finally {
-    state.pendingDeviceIds.delete(String(deviceId));
-    renderStatus();
+    const elapsed = Date.now() - commandStartedAt;
+    const minPendingForPress = normalizedAction === 'PRESS' ? MIN_BOT_PRESS_PENDING_MS : 0;
+    const remainingDelay = Math.max(0, minPendingForPress - elapsed);
+    releasePendingDevice(deviceId, remainingDelay);
   }
 }
 
