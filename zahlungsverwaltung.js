@@ -143,8 +143,8 @@ function renderOnlineTargetAccountSettings() {
             preview.innerHTML = '<span class="text-gray-500">Noch kein Zielkonto gespeichert. Ohne dieses Konto kann kein Online-Zahlungslink erstellt werden.</span>';
         } else {
             const wiseHint = looksLikeWiseBankName(onlinePaymentTargetAccount.bankName)
-                ? '<div class="mt-2 text-[11px] text-emerald-700 font-semibold">Wise-Zielkonto erkannt. Dieses Konto passt zum automatischen Wise-Eingangsabgleich.</div>'
-                : '<div class="mt-2 text-[11px] text-amber-700 font-semibold">Hinweis: Für automatischen Wise-Abgleich sollte hier dein Wise-EUR-Zielkonto stehen.</div>';
+                ? '<div class="mt-2 text-[11px] text-emerald-700 font-semibold">Wise-Zielkonto erkannt. Dieses Konto passt zum automatischen Wise-Webhook-Abgleich.</div>'
+                : '<div class="mt-2 text-[11px] text-amber-700 font-semibold">Hinweis: Für automatische Wise-Webhooks sollte hier dein Wise-EUR-Zielkonto stehen.</div>';
             preview.innerHTML = `
                 <div class="font-bold text-cyan-900">Aktives Zielkonto</div>
                 <div class="mt-1 text-sm text-gray-700">${onlinePaymentTargetAccount.accountHolder}</div>
@@ -160,49 +160,77 @@ async function renderOnlinePaymentWiseStatus() {
     const container = document.getElementById('zv-online-wise-status');
     if (!container) return;
 
-    if (!window.getOnlinePaymentWiseStatus) {
-        container.innerHTML = '<p class="text-sm text-red-600">Cloud Function getOnlinePaymentWiseStatus ist nicht verfügbar.</p>';
+    if (!window.getOnlinePaymentWiseWebhookStatus) {
+        container.innerHTML = '<p class="text-sm text-red-600">Cloud Function getOnlinePaymentWiseWebhookStatus ist nicht verfügbar.</p>';
         return;
     }
 
-    container.innerHTML = '<p class="text-gray-500">Wise-Status wird geladen...</p>';
+    container.innerHTML = '<p class="text-gray-500">Wise-Webhooks werden geladen...</p>';
 
     try {
-        const result = await window.getOnlinePaymentWiseStatus({});
+        const result = await window.getOnlinePaymentWiseWebhookStatus({});
         const data = result?.data || {};
-        const ready = data.ready === true;
         const configured = data.configured === true;
         const missing = Array.isArray(data.missing) ? data.missing : [];
         const checkedAt = data.checkedAt ? new Date(data.checkedAt).toLocaleString('de-DE') : '—';
         const activeLinkCount = Number(data.activeLinkCount || 0);
-        const recentIncomingCount = Number(data.recentIncomingCount || 0);
-        const setupStateClass = ready ? 'text-emerald-700 bg-emerald-100 border-emerald-200' : 'text-amber-700 bg-amber-100 border-amber-200';
-        const setupLabel = ready ? 'Wise bereit' : (configured ? 'Wise antwortet nicht' : 'Wise unvollständig');
+        const recentWebhookCount = Number(data.recentWebhookCount || 0);
+        const recentMatchedLinkCount = Number(data.recentMatchedLinkCount || 0);
+        const state = String(data.state || '').toLowerCase();
+        const webhookUrl = data.webhookUrl || '—';
+        const lastWebhookText = data.lastWebhookAt
+            ? new Date(data.lastWebhookAt).toLocaleString('de-DE')
+            : (data.lastTestWebhookAt ? `Test: ${new Date(data.lastTestWebhookAt).toLocaleString('de-DE')}` : 'Noch kein Webhook empfangen');
+        const lastMatchText = data.lastMatchedReference
+            ? `${data.lastMatchedReference}${data.lastMatchedAt ? ` • ${new Date(data.lastMatchedAt).toLocaleString('de-DE')}` : ''}`
+            : 'Noch kein automatischer Treffer';
+        const statusMeta = !configured
+            ? {
+                label: 'Webhook unvollständig',
+                className: 'text-red-700 bg-red-100 border-red-200',
+            }
+            : state === 'active'
+                ? {
+                    label: 'Webhook aktiv',
+                    className: 'text-emerald-700 bg-emerald-100 border-emerald-200',
+                }
+                : {
+                    label: 'Webhook bereit',
+                    className: 'text-amber-700 bg-amber-100 border-amber-200',
+                };
         const detailsHtml = missing.length
             ? `<div class="text-xs text-red-600 font-semibold">Fehlende Secrets: ${missing.join(', ')}</div>`
-            : `<div class="text-xs text-gray-500">Profil: ${data.profileIdMasked || '—'} • Konto: ${data.accountIdMasked || '—'}</div>`;
-        const errorHtml = data.error ? `<div class="text-xs text-red-600">${data.error}</div>` : '';
+            : `
+                <div class="text-xs text-gray-500">Profil: ${data.profileIdMasked || '—'} • Konto: ${data.accountIdMasked || '—'}</div>
+                <div class="text-xs text-gray-500 break-all">Webhook-URL: ${webhookUrl}</div>
+            `;
+        const noteHtml = data.lastProcessingNote
+            ? `<div class="text-xs text-gray-600">${data.lastProcessingNote}</div>`
+            : '';
 
         container.innerHTML = `
             <div class="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                    <div class="font-bold text-gray-800">Wise-Eingangsabgleich</div>
+                    <div class="font-bold text-gray-800">Wise-Webhooks</div>
                     <div class="text-[11px] text-gray-500">Letzte Prüfung: ${checkedAt}</div>
                 </div>
-                <span class="inline-flex items-center px-2 py-1 rounded border text-[11px] font-bold ${setupStateClass}">${setupLabel}</span>
+                <span class="inline-flex items-center px-2 py-1 rounded border text-[11px] font-bold ${statusMeta.className}">${statusMeta.label}</span>
             </div>
-            <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+            <div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
                 <div class="rounded bg-white/80 border border-amber-100 p-2"><span class="text-gray-500 block">Aktive Links</span><span class="font-bold text-gray-800">${activeLinkCount}</span></div>
-                <div class="rounded bg-white/80 border border-amber-100 p-2"><span class="text-gray-500 block">Wise-Eingänge 24h</span><span class="font-bold text-gray-800">${recentIncomingCount}</span></div>
+                <div class="rounded bg-white/80 border border-amber-100 p-2"><span class="text-gray-500 block">Webhooks 24h</span><span class="font-bold text-gray-800">${recentWebhookCount}</span></div>
+                <div class="rounded bg-white/80 border border-amber-100 p-2"><span class="text-gray-500 block">Auto-Matches 24h</span><span class="font-bold text-gray-800">${recentMatchedLinkCount}</span></div>
             </div>
-            <div class="mt-2 space-y-1">
+            <div class="mt-3 space-y-1 text-[11px]">
+                <div class="rounded bg-white/80 border border-amber-100 p-2"><span class="text-gray-500 block">Letzter Webhook</span><span class="font-semibold text-gray-800 break-all">${lastWebhookText}</span></div>
+                <div class="rounded bg-white/80 border border-amber-100 p-2"><span class="text-gray-500 block">Letzter erkannter Treffer</span><span class="font-semibold text-gray-800 break-all">${lastMatchText}</span></div>
                 ${detailsHtml}
-                ${errorHtml}
+                ${noteHtml}
             </div>
         `;
     } catch (error) {
         console.error(error);
-        container.innerHTML = `<p class="text-sm text-red-600">Wise-Status konnte nicht geladen werden: ${error?.message || 'Unbekannter Fehler'}</p>`;
+        container.innerHTML = `<p class="text-sm text-red-600">Wise-Webhooks konnten nicht geladen werden: ${error?.message || 'Unbekannter Fehler'}</p>`;
     }
 }
 
@@ -419,30 +447,6 @@ async function createOnlineLinkForGuestContact(guestId, guestName = '') {
     await renderOnlinePaymentLinks();
 }
 
-async function syncOnlinePaymentLinksNow() {
-    if (!window.syncOnlinePaymentLinksWithWise) {
-        alertUser('Wise-Sync ist nicht verfügbar.', 'error');
-        return;
-    }
-
-    const button = document.getElementById('btn-zv-online-sync-wise');
-    if (button) setButtonLoading(button, true);
-
-    try {
-        const result = await window.syncOnlinePaymentLinksWithWise({ hoursBack: 120 });
-        const matched = Number(result?.data?.matchedLinks || 0);
-        const checked = Number(result?.data?.checkedTransactions || 0);
-        alertUser(`Wise-Sync abgeschlossen: ${matched} Treffer bei ${checked} Transaktionen.`, 'success');
-        await renderOnlinePaymentWiseStatus();
-        await renderOnlinePaymentLinks();
-    } catch (error) {
-        console.error(error);
-        alertUser(error?.message || 'Wise-Sync fehlgeschlagen.', 'error');
-    } finally {
-        if (button) setButtonLoading(button, false);
-    }
-}
-
 async function renderOnlinePaymentLinks() {
     const container = document.getElementById('zv-online-links-list');
     if (!container) return;
@@ -454,7 +458,7 @@ async function renderOnlinePaymentLinks() {
 
     const targetAccount = getOnlineTargetAccount();
     const syncHint = hasConfiguredOnlineTargetAccount()
-        ? `<div class="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">Automatischer Abruf läuft über <span class="font-bold">Wise-Sync</span>. Der Referenzcode muss im Verwendungszweck stehen und das gespeicherte Zielkonto soll dein <span class="font-bold">Wise-EUR-Konto</span> sein.</div>`
+        ? `<div class="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">Automatische Erkennung läuft über <span class="font-bold">Wise-Webhooks</span>. Der Referenzcode muss exakt im Verwendungszweck stehen und das gespeicherte Zielkonto soll dein <span class="font-bold">Wise-EUR-Konto</span> sein.</div>`
         : '';
 
     container.innerHTML = `${syncHint}<p class="text-center text-gray-400 italic py-4">Lade Online-Zahlungslinks...</p>`;
@@ -476,8 +480,8 @@ async function renderOnlinePaymentLinks() {
             const remaining = normalizeMoney(link.remainingAmount);
             const createdAt = link.createdAt ? new Date(link.createdAt).toLocaleString('de-DE') : '—';
             const bankLabel = link.bankInfo?.bankName || targetAccount.bankName || 'Zielkonto';
-            const syncLabel = link.syncMode === 'wise_statement' ? 'Wise-Statement' : '—';
-            const lastMatchText = link.lastWiseBookedAt ? new Date(link.lastWiseBookedAt).toLocaleString('de-DE') : 'Noch kein Wise-Match';
+            const syncLabel = link.syncMode === 'wise_webhook' ? 'Wise-Webhook' : (link.syncMode === 'wise_statement' ? 'Legacy-Statement' : '—');
+            const lastMatchText = link.lastWiseBookedAt ? new Date(link.lastWiseBookedAt).toLocaleString('de-DE') : 'Noch kein Wise-Webhook-Match';
             const wiseMatchCount = Number(link.wiseMatchCount || 0);
             return `
                 <div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
@@ -486,7 +490,7 @@ async function renderOnlinePaymentLinks() {
                             <div class="text-sm font-bold text-gray-800 truncate">${link.title || 'Online-Zahlung'}</div>
                             <div class="text-[11px] text-gray-500 truncate">Ref: ${link.referenceCode || '—'} • Gast: ${link.guestName || link.guestId || 'Gast'}</div>
                             <div class="text-[11px] text-gray-400">Erstellt: ${createdAt} • Aufrufe: ${Number(link.tokenViews || 0)} • Zielbank: ${bankLabel}</div>
-                            <div class="text-[11px] text-gray-400">Sync: ${syncLabel} • Wise-Matches: ${wiseMatchCount} • Letzter Eingang: ${lastMatchText}</div>
+                            <div class="text-[11px] text-gray-400">Webhook: ${syncLabel} • Wise-Matches: ${wiseMatchCount} • Letzter Eingang: ${lastMatchText}</div>
                         </div>
                         <span class="inline-flex items-center px-2 py-1 rounded border text-[11px] font-bold ${getOnlineLinkStatusBadgeClass(status)}">${getOnlineLinkStatusLabel(status)}</span>
                     </div>
@@ -843,7 +847,6 @@ function setupSettingsListeners() {
     document.getElementById('tab-zv-accounts')?.addEventListener('click', () => openSettingsTab('accounts'));
     document.getElementById('tab-zv-categories')?.addEventListener('click', () => openSettingsTab('categories'));
     document.getElementById('tab-zv-archive')?.addEventListener('click', () => openSettingsTab('archive'));
-    document.getElementById('btn-zv-online-sync-wise')?.addEventListener('click', syncOnlinePaymentLinksNow);
     document.getElementById('btn-zv-online-check-wise-status')?.addEventListener('click', renderOnlinePaymentWiseStatus);
     document.getElementById('btn-save-online-target-account')?.addEventListener('click', saveOnlineTargetAccountSettings);
 
@@ -7224,8 +7227,8 @@ export async function initializeGuestView(guestId) {
             const canStartOnlinePayment = Boolean(bankInfo.accountHolder && bankInfo.iban && payAmount > 0);
             const popularBanks = getPopularEuBankLabels();
             const autoMatchInfo = paymentLinkData.lastWiseReference
-                ? `<div class="rounded-lg border border-emerald-100 bg-emerald-50 p-2 text-[11px] text-emerald-800">Letzter Wise-Abgleich: <span class="font-bold">${paymentLinkData.lastWiseReference}</span>${paymentLinkData.lastWiseBookedAt ? ` • ${new Date(paymentLinkData.lastWiseBookedAt).toLocaleString('de-DE')}` : ''}</div>`
-                : '<div class="rounded-lg border border-amber-100 bg-amber-50 p-2 text-[11px] text-amber-800">Automatische Erkennung läuft über Wise. Bitte den Referenzcode exakt im Verwendungszweck angeben.</div>';
+                ? `<div class="rounded-lg border border-emerald-100 bg-emerald-50 p-2 text-[11px] text-emerald-800">Letzter Wise-Webhook-Treffer: <span class="font-bold">${paymentLinkData.lastWiseReference}</span>${paymentLinkData.lastWiseBookedAt ? ` • ${new Date(paymentLinkData.lastWiseBookedAt).toLocaleString('de-DE')}` : ''}</div>`
+                : '<div class="rounded-lg border border-amber-100 bg-amber-50 p-2 text-[11px] text-amber-800">Automatische Erkennung läuft über Wise-Webhooks. Bitte den Referenzcode exakt im Verwendungszweck angeben.</div>';
             const sepaPaymentData = {
                 iban: bankInfo.iban || '',
                 bic: bankInfo.bic || '',

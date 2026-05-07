@@ -1651,12 +1651,11 @@ async function initializeFirebase() {
                 window.sendPasswordReset = httpsCallable(functions, 'sendPasswordReset');
                 window.getEinkaufslisteWebPushConfig = httpsCallable(functions, 'getEinkaufslisteWebPushConfig');
                 window.createOnlinePaymentLink = httpsCallable(functions, 'createOnlinePaymentLink');
-                window.getOnlinePaymentWiseStatus = httpsCallable(functions, 'getOnlinePaymentWiseStatus');
+                window.getOnlinePaymentWiseWebhookStatus = httpsCallable(functions, 'getOnlinePaymentWiseWebhookStatus');
                 window.listOnlinePaymentLinks = httpsCallable(functions, 'listOnlinePaymentLinks');
                 window.closeOnlinePaymentLink = httpsCallable(functions, 'closeOnlinePaymentLink');
                 window.guestMarkOnlinePaymentInProgress = httpsCallable(functions, 'guestMarkOnlinePaymentInProgress');
                 window.guestAddOnlinePaymentPost = httpsCallable(functions, 'guestAddOnlinePaymentPost');
-                window.syncOnlinePaymentLinksWithWise = httpsCallable(functions, 'syncOnlinePaymentLinksWithWise');
 
                 window.firebaseFunctionsInitialised = true;
                 console.log("Firebase Functions initialisiert und global verfügbar gemacht.");

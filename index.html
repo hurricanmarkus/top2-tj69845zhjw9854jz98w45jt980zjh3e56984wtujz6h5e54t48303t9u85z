@@ -25,15 +25,15 @@
     <meta name="application-name" content="TOP 2 App">
     <meta name="apple-mobile-web-app-title" content="TOP2">
     <meta name="theme-color" content="#4f46e5" />
-    <meta name="top2-app-version" content="1.18.1" />
-    <meta name="top2-build-id" content="20260507-5" />
+    <meta name="top2-app-version" content="1.19.0" />
+    <meta name="top2-build-id" content="20260507-6" />
     <meta name="msapplication-navbutton-color" content="#4f46e5">
     <meta name="apple-mobile-app-status-bar-style" content="black-translucent">
     <link rel="icon" type="image/png" sizes="192x192" href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
     <link rel="apple-touch-icon" type="image/png" sizes="192x192"
         href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
 
-    <link rel="manifest" href="manifest.json?v=20260507-5">
+    <link rel="manifest" href="manifest.json?v=20260507-6">
 
     <link rel="stylesheet" href="style.css">
     
@@ -6605,16 +6605,16 @@
                     <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-cyan-600">
                         <div class="mb-3">
                             <h3 class="text-lg font-bold text-gray-800">Zielkonto für Online-Zahlungen</h3>
-                            <p class="text-xs text-gray-500">Dieses eine Konto wird für alle Online-Zahlungslinks verwendet. Es ist unabhängig von „Meine Konten“ und soll für den automatischen Eingangsabgleich dein Wise-EUR-Zielkonto sein.</p>
+                            <p class="text-xs text-gray-500">Dieses eine Konto wird für alle Online-Zahlungslinks verwendet. Es ist unabhängig von „Meine Konten“ und soll für die automatische Wise-Webhook-Erkennung dein Wise-EUR-Zielkonto sein.</p>
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <input type="text" id="zv-online-target-account-holder" class="w-full p-2 border rounded-lg" placeholder="Kontoinhaber">
-                            <input type="text" id="zv-online-target-bank-name" class="w-full p-2 border rounded-lg" placeholder="Bankname">
+                            <input type="text" id="zv-online-target-bank-name" class="w-full p-2 border rounded-lg" placeholder="Bankname (z. B. Wise)">
                             <input type="text" id="zv-online-target-iban" class="w-full p-2 border rounded-lg" placeholder="IBAN">
                             <input type="text" id="zv-online-target-bic" class="w-full p-2 border rounded-lg" placeholder="BIC">
                         </div>
                         <div class="mt-3 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
-                            <div class="text-[11px] text-gray-500">Für QR/EPC-Start ist kein Bank-Token nötig. Der automatische Abruf liest später nur das angebundene Wise-Konto aus.</div>
+                            <div class="text-[11px] text-gray-500">Für QR/EPC-Start ist kein Bank-Token nötig. Die automatische Erkennung reagiert später nur auf Wise-Webhooks für dieses angebundene Konto.</div>
                             <button id="btn-save-online-target-account" class="px-4 py-2 bg-cyan-600 text-white text-sm font-bold rounded-lg hover:bg-cyan-700 transition">Online-Konto speichern</button>
                         </div>
                         <div id="zv-online-target-account-preview" class="mt-3 rounded-lg border border-cyan-100 bg-cyan-50 p-3 text-sm text-gray-700"></div>
@@ -6623,26 +6623,22 @@
                     <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-amber-500">
                         <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
                             <div>
-                                <h3 class="text-lg font-bold text-gray-800">Wise-Bereitschaft</h3>
-                                <p class="text-xs text-gray-500">Prüft, ob die Wise-Secrets hinterlegt sind und ob der automatische Eingangsabgleich sofort einsatzbereit ist.</p>
+                                <h3 class="text-lg font-bold text-gray-800">Wise-Webhooks</h3>
+                                <p class="text-xs text-gray-500">Prüft die Webhook-Konfiguration, zeigt die exakte Wise-Webhook-URL und meldet empfangene Events sowie automatische Treffer.</p>
                             </div>
-                            <button id="btn-zv-online-check-wise-status" class="px-3 py-2 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 transition">Wise prüfen</button>
+                            <button id="btn-zv-online-check-wise-status" class="px-3 py-2 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 transition">Webhook prüfen</button>
                         </div>
                         <div id="zv-online-wise-status" class="rounded-lg border border-amber-100 bg-amber-50 p-3 text-sm text-gray-700">
-                            <p class="text-gray-500">Wise-Status wird geladen...</p>
+                            <p class="text-gray-500">Wise-Webhooks werden geladen...</p>
                         </div>
                     </div>
 
                     <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-emerald-600">
-                        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                        <div class="mb-3">
                             <div>
                                 <h3 class="text-lg font-bold text-gray-800">Online-Zahlungslinks (SEPA/EUR)</h3>
-                                <p class="text-xs text-gray-500">Alle erzeugten Zahlungslinks inkl. Status, Aufrufe, Wise-Autoabgleich und manueller Beendigung.</p>
+                                <p class="text-xs text-gray-500">Alle erzeugten Zahlungslinks inkl. Status, Aufrufe, Wise-Webhook-Autoerkennung und manueller Beendigung.</p>
                             </div>
-                            <button id="btn-zv-online-sync-wise"
-                                class="px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition">
-                                Wise Sync starten
-                            </button>
                         </div>
                         <div id="zv-online-links-list" class="space-y-2 max-h-[28rem] overflow-y-auto">
                             <p class="text-center text-gray-400 italic py-4">Lade Online-Zahlungslinks...</p>

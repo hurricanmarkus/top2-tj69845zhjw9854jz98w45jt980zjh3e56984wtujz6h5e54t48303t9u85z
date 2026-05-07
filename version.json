@@ -1,14 +1,24 @@
 {
-  "version": "1.18.1",
-  "buildId": "20260507-5",
+  "version": "1.19.0",
+  "buildId": "20260507-6",
   "releaseDate": "2026-05-07",
-  "releaseTime": "19:09",
+  "releaseTime": "19:45",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Der Wise-Status zeigt jetzt die echte Einschränkung persönlicher Wise-Tokens statt eines irreführenden 404-Fehlers an.",
-  "commitId": "78bc852",
+  "note": "Online-Zahlungen nutzen jetzt Wise-Webhooks mit eigenem Firebase-Endpunkt, neuer Statusansicht und ohne den bisherigen nicht nutzbaren Statement-Sync.",
+  "commitId": "pending",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.19.0",
+      "buildId": "20260507-6",
+      "releaseDate": "2026-05-07",
+      "releaseTime": "19:45",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Online-Zahlungen nutzen jetzt Wise-Webhooks mit eigenem Firebase-Endpunkt, neuer Statusansicht und ohne den bisherigen nicht nutzbaren Statement-Sync.",
+      "commitId": "pending",
+      "obligation": "false"
+    },
     {
       "version": "1.18.1",
       "buildId": "20260507-5",
