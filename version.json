@@ -1,14 +1,24 @@
 {
-  "version": "1.18.0",
-  "buildId": "20260507-4",
+  "version": "1.18.1",
+  "buildId": "20260507-5",
   "releaseDate": "2026-05-07",
-  "releaseTime": "14:57",
+  "releaseTime": "19:09",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Online-Zahlungen sind jetzt vollständig auf Wise-Betrieb ausgerichtet, inklusive Wise-Bereitschaftsprüfung, Zielkonto-Hinweisen und verbessertem Autoabgleich-Status.",
-  "commitId": "5a31422",
+  "note": "Der Wise-Status zeigt jetzt die echte Einschränkung persönlicher Wise-Tokens statt eines irreführenden 404-Fehlers an.",
+  "commitId": "78bc852",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.18.1",
+      "buildId": "20260507-5",
+      "releaseDate": "2026-05-07",
+      "releaseTime": "19:09",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Der Wise-Status zeigt jetzt die echte Einschränkung persönlicher Wise-Tokens statt eines irreführenden 404-Fehlers an.",
+      "commitId": "78bc852",
+      "obligation": "false"
+    },
     {
       "version": "1.18.0",
       "buildId": "20260507-4",
