@@ -360,6 +360,24 @@ service cloud.firestore {
       allow update: if hasAppUserIdClaim() && resource.data.involvedUserIds.hasAny([appUserId()]);
       allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
     }
+
+    // PAYMENT-LINKS: Online-Zahlungslinks
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/payment-links/{linkId} {
+      allow read: if isSystemAdminClaim() || (hasAppUserIdClaim() && resource.data.createdByAppUserId == appUserId());
+      allow create: if hasAppUserIdClaim() && request.resource.data.createdByAppUserId == appUserId();
+      allow update, delete: if isSystemAdminClaim() || (
+        hasAppUserIdClaim()
+        && resource.data.createdByAppUserId == appUserId()
+        && request.resource.data.createdByAppUserId == resource.data.createdByAppUserId
+      );
+
+      match /{subCollection}/{documentId} {
+        allow read, write: if isSystemAdminClaim() || (
+          hasAppUserIdClaim()
+          && get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/public/data/payment-links/$(linkId)).data.createdByAppUserId == appUserId()
+        );
+      }
+    }
     
     // PAYMENT-TEMPLATES: Zahlungsvorlagen
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/payment-templates/{document} {

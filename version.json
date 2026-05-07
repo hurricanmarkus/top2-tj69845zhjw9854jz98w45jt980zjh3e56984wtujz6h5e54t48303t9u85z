@@ -1,14 +1,54 @@
 {
-  "version": "1.16.8",
-  "buildId": "20260505-12",
-  "releaseDate": "2026-05-05",
-  "releaseTime": "20:42",
-  "bereich": "Smart Top2",
+  "version": "1.18.0",
+  "buildId": "20260507-4",
+  "releaseDate": "2026-05-07",
+  "releaseTime": "14:57",
+  "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "SmartLife-Bugfix: Tuya-Geräteliste nutzt jetzt Endpoint-Fallbacks (inkl. Associated-Users), damit der Fehler 'device_ids param is illegal' nicht mehr den Cloud-Status auf offline setzt.",
-  "commitId": "0ae7df4",
+  "note": "Online-Zahlungen sind jetzt vollständig auf Wise-Betrieb ausgerichtet, inklusive Wise-Bereitschaftsprüfung, Zielkonto-Hinweisen und verbessertem Autoabgleich-Status.",
+  "commitId": "5a31422",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.18.0",
+      "buildId": "20260507-4",
+      "releaseDate": "2026-05-07",
+      "releaseTime": "14:57",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Online-Zahlungen sind jetzt vollständig auf Wise-Betrieb ausgerichtet, inklusive Wise-Bereitschaftsprüfung, Zielkonto-Hinweisen und verbessertem Autoabgleich-Status.",
+      "commitId": "5a31422",
+      "obligation": "false"
+    },
+    {
+      "version": "1.17.2",
+      "buildId": "20260507-3",
+      "releaseDate": "2026-05-07",
+      "releaseTime": "14:46",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Der Kontoeingangsabgleich für Online-Zahlungen ist backendseitig jetzt anbieterfähig vorbereitet und bleibt weiterhin Wise-kompatibel.",
+      "commitId": "5a31422",
+      "obligation": "false"
+    },
+    {
+      "version": "1.17.1",
+      "buildId": "20260507-2",
+      "releaseDate": "2026-05-07",
+      "releaseTime": "14:29",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Online-Zahlungen nutzen jetzt ein eigenes festes Zielkonto in den Einstellungen; Gäste können zwischen manueller Überweisung und vorausgefülltem SEPA/EPC-QR-Start wählen.",
+      "commitId": "5a31422",
+      "obligation": "false"
+    },
+    {
+      "version": "1.17.0",
+      "buildId": "20260507-1",
+      "releaseDate": "2026-05-07",
+      "releaseTime": "14:08",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Die Zahlungsverwaltung unterstützt jetzt Online-Zahlungslinks mit SEPA-Referenzcode, Wise-Sync, Gaststatus, Zusatzposten und Bearbeitungssperre für aktiv verlinkte Einträge.",
+      "commitId": "5a31422",
+      "obligation": "false"
+    },
     {
       "version": "1.16.8",
       "buildId": "20260505-12",

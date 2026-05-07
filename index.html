@@ -9,6 +9,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     
     <script>
         // Mermaid initialisieren nach dem Laden
@@ -24,15 +25,15 @@
     <meta name="application-name" content="TOP 2 App">
     <meta name="apple-mobile-web-app-title" content="TOP2">
     <meta name="theme-color" content="#4f46e5" />
-    <meta name="top2-app-version" content="1.16.8" />
-    <meta name="top2-build-id" content="20260505-12" />
+    <meta name="top2-app-version" content="1.18.0" />
+    <meta name="top2-build-id" content="20260507-4" />
     <meta name="msapplication-navbutton-color" content="#4f46e5">
     <meta name="apple-mobile-app-status-bar-style" content="black-translucent">
     <link rel="icon" type="image/png" sizes="192x192" href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
     <link rel="apple-touch-icon" type="image/png" sizes="192x192"
         href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
 
-    <link rel="manifest" href="manifest.json?v=20260505-12">
+    <link rel="manifest" href="manifest.json?v=20260507-4">
 
     <link rel="stylesheet" href="style.css">
     
@@ -6509,6 +6510,8 @@
                 <div class="flex gap-2 mb-4 border-b flex-wrap">
                     <button id="tab-zv-requests"
                         class="px-4 py-2 font-bold text-gray-500 hover:text-gray-700 whitespace-nowrap">Anfragen</button>
+                    <button id="tab-zv-online"
+                        class="px-4 py-2 font-bold text-gray-500 hover:text-gray-700 whitespace-nowrap">Online-Zahlungen</button>
                     <button id="tab-zv-templates"
                         class="px-4 py-2 font-bold text-gray-500 hover:text-gray-700 whitespace-nowrap">Vorlagen</button>
                     <button id="tab-zv-accounts"
@@ -6596,6 +6599,55 @@
                 </div>
 
                 <div id="content-zv-requests" class="hidden space-y-4">
+                </div>
+
+                <div id="content-zv-online" class="hidden space-y-4">
+                    <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-cyan-600">
+                        <div class="mb-3">
+                            <h3 class="text-lg font-bold text-gray-800">Zielkonto für Online-Zahlungen</h3>
+                            <p class="text-xs text-gray-500">Dieses eine Konto wird für alle Online-Zahlungslinks verwendet. Es ist unabhängig von „Meine Konten“ und soll für den automatischen Eingangsabgleich dein Wise-EUR-Zielkonto sein.</p>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <input type="text" id="zv-online-target-account-holder" class="w-full p-2 border rounded-lg" placeholder="Kontoinhaber">
+                            <input type="text" id="zv-online-target-bank-name" class="w-full p-2 border rounded-lg" placeholder="Bankname">
+                            <input type="text" id="zv-online-target-iban" class="w-full p-2 border rounded-lg" placeholder="IBAN">
+                            <input type="text" id="zv-online-target-bic" class="w-full p-2 border rounded-lg" placeholder="BIC">
+                        </div>
+                        <div class="mt-3 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
+                            <div class="text-[11px] text-gray-500">Für QR/EPC-Start ist kein Bank-Token nötig. Der automatische Abruf liest später nur das angebundene Wise-Konto aus.</div>
+                            <button id="btn-save-online-target-account" class="px-4 py-2 bg-cyan-600 text-white text-sm font-bold rounded-lg hover:bg-cyan-700 transition">Online-Konto speichern</button>
+                        </div>
+                        <div id="zv-online-target-account-preview" class="mt-3 rounded-lg border border-cyan-100 bg-cyan-50 p-3 text-sm text-gray-700"></div>
+                    </div>
+
+                    <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-amber-500">
+                        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                            <div>
+                                <h3 class="text-lg font-bold text-gray-800">Wise-Bereitschaft</h3>
+                                <p class="text-xs text-gray-500">Prüft, ob die Wise-Secrets hinterlegt sind und ob der automatische Eingangsabgleich sofort einsatzbereit ist.</p>
+                            </div>
+                            <button id="btn-zv-online-check-wise-status" class="px-3 py-2 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 transition">Wise prüfen</button>
+                        </div>
+                        <div id="zv-online-wise-status" class="rounded-lg border border-amber-100 bg-amber-50 p-3 text-sm text-gray-700">
+                            <p class="text-gray-500">Wise-Status wird geladen...</p>
+                        </div>
+                    </div>
+
+                    <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-emerald-600">
+                        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                            <div>
+                                <h3 class="text-lg font-bold text-gray-800">Online-Zahlungslinks (SEPA/EUR)</h3>
+                                <p class="text-xs text-gray-500">Alle erzeugten Zahlungslinks inkl. Status, Aufrufe, Wise-Autoabgleich und manueller Beendigung.</p>
+                            </div>
+                            <button id="btn-zv-online-sync-wise"
+                                class="px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition">
+                                Wise Sync starten
+                            </button>
+                        </div>
+                        <div id="zv-online-links-list" class="space-y-2 max-h-[28rem] overflow-y-auto">
+                            <p class="text-center text-gray-400 italic py-4">Lade Online-Zahlungslinks...</p>
+                        </div>
+                    </div>
                 </div>
 
                 <div id="content-zv-archive" class="hidden h-full">
@@ -7490,6 +7542,8 @@
                         <p class="text-xs text-gray-500 mt-2" id="guest-status-text">Alles ausgeglichen.</p>
                     </div>
 
+                    <div id="guest-online-payment-box" class="hidden p-3 rounded-lg border border-emerald-200 bg-emerald-50 space-y-2"></div>
+
                     <div>
                         <h3 class="font-bold text-gray-700 border-b pb-2 mb-2">Offene Posten</h3>
                         <div id="guest-payment-list" class="space-y-2 max-h-96 overflow-y-auto">
@@ -7631,6 +7685,10 @@
                 </div>
 
                 <div class="mt-4 pt-2 border-t">
+                    <button id="btn-copy-online-link"
+                        class="w-full mb-2 py-2 border border-emerald-300 text-emerald-700 font-bold rounded hover:bg-emerald-50 text-sm flex items-center justify-center gap-2">
+                        <span>💶 Online-Zahlungslink kopieren</span>
+                    </button>
                     <button id="btn-copy-guest-link"
                         class="w-full py-2 border border-gray-300 text-gray-600 font-bold rounded hover:bg-gray-50 text-sm flex items-center justify-center gap-2">
                         <span>🔗 Link für Gast kopieren</span>
