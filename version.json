@@ -1,14 +1,24 @@
 {
-  "version": "1.22.11",
-  "buildId": "20260508-16",
+  "version": "1.22.12",
+  "buildId": "20260508-17",
   "releaseDate": "2026-05-08",
-  "releaseTime": "16:28",
+  "releaseTime": "22:02",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Gesamtrevision: Adressbuch-Dopplungen stabilisiert, Gast-Zusatzpositionen erscheinen wieder und Verwendungszwecke werden konsistent über echte Eintrags-Kurz-IDs aufgebaut.",
-  "commitId": "5a9e9a2",
+  "note": "Link-Verwaltung zeigt Aufrufzahlen und Aufrufhistorie wieder ohne erfundene Zeitstempel und mit echter Event-Anzahl an.",
+  "commitId": "fb51763",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.12",
+      "buildId": "20260508-17",
+      "releaseDate": "2026-05-08",
+      "releaseTime": "22:02",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Link-Verwaltung zeigt Aufrufzahlen und Aufrufhistorie wieder ohne erfundene Zeitstempel und mit echter Event-Anzahl an.",
+      "commitId": "fb51763",
+      "obligation": "false"
+    },
     {
       "version": "1.22.11",
       "buildId": "20260508-16",

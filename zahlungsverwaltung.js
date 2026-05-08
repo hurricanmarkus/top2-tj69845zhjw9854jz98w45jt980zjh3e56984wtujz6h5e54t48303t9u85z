@@ -255,7 +255,13 @@ function getActiveIssuedLinkCount(target = {}) {
 }
 
 async function fetchIssuedLinkAccessHistory(entry = {}) {
-    if (!entry?.kind || !entry?.id) return [];
+    if (!entry?.kind || !entry?.id) {
+        return {
+            entries: [],
+            historyCount: Number(entry?.viewCount || 0),
+            hasExactHistory: false,
+        };
+    }
     let ref = null;
 
     if (entry.kind === 'payment_link') {
@@ -266,7 +272,13 @@ async function fetchIssuedLinkAccessHistory(entry = {}) {
         ref = collection(db, 'artifacts', appId, 'public', 'data', 'payments', entry.id, 'guestLinkEvents');
     }
 
-    if (!ref) return [];
+    if (!ref) {
+        return {
+            entries: [],
+            historyCount: Number(entry?.viewCount || 0),
+            hasExactHistory: false,
+        };
+    }
 
     try {
         const snap = await getDocs(ref);
@@ -283,20 +295,32 @@ async function fetchIssuedLinkAccessHistory(entry = {}) {
         });
 
         const normalized = events.sort((left, right) => new Date(left.createdAt || 0).getTime() - new Date(right.createdAt || 0).getTime());
-        if (normalized.length) return normalized;
+        return {
+            entries: normalized,
+            historyCount: normalized.length,
+            hasExactHistory: true,
+        };
     } catch (error) {
-        console.warn('fetchIssuedLinkAccessHistory: history read failed, falling back to cached counters.', error);
+        console.warn('fetchIssuedLinkAccessHistory: history read failed.', error);
+        return {
+            entries: [],
+            historyCount: Number(entry.viewCount || 0),
+            hasExactHistory: false,
+        };
     }
+}
 
-    const fallbackCount = Number(entry.viewCount || 0);
-    if (!fallbackCount) return [];
-    const seed = new Date();
-    seed.setSeconds(0, 0);
-    return Array.from({ length: fallbackCount }, (_, index) => ({
-        id: `fallback-${index}`,
-        createdAt: new Date(seed.getTime() - ((fallbackCount - 1 - index) * 60000)),
-        eventType: 'guest_open',
-    }));
+async function enrichIssuedLinksWithHistoryCounts(entries = []) {
+    if (!Array.isArray(entries) || !entries.length) return [];
+    const historyStates = await Promise.all(entries.map((entry) => fetchIssuedLinkAccessHistory(entry)));
+    return entries.map((entry, index) => {
+        const historyState = historyStates[index] || null;
+        if (!historyState?.hasExactHistory) return entry;
+        return {
+            ...entry,
+            viewCount: Number(historyState.historyCount || 0),
+        };
+    });
 }
 
 async function closeOverviewGuestLink(collectionName, docId) {
@@ -341,11 +365,15 @@ async function openIssuedLinkHistoryByToken(token = '', event = null) {
         const entry = pendingIssuedLinksModalState.entries.find((item) => item.kind === kind && item.id === id);
         if (!entry) return;
 
-        const entries = await fetchIssuedLinkAccessHistory(entry);
+        const historyState = await fetchIssuedLinkAccessHistory(entry);
+        const entries = Array.isArray(historyState?.entries) ? historyState.entries : [];
         pendingIssuedLinksModalState.selectedHistoryHtml = `
             <div class="space-y-2">
                 <div class="text-sm font-bold text-gray-800">Aufrufhistorie: ${entry.title}</div>
-                ${renderIssuedLinksHistory(entries)}
+                ${renderIssuedLinksHistory(entries, {
+                    fallbackCount: Number(historyState?.historyCount || entry.viewCount || 0),
+                    hasExactHistory: historyState?.hasExactHistory === true,
+                })}
             </div>
         `;
         renderIssuedLinksManagementModal();
@@ -363,13 +391,17 @@ async function openIssuedLinkHistoryByToken(token = '', event = null) {
 
 window.openIssuedLinkHistoryByToken = openIssuedLinkHistoryByToken;
 
-function renderIssuedLinksHistory(entries = []) {
+function renderIssuedLinksHistory(entries = [], options = {}) {
+    const fallbackCount = Number(options?.fallbackCount || 0);
+    const hasExactHistory = options?.hasExactHistory === true;
     if (!entries.length) {
+        if (!hasExactHistory && fallbackCount > 0) {
+            return `<div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">Gespeicherte Aufrufe: <span class="font-bold">${fallbackCount}</span><div class="mt-1 text-[11px] text-amber-700">Die einzelnen Zeitpunkte konnten nicht geladen werden. Es werden keine erfundenen Datum- oder Uhrzeitwerte mehr angezeigt.</div></div>`;
+        }
         return '<p class="text-xs text-gray-400 italic">Noch keine Aufrufdaten vorhanden.</p>';
     }
     return entries.map((entry, index) => {
-        const adjustedCreatedAt = entry.createdAt ? new Date(new Date(entry.createdAt).getTime() - 60000) : entry.createdAt;
-        return `<div class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs"><span class="font-semibold text-gray-700">Aufruf ${index + 1}</span><span class="text-gray-500">${formatLinkDateTime(adjustedCreatedAt)}</span></div>`;
+        return `<div class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs"><span class="font-semibold text-gray-700">Aufruf ${index + 1}</span><span class="text-gray-500">${formatLinkDateTime(entry.createdAt)}</span></div>`;
     }).join('');
 }
 
@@ -588,6 +620,8 @@ async function openIssuedLinksManagementModal(target = {}, customDirectLinks = n
                 });
             });
     }
+
+    entries = await enrichIssuedLinksWithHistoryCounts(entries);
 
     pendingIssuedLinksModalState = {
         targetId: target.id,
