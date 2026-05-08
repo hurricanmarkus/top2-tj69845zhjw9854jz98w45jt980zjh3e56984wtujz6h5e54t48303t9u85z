@@ -1,14 +1,24 @@
 {
-  "version": "1.22.8",
-  "buildId": "20260508-13",
+  "version": "1.22.9",
+  "buildId": "20260508-14",
   "releaseDate": "2026-05-08",
-  "releaseTime": "15:28",
+  "releaseTime": "15:44",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "LIVE-Anzeige zeigt wieder eine rote pulsierende Badge im Titel, die Link-Historie fällt bei leeren Events auf den Zähler zurück, und das Zahnrad steht rechts neben '+ Neu'.",
+  "note": "Zahnrad steht links von '+ Neu', die Online-Zahlungsbox hat keinen Copy-Footer mehr und die Link-Historie zeigt Aufruf 1 als ältesten Eintrag.",
   "commitId": "5a9e9a2",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.9",
+      "buildId": "20260508-14",
+      "releaseDate": "2026-05-08",
+      "releaseTime": "15:44",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Zahnrad steht links von '+ Neu', die Online-Zahlungsbox hat keinen Copy-Footer mehr und die Link-Historie zeigt Aufruf 1 als ältesten Eintrag.",
+      "commitId": "5a9e9a2",
+      "obligation": "false"
+    },
     {
       "version": "1.22.8",
       "buildId": "20260508-13",

@@ -219,7 +219,7 @@ function formatLinkDateTime(value) {
     const raw = value?.toDate ? value.toDate() : value;
     const date = new Date(raw);
     if (Number.isNaN(date.getTime())) return '—';
-    return date.toLocaleString('de-DE');
+    return date.toLocaleString('de-DE', { timeZone: 'Europe/Vienna' });
 }
 
 function getPaymentPartnerName(payment = {}) {
@@ -281,7 +281,7 @@ async function fetchIssuedLinkAccessHistory(entry = {}) {
             });
         });
 
-        const normalized = events.sort((left, right) => new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime());
+        const normalized = events.sort((left, right) => new Date(left.createdAt || 0).getTime() - new Date(right.createdAt || 0).getTime());
         if (normalized.length) return normalized;
     } catch (error) {
         console.warn('fetchIssuedLinkAccessHistory: history read failed, falling back to cached counters.', error);
@@ -289,11 +289,11 @@ async function fetchIssuedLinkAccessHistory(entry = {}) {
 
     const fallbackCount = Number(entry.viewCount || 0);
     if (!fallbackCount) return [];
-    const createdAt = entry.createdAt?.toDate ? entry.createdAt.toDate() : entry.createdAt;
-    const seed = createdAt ? new Date(createdAt) : new Date();
+    const seed = new Date();
+    seed.setSeconds(0, 0);
     return Array.from({ length: fallbackCount }, (_, index) => ({
         id: `fallback-${index}`,
-        createdAt: new Date(seed.getTime() + index * 60000),
+        createdAt: new Date(seed.getTime() - ((fallbackCount - 1 - index) * 60000)),
         eventType: 'guest_open',
     }));
 }
@@ -366,7 +366,10 @@ function renderIssuedLinksHistory(entries = []) {
     if (!entries.length) {
         return '<p class="text-xs text-gray-400 italic">Noch keine Aufrufdaten vorhanden.</p>';
     }
-    return entries.map((entry, index) => `<div class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs"><span class="font-semibold text-gray-700">Aufruf ${entries.length - index}</span><span class="text-gray-500">${formatLinkDateTime(entry.createdAt)}</span></div>`).join('');
+    return entries.map((entry, index) => {
+        const adjustedCreatedAt = entry.createdAt ? new Date(new Date(entry.createdAt).getTime() - 60000) : entry.createdAt;
+        return `<div class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs"><span class="font-semibold text-gray-700">Aufruf ${index + 1}</span><span class="text-gray-500">${formatLinkDateTime(adjustedCreatedAt)}</span></div>`;
+    }).join('');
 }
 
 function renderIssuedLinksManagementModal() {
@@ -8300,9 +8303,12 @@ export async function initializeGuestView(guestId, options = {}) {
                 <div id="guest-payment-workspace" class="${shouldShowPaymentWorkspace ? '' : 'hidden '}space-y-3">
                     <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-3">
                         <div class="flex items-start justify-between gap-2">
-                            <div>
+                            <div class="flex items-start gap-2 min-w-0">
+                                <button id="guest-close-online-payment-btn" type="button" class="shrink-0 rounded-md border border-emerald-200 bg-white px-2 py-1 text-sm font-black text-emerald-700 hover:bg-emerald-50" aria-label="Online-Zahlung schließen">←</button>
+                                <div>
                                 <div class="text-sm font-bold text-emerald-900">Online-Zahlung aktiv</div>
                                 <div class="text-[11px] text-emerald-800">Status: <span class="font-bold">${statusText}</span></div>
+                                </div>
                             </div>
                             <span class="inline-flex items-center px-2 py-1 rounded border text-[10px] font-bold ${getOnlineLinkStatusBadgeClass(paymentLinkData.status || 'open')}">${statusText}</span>
                         </div>
@@ -8353,10 +8359,6 @@ export async function initializeGuestView(guestId, options = {}) {
                                 <div id="guest-sepa-qr-code" class="min-h-[168px] flex items-center justify-center"></div>
                                 <div class="text-center text-[11px] text-gray-500">SEPA/EPC-QR mit vorausgefüllter IBAN, Betrag und Verwendungszweck des ausgewählten Eintrags</div>
                             </div>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                <button id="guest-copy-sepa-data-btn" type="button" class="py-2 px-3 rounded-lg border border-cyan-300 bg-white text-cyan-700 text-xs font-bold hover:bg-cyan-50 transition">Zahlungsdaten kopieren</button>
-                                <button id="guest-copy-iban-btn" type="button" class="py-2 px-3 rounded-lg border border-cyan-300 bg-white text-cyan-700 text-xs font-bold hover:bg-cyan-50 transition">IBAN kopieren</button>
-                            </div>
                             ${canStartOnlinePayment ? '' : '<div class="text-xs text-red-600 font-semibold">Für den Online-Start fehlen noch vollständige Zielkontodaten.</div>'}
                         </div>
                         <div class="grid grid-cols-1 gap-2">
@@ -8375,6 +8377,7 @@ export async function initializeGuestView(guestId, options = {}) {
             const onlinePanel = onlineBox.querySelector('#guest-online-start-panel');
             const manualModeBtn = onlineBox.querySelector('#guest-manual-mode-btn');
             const onlineModeBtn = onlineBox.querySelector('#guest-online-mode-btn');
+            const closeOnlineBtn = onlineBox.querySelector('#guest-close-online-payment-btn');
             const selectedBankLabel = onlineBox.querySelector('#guest-online-selected-bank');
             const selectedInstructionLabel = onlineBox.querySelector('#guest-online-selected-instruction');
             const qrContainer = onlineBox.querySelector('#guest-sepa-qr-code');
@@ -8458,6 +8461,15 @@ export async function initializeGuestView(guestId, options = {}) {
                 activatePaymentMode('manual');
             });
 
+            closeOnlineBtn?.addEventListener('click', () => {
+                launcher?.classList.remove('hidden');
+                workspace?.classList.add('hidden');
+                document.getElementById('guest-overview-summary')?.classList.remove('hidden');
+                document.getElementById('guest-open-posts-section')?.classList.remove('hidden');
+                document.getElementById('guest-position-add-box')?.classList.remove('hidden');
+                activatePaymentMode('manual');
+            });
+
             manualModeBtn?.addEventListener('click', () => activatePaymentMode('manual'));
             onlineModeBtn?.addEventListener('click', () => activatePaymentMode('online'));
 
@@ -8478,16 +8490,6 @@ export async function initializeGuestView(guestId, options = {}) {
                     button.classList.remove('border-cyan-200', 'bg-white', 'text-cyan-700');
                     button.classList.add('border-cyan-400', 'bg-cyan-600', 'text-white');
                 });
-            });
-
-            onlineBox.querySelector('#guest-copy-sepa-data-btn')?.addEventListener('click', async () => {
-                const copied = await copyTextToClipboardSafe(buildSepaCopyText(currentSepaPaymentData));
-                alertUser(copied ? 'Zahlungsdaten kopiert.' : 'Zahlungsdaten bereit.', 'success');
-            });
-
-            onlineBox.querySelector('#guest-copy-iban-btn')?.addEventListener('click', async () => {
-                const copied = await copyTextToClipboardSafe(bankInfo.iban || '');
-                alertUser(copied ? 'IBAN kopiert.' : 'IBAN bereit.', 'success');
             });
 
             onlineBox.querySelector('#guest-mark-paid-btn')?.addEventListener('click', async () => {
