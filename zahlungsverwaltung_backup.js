@@ -353,7 +353,7 @@ function renderIssuedLinksManagementModal() {
                         <div class="text-[12px] text-gray-700">Aufrufe: <span class="font-bold">${entry.viewCount}</span></div>
                         <div class="text-[12px] text-gray-700">${entry.type}</div>
                         <div class="flex flex-wrap justify-start gap-2 sm:justify-end">
-                            <button type="button" data-issued-link-history="${entry.kind}:${entry.id}" class="relative z-10 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-bold text-cyan-700 hover:bg-cyan-100">Aufruf anzeigen</button>
+                            <button type="button" data-issued-link-history="${entry.kind}:${entry.id}" class="relative z-10 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-bold text-cyan-700 hover:bg-cyan-100">[anzeigen]</button>
                             ${entry.copyUrl ? `<button type="button" data-issued-link-copy="${entry.kind}:${entry.id}" class="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100">Link</button>` : ''}
                             <button type="button" data-issued-link-close="${entry.kind}:${entry.id}" class="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50" ${valid ? '' : 'disabled'}>Link beenden</button>
                         </div>
@@ -364,14 +364,13 @@ function renderIssuedLinksManagementModal() {
         }).join('')
         : '<p class="text-sm text-gray-400 italic">Keine ausgestellten Links gefunden.</p>';
 
-    history.innerHTML = state.selectedHistoryHtml || '<p class="text-xs text-gray-400 italic">Klicke bei einem Link auf <strong>Aufruf anzeigen</strong>, um Datum und Uhrzeit der Aufrufe zu sehen.</p>';
+    history.innerHTML = state.selectedHistoryHtml || '<p class="text-xs text-gray-400 italic">Klicke bei einem Link auf <strong>[anzeigen]</strong>, um Datum und Uhrzeit der Aufrufe zu sehen.</p>';
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
 
-    list.onclick = async (e) => {
-        const historyBtn = e.target.closest('[data-issued-link-history]');
-        if (historyBtn) {
-            const token = historyBtn.getAttribute('data-issued-link-history') || '';
+    list.querySelectorAll('[data-issued-link-history]').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const token = button.getAttribute('data-issued-link-history') || '';
             const [kind, id] = token.split(':');
             const entry = state.entries.find((item) => item.kind === kind && item.id === id);
             if (!entry) return;
@@ -383,12 +382,12 @@ function renderIssuedLinksManagementModal() {
                 </div>
             `;
             renderIssuedLinksManagementModal();
-            return;
-        }
+        });
+    });
 
-        const copyBtn = e.target.closest('[data-issued-link-copy]');
-        if (copyBtn) {
-            const token = copyBtn.getAttribute('data-issued-link-copy') || '';
+    list.querySelectorAll('[data-issued-link-copy]').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const token = button.getAttribute('data-issued-link-copy') || '';
             const [kind, id] = token.split(':');
             const entry = state.entries.find((item) => item.kind === kind && item.id === id);
             if (!entry?.copyUrl) return;
@@ -398,52 +397,43 @@ function renderIssuedLinksManagementModal() {
             } else {
                 alertUser('Link kopiert.', 'success');
             }
-            return;
-        }
+        });
+    });
 
-        const closeBtn = e.target.closest('[data-issued-link-close]');
-        if (closeBtn) {
-            const token = closeBtn.getAttribute('data-issued-link-close') || '';
+    list.querySelectorAll('[data-issued-link-close]').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const token = button.getAttribute('data-issued-link-close') || '';
             const [kind, id] = token.split(':');
             const entry = state.entries.find((item) => item.kind === kind && item.id === id);
             if (!entry || !entry.isActive) return;
             if (!confirm('Diesen Link wirklich beenden?')) return;
-            
-            const card = closeBtn.closest('.rounded-xl');
-            if (card) card.style.display = 'none';
-            
             try {
                 if (entry.kind === 'overview_link') {
                     await closeOverviewGuestLink(entry.collectionName, entry.id);
                 } else if (entry.kind === 'payment_link') {
                     await window.closeOnlinePaymentLink({ linkId: entry.id });
                     await ensureOnlinePaymentLinksCacheLoaded(true);
-                } else if (entry.kind === 'direct_payment_link') {
-                    await closeDirectPaymentGuestLink(entry.id);
                 }
                 alertUser('Link beendet.', 'success');
-                
-                if (card) card.remove();
-                state.entries = state.entries.filter((item) => !(item.kind === kind && item.id === id));
-                state.activeCount = state.entries.length;
-                document.getElementById('issued-links-management-subtitle').textContent = `${state.activeCount} aktive Links`;
-                
-                if (entry.kind === 'direct_payment_link') {
-                    renderDirectLinksManagementBox();
-                } else {
-                    renderContactList();
-                }
+                await renderContactList();
+                await openIssuedLinksManagementModal({
+                    id: state.targetId,
+                    targetName: state.targetName,
+                    collectionName: state.collectionName,
+                    raw: state.collectionName === 'private-contacts'
+                        ? (allContacts.find((entry) => entry.id === state.targetId) || {})
+                        : ((allSystemUsers.find((entry) => entry.id === state.targetId) || USERS[state.targetId] || {})),
+                });
             } catch (error) {
-                if (card) card.style.display = '';
                 console.error(error);
                 alertUser(error?.message || 'Link konnte nicht beendet werden.', 'error');
             }
-            return;
-        }
+        });
+    });
 
-        const tipBtn = e.target.closest('[data-issued-link-owner-tip]');
-        if (tipBtn) {
-            const linkId = tipBtn.getAttribute('data-issued-link-owner-tip') || '';
+    list.querySelectorAll('[data-issued-link-owner-tip]').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const linkId = button.getAttribute('data-issued-link-owner-tip') || '';
             try {
                 await resolveOnlinePaymentOverpaymentByOwnerAction(linkId, 'tip');
                 await ensureOnlinePaymentLinksCacheLoaded(true);
@@ -456,17 +446,17 @@ function renderIssuedLinksManagementModal() {
                     raw: state.collectionName === 'private-contacts'
                         ? (allContacts.find((entry) => entry.id === state.targetId) || {})
                         : ((allSystemUsers.find((entry) => entry.id === state.targetId) || USERS[state.targetId] || {})),
-                }, state.rawCustomDirectLinks);
+                });
             } catch (error) {
                 console.error(error);
                 alertUser(error?.message || 'Überzahlung konnte nicht entschieden werden.', 'error');
             }
-            return;
-        }
+        });
+    });
 
-        const creditBtn = e.target.closest('[data-issued-link-owner-credit]');
-        if (creditBtn) {
-            const linkId = creditBtn.getAttribute('data-issued-link-owner-credit') || '';
+    list.querySelectorAll('[data-issued-link-owner-credit]').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const linkId = button.getAttribute('data-issued-link-owner-credit') || '';
             try {
                 await resolveOnlinePaymentOverpaymentByOwnerAction(linkId, 'credit');
                 await ensureOnlinePaymentLinksCacheLoaded(true);
@@ -479,82 +469,58 @@ function renderIssuedLinksManagementModal() {
                     raw: state.collectionName === 'private-contacts'
                         ? (allContacts.find((entry) => entry.id === state.targetId) || {})
                         : ((allSystemUsers.find((entry) => entry.id === state.targetId) || USERS[state.targetId] || {})),
-                }, state.rawCustomDirectLinks);
+                });
             } catch (error) {
                 console.error(error);
                 alertUser(error?.message || 'Überzahlung konnte nicht entschieden werden.', 'error');
             }
-            return;
-        }
-    };
+        });
+    });
 }
 
-async function openIssuedLinksManagementModal(target = {}, customDirectLinks = null) {
+async function openIssuedLinksManagementModal(target = {}) {
     await ensureOnlinePaymentLinksCacheLoaded();
     const raw = target.raw || {};
-    let entries = [];
-
-    if (customDirectLinks) {
-        entries = customDirectLinks.map(payment => {
-            const active = isGuestTokenLinkActive(payment);
-            return {
-                id: payment.id,
-                kind: 'direct_payment_link',
-                type: 'Direkt-Link',
-                title: payment.title || 'Schuldeneintrag',
-                meta: `Typ: Direkt-Link • Erstellt: ${formatLinkDateTime(payment.guestTokenCreatedAt)}`,
-                isActive: active,
-                viewCount: Number(payment.guestTokenViews || 0),
-                createdAt: payment.guestTokenCreatedAt,
-                copyUrl: active ? buildDirectPaymentGuestUrl(payment.id, payment.guestToken) : '',
-                pendingOverpayment: null,
-            };
-        }).filter(e => e.isActive);
-    } else {
-        const overviewExists = Boolean(raw.guestToken || raw.guestTokenCreatedAt || raw.guestTokenStatus === 'closed');
-        const overviewActive = isGuestTokenLinkActive(raw);
-        if (overviewExists && overviewActive) {
-            entries.push({
-                id: target.id,
-                kind: 'overview_link',
-                type: 'Übersichtslink',
-                title: `${target.targetName} • Übersicht`,
-                meta: target.collectionName === 'private-contacts' ? 'Manueller Kontakt' : 'Registrierte Person',
-                isActive: true,
-                viewCount: Number(raw.guestTokenViews || 0),
-                createdAt: raw.guestTokenCreatedAt,
-                collectionName: target.collectionName,
-                copyUrl: buildOverviewGuestUrl(target.id, raw.guestToken),
-                pendingOverpayment: null,
-            });
-        }
-
-        getIssuedOnlineLinksForGuest(target.id)
-            .filter((link) => String(link.status || '').trim().toLowerCase() !== 'closed')
-            .forEach((link) => {
-                entries.push({
-                    id: link.id,
-                    kind: 'payment_link',
-                    type: 'Zahlungslink',
-                    title: link.title || 'Online-Zahlungslink',
-                    meta: `Status intern: ${getOnlineLinkStatusLabel(link.status || 'open')} • Aufrufe: ${Number(link.tokenViews || 0)}`,
-                    isActive: true,
-                    viewCount: Number(link.tokenViews || 0),
-                    createdAt: link.createdAt,
-                    copyUrl: buildOnlinePaymentPublicUrl(link.id, link.token || ''),
-                    pendingOverpayment: link.pendingOverpayment || null,
-                });
-            });
+    const entries = [];
+    const overviewExists = Boolean(raw.guestToken || raw.guestTokenCreatedAt || raw.guestTokenStatus === 'closed');
+    if (overviewExists) {
+        entries.push({
+            id: target.id,
+            kind: 'overview_link',
+            type: 'Übersichtslink',
+            title: `${target.targetName} • Übersicht`,
+            meta: target.collectionName === 'private-contacts' ? 'Manueller Kontakt' : 'Registrierte Person',
+            isActive: isGuestTokenLinkActive(raw),
+            viewCount: Number(raw.guestTokenViews || 0),
+            createdAt: raw.guestTokenCreatedAt,
+            collectionName: target.collectionName,
+            copyUrl: isGuestTokenLinkActive(raw) ? buildOverviewGuestUrl(target.id, raw.guestToken) : '',
+            pendingOverpayment: null,
+        });
     }
+
+    getIssuedOnlineLinksForGuest(target.id).forEach((link) => {
+        entries.push({
+            id: link.id,
+            kind: 'payment_link',
+            type: 'Zahlungslink',
+            title: link.title || 'Online-Zahlungslink',
+            meta: `Status intern: ${getOnlineLinkStatusLabel(link.status || 'open')} • Aufrufe: ${Number(link.tokenViews || 0)}`,
+            isActive: String(link.status || '').trim().toLowerCase() !== 'closed',
+            viewCount: Number(link.tokenViews || 0),
+            createdAt: link.createdAt,
+            copyUrl: buildOnlinePaymentPublicUrl(link.id, link.token || ''),
+            pendingOverpayment: link.pendingOverpayment || null,
+        });
+    });
 
     pendingIssuedLinksModalState = {
         targetId: target.id,
         targetName: target.targetName,
         collectionName: target.collectionName,
-        activeCount: entries.length,
+        activeCount: getActiveIssuedLinkCount(target),
         entries,
         selectedHistoryHtml: '',
-        rawCustomDirectLinks: customDirectLinks
     };
     renderIssuedLinksManagementModal();
 }
@@ -565,50 +531,76 @@ async function renderDirectLinksManagementBox() {
 
     const directLinks = allPayments
         .filter((payment) => String(payment?.createdBy || '').trim() === currentUser.mode)
-        .filter((payment) => isGuestTokenLinkActive(payment))
+        .filter((payment) => payment?.guestToken || payment?.guestTokenCreatedAt || String(payment?.guestTokenStatus || '').trim().toLowerCase() === 'closed')
         .sort((left, right) => new Date(right?.guestTokenCreatedAt?.toDate ? right.guestTokenCreatedAt.toDate() : right?.guestTokenCreatedAt || 0).getTime() - new Date(left?.guestTokenCreatedAt?.toDate ? left.guestTokenCreatedAt.toDate() : left?.guestTokenCreatedAt || 0).getTime());
 
-    const groupedByPartner = {};
-    directLinks.forEach(p => {
-        const partner = getPaymentPartnerName(p);
-        if (!groupedByPartner[partner]) groupedByPartner[partner] = [];
-        groupedByPartner[partner].push(p);
-    });
-
-    if (Object.keys(groupedByPartner).length === 0) {
+    if (!directLinks.length) {
         container.innerHTML = '<p class="text-sm text-gray-400 italic">Noch keine Direkt-Links aus Einzel-Einträgen vorhanden.</p>';
         return;
     }
 
-    container.innerHTML = Object.entries(groupedByPartner).map(([partner, partnerLinks]) => {
-        const activeCount = partnerLinks.length;
+    container.innerHTML = directLinks.map((payment) => {
+        const active = isGuestTokenLinkActive(payment);
         return `
-            <div class="flex justify-between items-center p-3 bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition mb-2">
-                <div class="flex items-center gap-2">
-                    <div class="w-8 h-8 bg-cyan-100 text-cyan-700 rounded-full flex items-center justify-center font-bold text-xs">
-                        ${partner.substring(0, 2).toUpperCase()}
-                    </div>
+            <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+                <div class="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                        <span class="font-bold text-gray-800 block leading-tight">${partner}</span>
-                        <span class="text-[10px] text-cyan-500 block mb-0.5">Partner mit Direkt-Links</span>
+                        <div class="text-sm font-bold text-gray-800">${payment.title || 'Direkt-Link'}</div>
+                        <div class="text-[11px] text-gray-500">Partner: ${getPaymentPartnerName(payment)} • Erstellt: ${formatLinkDateTime(payment.guestTokenCreatedAt)}</div>
+                        <div class="text-[11px] text-gray-400">Typ: Direkt-Link • Aufrufe: <span class="font-bold">${Number(payment.guestTokenViews || 0)}</span></div>
                     </div>
+                    <span class="inline-flex items-center rounded border px-2 py-1 text-[11px] font-bold ${getSimpleLinkValidityBadgeClass(active)}">${getSimpleLinkValidityLabel(active)}</span>
                 </div>
-                <div class="flex flex-wrap justify-end gap-1.5">
-                    <button class="manage-direct-links-btn px-3 py-1 bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded hover:bg-cyan-50 hover:text-cyan-700 transition" data-partner="${partner}">${activeCount} aktive Links</button>
+                <div class="mt-2 flex flex-wrap gap-2">
+                    <button type="button" data-direct-link-history="${payment.id}" class="relative z-10 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-bold text-cyan-700 hover:bg-cyan-100">[anzeigen]</button>
+                    ${active ? `<button type="button" data-direct-link-copy="${payment.id}" class="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100">Link</button>` : ''}
+                    <button type="button" data-direct-link-close="${payment.id}" class="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50" ${active ? '' : 'disabled'}>Link beenden</button>
                 </div>
+                <div id="direct-link-history-${payment.id}" class="mt-2 hidden space-y-2"></div>
             </div>
         `;
     }).join('');
 
-    container.querySelectorAll('.manage-direct-links-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const partner = btn.getAttribute('data-partner');
-            const links = groupedByPartner[partner];
-            openIssuedLinksManagementModal({
-                id: 'direct_' + partner,
-                targetName: partner,
-                collectionName: 'payments',
-            }, links);
+    container.querySelectorAll('[data-direct-link-history]').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const paymentId = button.getAttribute('data-direct-link-history') || '';
+            const target = directLinks.find((entry) => entry.id === paymentId);
+            const historyBox = document.getElementById(`direct-link-history-${paymentId}`);
+            if (!target || !historyBox) return;
+            const historyEntries = await fetchIssuedLinkAccessHistory({ kind: 'direct_payment_link', id: paymentId });
+            historyBox.innerHTML = renderIssuedLinksHistory(historyEntries);
+            historyBox.classList.remove('hidden');
+        });
+    });
+
+    container.querySelectorAll('[data-direct-link-copy]').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const paymentId = button.getAttribute('data-direct-link-copy') || '';
+            const target = directLinks.find((entry) => entry.id === paymentId);
+            if (!target?.guestToken) return;
+            const link = buildDirectPaymentGuestUrl(paymentId, target.guestToken);
+            const copied = await navigator.clipboard.writeText(link).then(() => true).catch(() => false);
+            if (!copied) {
+                prompt('Link kopieren:', link);
+            } else {
+                alertUser('Direkt-Link kopiert.', 'success');
+            }
+        });
+    });
+
+    container.querySelectorAll('[data-direct-link-close]').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const paymentId = button.getAttribute('data-direct-link-close') || '';
+            if (!paymentId) return;
+            if (!confirm('Diesen Direkt-Link wirklich beenden?')) return;
+            try {
+                await closeDirectPaymentGuestLink(paymentId);
+                alertUser('Direkt-Link beendet.', 'success');
+                await renderDirectLinksManagementBox();
+            } catch (error) {
+                console.error(error);
+                alertUser(error?.message || 'Direkt-Link konnte nicht beendet werden.', 'error');
+            }
         });
     });
 }
@@ -1301,7 +1293,7 @@ async function renderOnlinePaymentLinks() {
     container.innerHTML = `${syncHint}<p class="text-center text-gray-400 italic py-4">Lade Online-Zahlungslinks...</p>`;
 
     try {
-        const links = (await ensureOnlinePaymentLinksCacheLoaded(true)).filter((link) => String(link.status || 'open').toLowerCase() !== 'closed');
+        const links = await ensureOnlinePaymentLinksCacheLoaded(true);
 
         if (!links.length) {
             container.innerHTML = `${syncHint}<p class="text-center text-gray-400 italic py-4">Noch keine Online-Zahlungslinks erzeugt.</p>`;
@@ -1379,18 +1371,11 @@ async function renderOnlinePaymentLinks() {
                 const linkId = button.getAttribute('data-online-link-close') || '';
                 if (!linkId) return;
                 if (!confirm('Diesen Zahlungslink beenden? Danach sind zugehörige Einträge wieder bearbeitbar.')) return;
-                
-                const card = button.closest('.rounded-xl');
-                if (card) card.style.display = 'none';
-                
                 try {
                     await window.closeOnlinePaymentLink({ linkId });
                     alertUser('Zahlungslink beendet.', 'success');
-                    
-                    if (card) card.remove();
-                    renderOnlinePaymentLinks();
+                    await renderOnlinePaymentLinks();
                 } catch (error) {
-                    if (card) card.style.display = '';
                     console.error(error);
                     alertUser(error?.message || 'Beenden fehlgeschlagen.', 'error');
                 }

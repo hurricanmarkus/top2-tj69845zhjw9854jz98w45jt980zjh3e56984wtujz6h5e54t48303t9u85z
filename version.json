@@ -1,14 +1,24 @@
 {
-  "version": "1.22.3",
-  "buildId": "20260508-8",
+  "version": "1.22.4",
+  "buildId": "20260508-9",
   "releaseDate": "2026-05-08",
-  "releaseTime": "14:08",
+  "releaseTime": "14:40",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Link-Verwaltung und Direkt-Links zeigen die Aufrufhistorie wieder klickbar; Gastlinks scrollen korrekt, Live-Anzeige sitzt in eigener Box und hinzugefügte Positionen erscheinen sofort sichtbar.",
-  "commitId": "0e430fd",
+  "note": "Historien-Button zu 'Aufruf anzeigen' umbenannt und Klickbarkeit behoben. Direkt-Links nach Partner gruppiert. Beendete Links verschwinden nun restlos und sofort aus allen Übersichten.",
+  "commitId": "5a9e9a2",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.4",
+      "buildId": "20260508-9",
+      "releaseDate": "2026-05-08",
+      "releaseTime": "14:40",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Historien-Button zu 'Aufruf anzeigen' umbenannt und Klickbarkeit behoben. Direkt-Links nach Partner gruppiert. Beendete Links verschwinden nun restlos und sofort aus allen Übersichten.",
+      "commitId": "5a9e9a2",
+      "obligation": "false"
+    },
     {
       "version": "1.22.3",
       "buildId": "20260508-8",
