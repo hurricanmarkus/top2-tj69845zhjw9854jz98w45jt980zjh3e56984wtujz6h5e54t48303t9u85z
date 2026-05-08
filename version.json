@@ -1,14 +1,24 @@
 {
-  "version": "1.22.2",
-  "buildId": "20260508-7",
+  "version": "1.22.3",
+  "buildId": "20260508-8",
   "releaseDate": "2026-05-08",
-  "releaseTime": "13:40",
+  "releaseTime": "14:08",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Gast-Zahlungslinks blenden den Direktzahlungsbutton bei 0 € aus, zeigen einen Live-Statuschip und aktualisieren Verwendungszweck sowie Status ohne Seitenreload.",
-  "commitId": "d1d00dd",
+  "note": "Link-Verwaltung und Direkt-Links zeigen die Aufrufhistorie wieder klickbar; Gastlinks scrollen korrekt, Live-Anzeige sitzt in eigener Box und hinzugefügte Positionen erscheinen sofort sichtbar.",
+  "commitId": "0e430fd",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.3",
+      "buildId": "20260508-8",
+      "releaseDate": "2026-05-08",
+      "releaseTime": "14:08",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Link-Verwaltung und Direkt-Links zeigen die Aufrufhistorie wieder klickbar; Gastlinks scrollen korrekt, Live-Anzeige sitzt in eigener Box und hinzugefügte Positionen erscheinen sofort sichtbar.",
+      "commitId": "0e430fd",
+      "obligation": "false"
+    },
     {
       "version": "1.22.2",
       "buildId": "20260508-7",

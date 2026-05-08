@@ -381,6 +381,8 @@ option {
     overflow-y: auto !important;
     scrollbar-gutter: auto !important;
     scrollbar-width: none;
+    min-height: 0 !important;
+    height: auto !important;
 }
 
 .main-content.guest-main-content::-webkit-scrollbar {
@@ -408,14 +410,61 @@ body.guest-link-mode .app-container,
 
 body.guest-link-mode .main-content,
 .main-content.guest-main-content {
-    overflow-y: visible !important;
-    min-height: 100vh;
+    overflow-y: auto !important;
+    min-height: 0 !important;
+    height: auto !important;
     padding: 0 !important;
 }
 
 body.guest-link-mode #guestView {
-    min-height: 100vh;
+    min-height: 100dvh;
     padding: 1rem;
+    box-sizing: border-box;
+}
+
+.guest-live-status-box {
+    border: 1px solid #fecaca;
+    background: linear-gradient(180deg, #fff7f7 0%, #ffffff 100%);
+    border-radius: 1rem;
+    padding: 0.9rem 1rem;
+    box-shadow: 0 10px 30px rgba(239, 68, 68, 0.08);
+}
+
+.guest-live-status-box-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.85rem;
+}
+
+.guest-live-status-box-title {
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #7f1d1d;
+}
+
+.guest-live-status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.75rem;
+    height: 1.4rem;
+    padding: 0 0.55rem;
+    border-radius: 0.4rem;
+    background: #dc2626;
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    animation: guestLiveBadgePulse 1.2s ease-in-out infinite;
+}
+
+.guest-live-status-box-body {
+    display: flex;
+    justify-content: center;
 }
 
 .guest-live-status-chip {
@@ -465,13 +514,6 @@ body.guest-link-mode #guestView {
 .guest-live-status-label {
     position: relative;
     z-index: 2;
-}
-
-.guest-live-status-text {
-    position: relative;
-    z-index: 2;
-    font-size: 0.65rem;
-    opacity: 0.8;
 }
 
 .guest-live-status-arrows {
@@ -540,6 +582,18 @@ body.guest-link-mode #guestView {
     }
     50% {
         opacity: 1;
+    }
+}
+
+@keyframes guestLiveBadgePulse {
+    0%,
+    100% {
+        transform: scale(0.96);
+        box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.16);
+    }
+    50% {
+        transform: scale(1);
+        box-shadow: 0 0 0 6px rgba(220, 38, 38, 0.08);
     }
 }
 

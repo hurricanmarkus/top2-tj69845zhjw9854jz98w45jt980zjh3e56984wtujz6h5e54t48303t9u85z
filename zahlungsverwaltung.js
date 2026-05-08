@@ -349,10 +349,11 @@ function renderIssuedLinksManagementModal() {
                         </div>
                         <span class="inline-flex items-center rounded border px-2 py-1 text-[11px] font-bold ${getSimpleLinkValidityBadgeClass(valid)}">${getSimpleLinkValidityLabel(valid)}</span>
                     </div>
-                    <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-center">
-                        <div class="text-[12px] text-gray-700">Aufrufe: <span class="font-bold">${entry.viewCount}</span> <button type="button" data-issued-link-history="${entry.kind}:${entry.id}" class="font-bold text-indigo-600 hover:text-indigo-800">[anzeigen]</button></div>
+                    <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
+                        <div class="text-[12px] text-gray-700">Aufrufe: <span class="font-bold">${entry.viewCount}</span></div>
                         <div class="text-[12px] text-gray-700">${entry.type}</div>
                         <div class="flex flex-wrap justify-start gap-2 sm:justify-end">
+                            <button type="button" data-issued-link-history="${entry.kind}:${entry.id}" class="relative z-10 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-bold text-cyan-700 hover:bg-cyan-100">[anzeigen]</button>
                             ${entry.copyUrl ? `<button type="button" data-issued-link-copy="${entry.kind}:${entry.id}" class="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100">Link</button>` : ''}
                             <button type="button" data-issued-link-close="${entry.kind}:${entry.id}" class="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50" ${valid ? '' : 'disabled'}>Link beenden</button>
                         </div>
@@ -546,11 +547,12 @@ async function renderDirectLinksManagementBox() {
                     <div>
                         <div class="text-sm font-bold text-gray-800">${payment.title || 'Direkt-Link'}</div>
                         <div class="text-[11px] text-gray-500">Partner: ${getPaymentPartnerName(payment)} • Erstellt: ${formatLinkDateTime(payment.guestTokenCreatedAt)}</div>
-                        <div class="text-[11px] text-gray-400">Typ: Direkt-Link • Aufrufe: <span class="font-bold">${Number(payment.guestTokenViews || 0)}</span> <button type="button" data-direct-link-history="${payment.id}" class="font-bold text-indigo-600 hover:text-indigo-800">[anzeigen]</button></div>
+                        <div class="text-[11px] text-gray-400">Typ: Direkt-Link • Aufrufe: <span class="font-bold">${Number(payment.guestTokenViews || 0)}</span></div>
                     </div>
                     <span class="inline-flex items-center rounded border px-2 py-1 text-[11px] font-bold ${getSimpleLinkValidityBadgeClass(active)}">${getSimpleLinkValidityLabel(active)}</span>
                 </div>
                 <div class="mt-2 flex flex-wrap gap-2">
+                    <button type="button" data-direct-link-history="${payment.id}" class="relative z-10 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-bold text-cyan-700 hover:bg-cyan-100">[anzeigen]</button>
                     ${active ? `<button type="button" data-direct-link-copy="${payment.id}" class="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100">Link</button>` : ''}
                     <button type="button" data-direct-link-close="${payment.id}" class="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50" ${active ? '' : 'disabled'}>Link beenden</button>
                 </div>
@@ -7232,7 +7234,7 @@ async function renderContactList() {
                         <span class="text-[10px] text-indigo-400 block mb-0.5">Registrierter Nutzer</span>
                     </div>
                 </div>
-                <div class="flex flex-col gap-1">
+                <div class="flex flex-wrap justify-end gap-1.5">
                     <button class="manage-user-links-btn px-3 py-1 bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded hover:bg-teal-50 hover:text-teal-700 hover:border-teal-200 transition shadow-sm">${activeLinkCount} aktive Links</button>
                     <button class="copy-user-online-link-btn px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold rounded hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition shadow-sm">
                         💶 Online
@@ -7882,10 +7884,14 @@ export async function initializeGuestView(guestId, options = {}) {
     if (mainContent) {
         mainContent.classList.add('guest-main-content');
         mainContent.classList.remove('space-y-4');
-        mainContent.style.setProperty('overflow-y', 'visible', 'important');
+        mainContent.style.setProperty('overflow-y', 'auto', 'important');
         mainContent.style.setProperty('scrollbar-gutter', 'auto', 'important');
         mainContent.style.setProperty('padding', '0', 'important');
+        mainContent.scrollTop = 0;
     }
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
 
     // Close Button Listener
     const closeBtn = document.getElementById('btn-close-guest-modal');
@@ -8139,16 +8145,23 @@ export async function initializeGuestView(guestId, options = {}) {
         if (paymentLinkData && liveStatusIndicator) {
             const liveMeta = getGuestLiveStatusMeta(paymentLinkData.status || 'open');
             liveStatusIndicator.innerHTML = `
-                <div class="guest-live-status-chip ${liveMeta.className}">
-                    <span class="guest-live-status-dot"></span>
-                    <span class="guest-live-status-label">${liveMeta.label}</span>
-                    <span class="guest-live-status-text">Live</span>
-                    <span class="guest-live-status-arrows" aria-hidden="true">
-                        <span class="guest-live-status-arrow guest-live-status-arrow--top">➜</span>
-                        <span class="guest-live-status-arrow guest-live-status-arrow--right">➜</span>
-                        <span class="guest-live-status-arrow guest-live-status-arrow--bottom">➜</span>
-                        <span class="guest-live-status-arrow guest-live-status-arrow--left">➜</span>
-                    </span>
+                <div class="guest-live-status-box">
+                    <div class="guest-live-status-box-header">
+                        <span class="guest-live-status-box-title">LIVE-Anzeige Zahlungseingang</span>
+                        <span class="guest-live-status-badge">LIVE</span>
+                    </div>
+                    <div class="guest-live-status-box-body">
+                        <div class="guest-live-status-chip ${liveMeta.className}">
+                            <span class="guest-live-status-dot"></span>
+                            <span class="guest-live-status-label">${liveMeta.label}</span>
+                            <span class="guest-live-status-arrows" aria-hidden="true">
+                                <span class="guest-live-status-arrow guest-live-status-arrow--top">➜</span>
+                                <span class="guest-live-status-arrow guest-live-status-arrow--right">➜</span>
+                                <span class="guest-live-status-arrow guest-live-status-arrow--bottom">➜</span>
+                                <span class="guest-live-status-arrow guest-live-status-arrow--left">➜</span>
+                            </span>
+                        </div>
+                    </div>
                 </div>
             `;
             liveStatusIndicator.classList.remove('hidden');
@@ -8435,7 +8448,7 @@ export async function initializeGuestView(guestId, options = {}) {
                         note,
                     });
                     alertUser('Status gespeichert. Der Ersteller sieht jetzt, dass du bezahlt hast.', 'success');
-                    await initializeGuestView(guestId);
+                    await initializeGuestView(guestId, { skipTracking: true });
                 } catch (error) {
                     console.error(error);
                     alertUser(error?.message || 'Status konnte nicht gespeichert werden.', 'error');
@@ -8454,7 +8467,7 @@ export async function initializeGuestView(guestId, options = {}) {
                         resolution,
                     });
                     alertUser(resolution === 'tip' ? 'Überzahlung als Trinkgeld gespeichert.' : 'Überzahlung als Guthaben gespeichert.', 'success');
-                    await initializeGuestView(guestId);
+                    await initializeGuestView(guestId, { skipTracking: true });
                 } catch (error) {
                     console.error(error);
                     alertUser(error?.message || 'Überzahlungsentscheidung konnte nicht gespeichert werden.', 'error');
@@ -8503,7 +8516,7 @@ export async function initializeGuestView(guestId, options = {}) {
                     });
                     closeGuestAddPositionModal();
                     alertUser('Position gespeichert.', 'success');
-                    await initializeGuestView(guestId);
+                    await initializeGuestView(guestId, { skipTracking: true });
                 } catch (error) {
                     console.error(error);
                     alertUser(error?.message || 'Position konnte nicht gespeichert werden.', 'error');
