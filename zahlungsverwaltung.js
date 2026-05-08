@@ -63,6 +63,7 @@ let guestViewLiveRefreshInFlight = false;
 let guestViewLastSignature = '';
 let guestViewTrackedAccessKeys = new Set();
 const GUEST_LINK_TRACKING_SESSION_KEY = 'zv_guest_link_tracking_v1';
+const GUEST_LINK_TRACKING_SESSION_IDS_KEY = 'zv_guest_link_tracking_session_ids_v1';
 const GUEST_LINK_TRACKING_PENDING_MS = 30000;
 
 // STANDARD KATEGORIEN (Unveränderlich)
@@ -147,6 +148,52 @@ function buildGuestLinkTrackingKey(guestId = '', token = '') {
     const normalizedToken = String(token || '').trim();
     if (!normalizedGuestId || !normalizedToken) return '';
     return `${encodeURIComponent(normalizedGuestId)}::${encodeURIComponent(normalizedToken)}`;
+}
+
+function readGuestLinkTrackingSessionIds() {
+    try {
+        const raw = window.sessionStorage?.getItem(GUEST_LINK_TRACKING_SESSION_IDS_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+        return {};
+    }
+}
+
+function writeGuestLinkTrackingSessionIds(state = {}) {
+    try {
+        window.sessionStorage?.setItem(GUEST_LINK_TRACKING_SESSION_IDS_KEY, JSON.stringify(state || {}));
+    } catch {}
+}
+
+function createGuestLinkTrackingSessionId() {
+    try {
+        if (window.crypto?.getRandomValues) {
+            const bytes = new Uint8Array(12);
+            window.crypto.getRandomValues(bytes);
+            return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+        }
+    } catch {}
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
+}
+
+function getOrCreateGuestLinkTrackingSessionId(guestId = '', token = '') {
+    const key = buildGuestLinkTrackingKey(guestId, token);
+    if (!key) return '';
+    const state = readGuestLinkTrackingSessionIds();
+    const existing = String(state[key] || '').trim();
+    if (existing) return existing;
+    const nextId = createGuestLinkTrackingSessionId();
+    state[key] = nextId;
+
+    const keys = Object.keys(state);
+    if (keys.length > 120) {
+        keys.slice(0, keys.length - 120).forEach((entryKey) => delete state[entryKey]);
+    }
+
+    writeGuestLinkTrackingSessionIds(state);
+    return nextId;
 }
 
 function readGuestLinkTrackingSessionState() {
@@ -246,7 +293,13 @@ function startGuestViewLiveRefresh(guestId, token) {
 
         guestViewLiveRefreshInFlight = true;
         try {
-            const liveResult = await window.getGuestPayments({ guestId: normalizedGuestId, token: normalizedToken, skipTracking: true });
+            const trackingSessionId = getOrCreateGuestLinkTrackingSessionId(normalizedGuestId, normalizedToken);
+            const liveResult = await window.getGuestPayments({
+                guestId: normalizedGuestId,
+                token: normalizedToken,
+                skipTracking: true,
+                trackingSessionId,
+            });
             if (!liveResult?.data || liveResult.data.status !== 'success') return;
 
             const nextSignature = buildGuestViewLiveSignature(liveResult.data);
@@ -8104,8 +8157,14 @@ export async function initializeGuestView(guestId, options = {}) {
                 throw new Error("Cloud Function 'getGuestPayments' ist nicht initialisiert.");
             }
 
+            const trackingSessionId = getOrCreateGuestLinkTrackingSessionId(guestId, urlToken);
             trackingReservation = reserveGuestLinkTracking(guestId, urlToken, skipTracking);
-            const result = await window.getGuestPayments({ guestId: guestId, token: urlToken, skipTracking: !trackingReservation.shouldTrack });
+            const result = await window.getGuestPayments({
+                guestId: guestId,
+                token: urlToken,
+                skipTracking: !trackingReservation.shouldTrack,
+                trackingSessionId,
+            });
             if (!result.data || result.data.status !== 'success') {
                 if (trackingReservation.shouldTrack) {
                     finalizeGuestLinkTrackingReservation(trackingReservation.key, false);

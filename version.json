@@ -1,14 +1,24 @@
 {
-  "version": "1.22.13",
-  "buildId": "20260508-18",
+  "version": "1.22.14",
+  "buildId": "20260508-19",
   "releaseDate": "2026-05-08",
-  "releaseTime": "22:11",
+  "releaseTime": "22:20",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Gastlink-Tracking zählt Seitenreloads in derselben Browser-Session nicht mehr mehrfach als neue Aufrufe.",
-  "commitId": "3d02d54",
+  "note": "Gastlink-Aufrufe werden jetzt serverseitig per Session-ID und Zeitfenster dedupliziert, sodass wiederholte Requests nicht mehr mehrfach zählen.",
+  "commitId": "a45b8fa",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.14",
+      "buildId": "20260508-19",
+      "releaseDate": "2026-05-08",
+      "releaseTime": "22:20",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Gastlink-Aufrufe werden jetzt serverseitig per Session-ID und Zeitfenster dedupliziert, sodass wiederholte Requests nicht mehr mehrfach zählen.",
+      "commitId": "a45b8fa",
+      "obligation": "false"
+    },
     {
       "version": "1.22.13",
       "buildId": "20260508-18",
