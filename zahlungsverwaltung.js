@@ -56,6 +56,7 @@ let onlinePaymentLinksCache = [];
 let onlinePaymentTargetAccount = null;
 let pendingOnlineLinkSelectionState = null;
 let pendingIssuedLinksModalState = null;
+let contactRenderSequence = 0;
 let guestViewLiveRefreshTimer = null;
 let guestViewLiveRefreshGuestId = '';
 let guestViewLiveRefreshInFlight = false;
@@ -1060,6 +1061,8 @@ function resolveGuestIdForPaymentLink(payment) {
 
 function getOnlinePaymentReferenceShortId(payment) {
     if (!payment || typeof payment !== 'object') return '';
+    const explicit = String(payment.paymentShortId || payment.shortId || '').trim().toUpperCase();
+    if (explicit) return explicit;
     const stored = String(payment.onlinePaymentReferenceShortId || '').trim().toUpperCase();
     if (stored) return stored;
     return String(payment.id || '').trim().slice(-4).toUpperCase();
@@ -7171,8 +7174,11 @@ function generateGuestToken() {
 async function renderContactList() {
     const container = document.getElementById('zv-contacts-list');
     if (!container) return;
-    container.innerHTML = '';
+    const renderToken = ++contactRenderSequence;
     await ensureOnlinePaymentLinksCacheLoaded();
+    if (renderToken !== contactRenderSequence) return;
+
+    container.innerHTML = '';
 
     // Helper: Link kopieren (FÜR ALLE ERLAUBT)
     const handleCopyLink = async (collectionName, docId, currentToken, currentStatus = '') => {
@@ -7214,13 +7220,20 @@ async function renderContactList() {
     headerContacts.textContent = "Mein Adressbuch (Manuell)";
     container.appendChild(headerContacts);
 
-    if (allContacts.length === 0) {
+    const manualContacts = Array.from(new Map(allContacts.map((contact) => [contact.id, contact])).values());
+    const systemUsersSource = allSystemUsers.length > 0 ? allSystemUsers : Object.values(USERS);
+    const systemUsers = Array.from(new Map(systemUsersSource
+        .filter(u => u && u.id !== currentUser.mode && u.isActive)
+        .map((user) => [user.id, user]))
+        .values());
+
+    if (manualContacts.length === 0) {
         const empty = document.createElement('p');
         empty.className = "text-center text-gray-400 italic text-sm mb-4";
         empty.textContent = "Keine manuellen Kontakte.";
         container.appendChild(empty);
     } else {
-        allContacts.forEach(c => {
+        manualContacts.forEach(c => {
             const activeLinkCount = getActiveIssuedLinkCount({ id: c.id, raw: c });
 
             const div = document.createElement('div');
@@ -7266,12 +7279,6 @@ async function renderContactList() {
     headerUsers.className = "font-bold text-gray-500 text-xs uppercase mb-2 mt-6 pt-4 border-t border-gray-200 px-1";
     headerUsers.textContent = "Registrierte Personen im System";
     container.appendChild(headerUsers);
-
-    // FIX: Nutze allSystemUsers (Live) statt USERS (Statisch)
-    // Wenn allSystemUsers noch leer ist (beim allerersten Laden), Fallback auf USERS versuchen oder leer lassen
-    let usersSource = allSystemUsers.length > 0 ? allSystemUsers : Object.values(USERS);
-    
-    const systemUsers = usersSource.filter(u => u.id !== currentUser.mode && u.isActive);
 
     if (systemUsers.length === 0) {
         const emptyUsers = document.createElement('p');

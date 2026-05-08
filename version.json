@@ -1,14 +1,24 @@
 {
-  "version": "1.22.10",
-  "buildId": "20260508-15",
+  "version": "1.22.11",
+  "buildId": "20260508-16",
   "releaseDate": "2026-05-08",
-  "releaseTime": "16:05",
+  "releaseTime": "16:28",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Adressbuch zeigt 'Zahlungslink', Online-Referenzen nutzen TOP2-ID-XXXX-YYYY-YYYY und Gast-Zusatzpositionen bleiben nach dem Speichern sichtbar.",
+  "note": "Gesamtrevision: Adressbuch-Dopplungen stabilisiert, Gast-Zusatzpositionen erscheinen wieder und Verwendungszwecke werden konsistent über echte Eintrags-Kurz-IDs aufgebaut.",
   "commitId": "5a9e9a2",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.11",
+      "buildId": "20260508-16",
+      "releaseDate": "2026-05-08",
+      "releaseTime": "16:28",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Gesamtrevision: Adressbuch-Dopplungen stabilisiert, Gast-Zusatzpositionen erscheinen wieder und Verwendungszwecke werden konsistent über echte Eintrags-Kurz-IDs aufgebaut.",
+      "commitId": "5a9e9a2",
+      "obligation": "false"
+    },
     {
       "version": "1.22.10",
       "buildId": "20260508-15",
