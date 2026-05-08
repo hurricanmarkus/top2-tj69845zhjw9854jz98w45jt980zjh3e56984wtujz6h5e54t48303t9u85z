@@ -1,14 +1,24 @@
 {
-  "version": "1.22.4",
-  "buildId": "20260508-9",
+  "version": "1.22.5",
+  "buildId": "20260508-10",
   "releaseDate": "2026-05-08",
-  "releaseTime": "14:40",
+  "releaseTime": "14:58",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Historien-Button zu 'Aufruf anzeigen' umbenannt und Klickbarkeit behoben. Direkt-Links nach Partner gruppiert. Beendete Links verschwinden nun restlos und sofort aus allen Übersichten.",
+  "note": "Online-Zahlungslinks in den Einstellungen sind jetzt read-only und einklappbar; der Rechte-Dialog kopiert aktive Online-Links wieder aktiv, und der Gastmodus startet mit Ladebildschirm statt Header/Footer-Flash.",
   "commitId": "5a9e9a2",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.5",
+      "buildId": "20260508-10",
+      "releaseDate": "2026-05-08",
+      "releaseTime": "14:58",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Online-Zahlungslinks in den Einstellungen sind jetzt read-only und einklappbar; der Rechte-Dialog kopiert aktive Online-Links wieder aktiv, und der Gastmodus startet mit Ladebildschirm statt Header/Footer-Flash.",
+      "commitId": "5a9e9a2",
+      "obligation": "false"
+    },
     {
       "version": "1.22.4",
       "buildId": "20260508-9",

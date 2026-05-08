@@ -313,6 +313,29 @@ function closeIssuedLinksManagementModal() {
     modal.style.display = 'none';
 }
 
+async function openIssuedLinkHistoryByToken(token = '', event = null) {
+    if (event) {
+        event.preventDefault?.();
+        event.stopPropagation?.();
+    }
+    if (!pendingIssuedLinksModalState) return;
+
+    const [kind, id] = String(token || '').split(':');
+    const entry = pendingIssuedLinksModalState.entries.find((item) => item.kind === kind && item.id === id);
+    if (!entry) return;
+
+    const entries = await fetchIssuedLinkAccessHistory(entry);
+    pendingIssuedLinksModalState.selectedHistoryHtml = `
+        <div class="space-y-2">
+            <div class="text-sm font-bold text-gray-800">Aufrufhistorie: ${entry.title}</div>
+            ${renderIssuedLinksHistory(entries)}
+        </div>
+    `;
+    renderIssuedLinksManagementModal();
+}
+
+window.openIssuedLinkHistoryByToken = openIssuedLinkHistoryByToken;
+
 function renderIssuedLinksHistory(entries = []) {
     if (!entries.length) {
         return '<p class="text-xs text-gray-400 italic">Noch keine Aufrufdaten vorhanden.</p>';
@@ -353,7 +376,7 @@ function renderIssuedLinksManagementModal() {
                         <div class="text-[12px] text-gray-700">Aufrufe: <span class="font-bold">${entry.viewCount}</span></div>
                         <div class="text-[12px] text-gray-700">${entry.type}</div>
                         <div class="flex flex-wrap justify-start gap-2 sm:justify-end">
-                            <button type="button" data-issued-link-history="${entry.kind}:${entry.id}" class="relative z-10 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-bold text-cyan-700 hover:bg-cyan-100">Aufruf anzeigen</button>
+                            <button type="button" onclick="window.openIssuedLinkHistoryByToken('${entry.kind}:${entry.id}', event)" data-issued-link-history="${entry.kind}:${entry.id}" class="relative z-10 pointer-events-auto rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-bold text-cyan-700 hover:bg-cyan-100">Aufruf anzeigen</button>
                             ${entry.copyUrl ? `<button type="button" data-issued-link-copy="${entry.kind}:${entry.id}" class="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100">Link</button>` : ''}
                             <button type="button" data-issued-link-close="${entry.kind}:${entry.id}" class="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50" ${valid ? '' : 'disabled'}>Link beenden</button>
                         </div>
@@ -371,18 +394,7 @@ function renderIssuedLinksManagementModal() {
     list.onclick = async (e) => {
         const historyBtn = e.target.closest('[data-issued-link-history]');
         if (historyBtn) {
-            const token = historyBtn.getAttribute('data-issued-link-history') || '';
-            const [kind, id] = token.split(':');
-            const entry = state.entries.find((item) => item.kind === kind && item.id === id);
-            if (!entry) return;
-            const entries = await fetchIssuedLinkAccessHistory(entry);
-            pendingIssuedLinksModalState.selectedHistoryHtml = `
-                <div class="space-y-2">
-                    <div class="text-sm font-bold text-gray-800">Aufrufhistorie: ${entry.title}</div>
-                    ${renderIssuedLinksHistory(entries)}
-                </div>
-            `;
-            renderIssuedLinksManagementModal();
+            await openIssuedLinkHistoryByToken(historyBtn.getAttribute('data-issued-link-history') || '', e);
             return;
         }
 
@@ -1356,10 +1368,6 @@ async function renderOnlinePaymentLinks() {
                     </div>
                     ${overpaymentLine}
                     ${ownerDecisionLine}
-                    <div class="mt-2 flex gap-2">
-                        <button type="button" data-online-link-copy="${link.id}" data-online-link-token="${link.token || ''}" class="flex-1 py-1.5 rounded border border-indigo-200 text-indigo-700 text-xs font-bold hover:bg-indigo-50">🔗 Link</button>
-                        <button type="button" data-online-link-close="${link.id}" class="flex-1 py-1.5 rounded border border-red-200 text-red-700 text-xs font-bold hover:bg-red-50" ${status === 'closed' ? 'disabled' : ''}>Beenden</button>
-                    </div>
                 </div>
             `;
         }).join('')}`;
@@ -7888,6 +7896,11 @@ export async function initializeGuestView(guestId, options = {}) {
     view.classList.add('active');
     const { skipTracking = false, skipLiveSetup = false, prefetchedResult = null } = options;
 
+    const clearGuestLoadingState = () => {
+        document.documentElement.classList.remove('guest-link-pending');
+        document.getElementById('guestLoadingScreen')?.remove();
+    };
+
     const appContainer = document.querySelector('.app-container');
     document.body.classList.add('guest-link-mode');
     if (appContainer) appContainer.classList.add('guest-link-mode');
@@ -8539,7 +8552,10 @@ export async function initializeGuestView(guestId, options = {}) {
             };
         }
 
+        clearGuestLoadingState();
+
     } catch (e) {
+        clearGuestLoadingState();
         console.error(e);
         if (e && (e.code === 'functions/permission-denied' || String(e.message || '').toLowerCase().includes('abgelaufen'))) {
             document.getElementById('guestView').innerHTML = `
@@ -9686,14 +9702,6 @@ function openShareModal(id) {
     // Link kopieren Logik (BUG 2 FIX & Einzel-Link Logik)
     btnLink.onclick = () => {
         // Wir prüfen kurz, ob es ein "echter" registrierter App-User ist (kein Kontakt)
-        let partnerId = (p.debtorId === currentUser.mode) ? p.creditorId : p.debtorId;
-        const isRegistered = USERS[partnerId];
-
-        if (isRegistered) {
-            alertUser("Info: Registrierte Nutzer sollten sich normal einloggen.", "info");
-            // Wir erlauben das Kopieren trotzdem für den Notfall
-        }
-
         const baseUrl = window.location.origin + window.location.pathname;
 
         (async () => {
@@ -9732,21 +9740,30 @@ function openShareModal(id) {
     if (btnOnlineLink) {
         btnOnlineLink.disabled = false;
         btnOnlineLink.classList.remove('opacity-50', 'cursor-not-allowed');
-
-        if (isPaymentLockedByOnlineLink(p)) {
-            btnOnlineLink.disabled = true;
-            btnOnlineLink.classList.add('opacity-50', 'cursor-not-allowed');
-            btnOnlineLink.onclick = () => alertUser('Für diesen Eintrag existiert bereits ein aktiver Online-Zahlungslink.', 'info');
-        } else {
-            btnOnlineLink.onclick = async () => {
-                try {
-                    await createOnlineLinkForPayment(id);
-                } catch (error) {
-                    console.error(error);
-                    alertUser(error?.message || 'Online-Zahlungslink konnte nicht erstellt werden.', 'error');
+        btnOnlineLink.onclick = async () => {
+            try {
+                await ensureOnlinePaymentLinksCacheLoaded(true);
+                const activeLink = (Array.isArray(onlinePaymentLinksCache) ? onlinePaymentLinksCache : [])
+                    .filter((link) => String(link?.status || '').trim().toLowerCase() !== 'closed')
+                    .find((link) => {
+                        const paymentIds = Array.isArray(link?.paymentIds) ? link.paymentIds.map((entry) => String(entry || '').trim()) : [];
+                        if (paymentIds.includes(String(id))) return true;
+                        const paymentTargets = Array.isArray(link?.paymentTargets) ? link.paymentTargets : [];
+                        return paymentTargets.some((entry) => String(entry?.paymentId || '').trim() === String(id));
+                    });
+                if (activeLink?.token) {
+                    const linkUrl = buildOnlinePaymentPublicUrl(activeLink.id, activeLink.token);
+                    const copied = await copyTextToClipboardSafe(linkUrl);
+                    alertUser(copied ? 'Online-Zahlungslink kopiert.' : 'Online-Zahlungslink bereit.', 'success');
+                    return;
                 }
-            };
-        }
+
+                await createOnlineLinkForPayment(id);
+            } catch (error) {
+                console.error(error);
+                alertUser(error?.message || 'Online-Zahlungslink konnte nicht erstellt oder kopiert werden.', 'error');
+            }
+        };
     }
 
     modal.style.display = 'flex';
