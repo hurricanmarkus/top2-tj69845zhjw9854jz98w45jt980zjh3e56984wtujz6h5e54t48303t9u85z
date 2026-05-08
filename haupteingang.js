@@ -1652,6 +1652,7 @@ async function initializeFirebase() {
                 window.getEinkaufslisteWebPushConfig = httpsCallable(functions, 'getEinkaufslisteWebPushConfig');
                 window.createOnlinePaymentLink = httpsCallable(functions, 'createOnlinePaymentLink');
                 window.getOnlinePaymentWiseWebhookStatus = httpsCallable(functions, 'getOnlinePaymentWiseWebhookStatus');
+                window.ensureOnlinePaymentWiseWebhookSubscriptions = httpsCallable(functions, 'ensureOnlinePaymentWiseWebhookSubscriptions');
                 window.listOnlinePaymentLinks = httpsCallable(functions, 'listOnlinePaymentLinks');
                 window.closeOnlinePaymentLink = httpsCallable(functions, 'closeOnlinePaymentLink');
                 window.guestMarkOnlinePaymentInProgress = httpsCallable(functions, 'guestMarkOnlinePaymentInProgress');

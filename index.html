@@ -25,15 +25,15 @@
     <meta name="application-name" content="TOP 2 App">
     <meta name="apple-mobile-web-app-title" content="TOP2">
     <meta name="theme-color" content="#4f46e5" />
-    <meta name="top2-app-version" content="1.19.0" />
-    <meta name="top2-build-id" content="20260507-6" />
+    <meta name="top2-app-version" content="1.19.1" />
+    <meta name="top2-build-id" content="20260508-1" />
     <meta name="msapplication-navbutton-color" content="#4f46e5">
     <meta name="apple-mobile-app-status-bar-style" content="black-translucent">
     <link rel="icon" type="image/png" sizes="192x192" href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
     <link rel="apple-touch-icon" type="image/png" sizes="192x192"
         href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
 
-    <link rel="manifest" href="manifest.json?v=20260507-6">
+    <link rel="manifest" href="manifest.json?v=20260508-1">
 
     <link rel="stylesheet" href="style.css">
     
@@ -6626,7 +6626,10 @@
                                 <h3 class="text-lg font-bold text-gray-800">Wise-Webhooks</h3>
                                 <p class="text-xs text-gray-500">Prüft die Webhook-Konfiguration, zeigt die exakte Wise-Webhook-URL und meldet empfangene Events sowie automatische Treffer.</p>
                             </div>
-                            <button id="btn-zv-online-check-wise-status" class="px-3 py-2 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 transition">Webhook prüfen</button>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <button id="btn-zv-online-check-wise-status" class="px-3 py-2 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 transition">Webhook prüfen</button>
+                                <button id="btn-zv-online-ensure-wise-subscriptions" class="px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition">Subscriptions anlegen</button>
+                            </div>
                         </div>
                         <div id="zv-online-wise-status" class="rounded-lg border border-amber-100 bg-amber-50 p-3 text-sm text-gray-700">
                             <p class="text-gray-500">Wise-Webhooks werden geladen...</p>

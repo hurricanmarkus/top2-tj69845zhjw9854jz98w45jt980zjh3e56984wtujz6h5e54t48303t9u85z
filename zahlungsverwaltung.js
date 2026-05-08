@@ -158,13 +158,19 @@ function renderOnlineTargetAccountSettings() {
 
 async function renderOnlinePaymentWiseStatus() {
     const container = document.getElementById('zv-online-wise-status');
+    const ensureButton = document.getElementById('btn-zv-online-ensure-wise-subscriptions');
     if (!container) return;
 
     if (!window.getOnlinePaymentWiseWebhookStatus) {
         container.innerHTML = '<p class="text-sm text-red-600">Cloud Function getOnlinePaymentWiseWebhookStatus ist nicht verfügbar.</p>';
+        if (ensureButton) ensureButton.style.display = 'none';
         return;
     }
 
+    if (ensureButton) {
+        ensureButton.disabled = true;
+        ensureButton.classList.add('opacity-50', 'cursor-not-allowed');
+    }
     container.innerHTML = '<p class="text-gray-500">Wise-Webhooks werden geladen...</p>';
 
     try {
@@ -178,6 +184,15 @@ async function renderOnlinePaymentWiseStatus() {
         const recentMatchedLinkCount = Number(data.recentMatchedLinkCount || 0);
         const state = String(data.state || '').toLowerCase();
         const webhookUrl = data.webhookUrl || '—';
+        const subscriptionState = String(data.subscriptionState || '').toLowerCase();
+        const subscriptionMissing = Array.isArray(data.subscriptionMissing) ? data.subscriptionMissing : [];
+        const configuredEventTypes = Array.isArray(data.configuredEventTypes) ? data.configuredEventTypes : [];
+        const missingEventTypes = Array.isArray(data.missingEventTypes) ? data.missingEventTypes : [];
+        const canAutoConfigure = data.canAutoConfigure === true;
+        const subscriptionApiConfigured = data.subscriptionApiConfigured === true;
+        const subscriptionError = data.subscriptionError || '';
+        const matchingSubscriptionCount = Number(data.matchingSubscriptionCount || 0);
+        const subscriptionCount = Number(data.subscriptionCount || 0);
         const lastWebhookText = data.lastWebhookAt
             ? new Date(data.lastWebhookAt).toLocaleString('de-DE')
             : (data.lastTestWebhookAt ? `Test: ${new Date(data.lastTestWebhookAt).toLocaleString('de-DE')}` : 'Noch kein Webhook empfangen');
@@ -189,24 +204,92 @@ async function renderOnlinePaymentWiseStatus() {
                 label: 'Webhook unvollständig',
                 className: 'text-red-700 bg-red-100 border-red-200',
             }
-            : state === 'active'
+            : state === 'subscription_missing'
                 ? {
-                    label: 'Webhook aktiv',
-                    className: 'text-emerald-700 bg-emerald-100 border-emerald-200',
+                    label: 'Subscription fehlt',
+                    className: 'text-red-700 bg-red-100 border-red-200',
                 }
-                : {
-                    label: 'Webhook bereit',
-                    className: 'text-amber-700 bg-amber-100 border-amber-200',
-                };
+                : state === 'subscription_error'
+                    ? {
+                        label: 'Subscription-Check fehlgeschlagen',
+                        className: 'text-red-700 bg-red-100 border-red-200',
+                    }
+                    : state === 'active'
+                        ? {
+                            label: 'Webhook aktiv',
+                            className: 'text-emerald-700 bg-emerald-100 border-emerald-200',
+                        }
+                        : {
+                            label: 'Webhook bereit',
+                            className: 'text-amber-700 bg-amber-100 border-amber-200',
+                        };
+        const subscriptionMeta = subscriptionState === 'configured'
+            ? {
+                label: 'Events vollständig',
+                className: 'text-emerald-700 bg-emerald-100 border-emerald-200',
+            }
+            : subscriptionState === 'missing'
+                ? {
+                    label: 'Events fehlen',
+                    className: 'text-red-700 bg-red-100 border-red-200',
+                }
+                : subscriptionState === 'api_incomplete'
+                    ? {
+                        label: 'API-Konfiguration unvollständig',
+                        className: 'text-amber-700 bg-amber-100 border-amber-200',
+                    }
+                    : subscriptionState === 'error'
+                        ? {
+                            label: 'API-Prüfung fehlgeschlagen',
+                            className: 'text-red-700 bg-red-100 border-red-200',
+                        }
+                        : {
+                            label: 'Noch nicht geprüft',
+                            className: 'text-gray-700 bg-gray-100 border-gray-200',
+                        };
         const detailsHtml = missing.length
             ? `<div class="text-xs text-red-600 font-semibold">Fehlende Secrets: ${missing.join(', ')}</div>`
             : `
                 <div class="text-xs text-gray-500">Profil: ${data.profileIdMasked || '—'} • Konto: ${data.accountIdMasked || '—'}</div>
                 <div class="text-xs text-gray-500 break-all">Webhook-URL: ${webhookUrl}</div>
             `;
+        const configuredEventText = configuredEventTypes.length ? configuredEventTypes.join(', ') : 'Noch keine passenden Wise-Events gefunden';
+        const missingEventText = missingEventTypes.length ? missingEventTypes.join(', ') : 'Keine fehlenden Events';
+        const subscriptionApiHtml = !subscriptionApiConfigured && subscriptionMissing.length
+            ? `<div class="text-xs text-amber-700 font-semibold">Für API-Anlage fehlen: ${subscriptionMissing.join(', ')}</div>`
+            : `<div class="text-xs text-gray-500">Passende Wise-Subscriptions: ${matchingSubscriptionCount} von insgesamt ${subscriptionCount}</div>`;
+        const subscriptionErrorHtml = subscriptionError
+            ? `<div class="text-xs text-red-600">${subscriptionError}</div>`
+            : '';
+        const autoConfigureHintHtml = canAutoConfigure
+            ? (subscriptionState === 'configured'
+                ? '<div class="text-xs text-emerald-700">Die benötigten Wise-Events sind bereits für diese Webhook-URL registriert.</div>'
+                : '<div class="text-xs text-gray-600">Als SYSTEMADMIN kannst du fehlende Wise-Events direkt per API für diese Webhook-URL anlegen.</div>')
+            : '<div class="text-xs text-gray-500">Nur SYSTEMADMIN darf fehlende Wise-Subscriptions automatisch per API anlegen.</div>';
         const noteHtml = data.lastProcessingNote
             ? `<div class="text-xs text-gray-600">${data.lastProcessingNote}</div>`
             : '';
+
+        if (ensureButton) {
+            const canUseEnsure = Boolean(
+                window.ensureOnlinePaymentWiseWebhookSubscriptions
+                && configured
+                && canAutoConfigure
+                && subscriptionApiConfigured
+                && subscriptionState !== 'configured'
+            );
+            ensureButton.style.display = canAutoConfigure ? 'inline-flex' : 'none';
+            ensureButton.disabled = !canUseEnsure;
+            ensureButton.classList.toggle('opacity-50', !canUseEnsure);
+            ensureButton.classList.toggle('cursor-not-allowed', !canUseEnsure);
+            ensureButton.title = canUseEnsure
+                ? ''
+                : (!subscriptionApiConfigured
+                    ? `Fehlende API-Secrets: ${subscriptionMissing.join(', ')}`
+                    : (subscriptionState === 'configured'
+                        ? 'Für diese URL sind bereits alle benötigten Events vorhanden.'
+                        : 'Automatische Anlage ist derzeit nicht möglich.'));
+        }
 
         container.innerHTML = `
             <div class="flex flex-wrap items-start justify-between gap-2">
@@ -221,6 +304,18 @@ async function renderOnlinePaymentWiseStatus() {
                 <div class="rounded bg-white/80 border border-amber-100 p-2"><span class="text-gray-500 block">Webhooks 24h</span><span class="font-bold text-gray-800">${recentWebhookCount}</span></div>
                 <div class="rounded bg-white/80 border border-amber-100 p-2"><span class="text-gray-500 block">Auto-Matches 24h</span><span class="font-bold text-gray-800">${recentMatchedLinkCount}</span></div>
             </div>
+            <div class="mt-3 rounded bg-white/80 border border-amber-100 p-2 text-[11px] space-y-2">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <span class="font-semibold text-gray-800">Wise-Subscription-Status</span>
+                    <span class="inline-flex items-center px-2 py-1 rounded border text-[11px] font-bold ${subscriptionMeta.className}">${subscriptionMeta.label}</span>
+                </div>
+                <div><span class="text-gray-500 block">Konfigurierte Events</span><span class="font-semibold text-gray-800 break-all">${configuredEventText}</span></div>
+                <div><span class="text-gray-500 block">Fehlende Events</span><span class="font-semibold text-gray-800 break-all">${missingEventText}</span></div>
+                ${subscriptionApiHtml}
+                ${subscriptionErrorHtml}
+                ${autoConfigureHintHtml}
+                <div class="text-[11px] text-gray-500">Wise bietet für Profile-Webhook-Subscriptions keinen direkten API-Testauslöser; Tests laufen daher über echte oder simulierte eingehende Events an dieser URL.</div>
+            </div>
             <div class="mt-3 space-y-1 text-[11px]">
                 <div class="rounded bg-white/80 border border-amber-100 p-2"><span class="text-gray-500 block">Letzter Webhook</span><span class="font-semibold text-gray-800 break-all">${lastWebhookText}</span></div>
                 <div class="rounded bg-white/80 border border-amber-100 p-2"><span class="text-gray-500 block">Letzter erkannter Treffer</span><span class="font-semibold text-gray-800 break-all">${lastMatchText}</span></div>
@@ -230,7 +325,35 @@ async function renderOnlinePaymentWiseStatus() {
         `;
     } catch (error) {
         console.error(error);
+        if (ensureButton) {
+            ensureButton.style.display = currentUser?.role === 'SYSTEMADMIN' ? 'inline-flex' : 'none';
+            ensureButton.disabled = true;
+            ensureButton.classList.add('opacity-50', 'cursor-not-allowed');
+        }
         container.innerHTML = `<p class="text-sm text-red-600">Wise-Webhooks konnten nicht geladen werden: ${error?.message || 'Unbekannter Fehler'}</p>`;
+    }
+}
+
+async function ensureOnlinePaymentWiseSubscriptions() {
+    if (!window.ensureOnlinePaymentWiseWebhookSubscriptions) {
+        alertUser('Cloud Function ensureOnlinePaymentWiseWebhookSubscriptions ist nicht verfügbar.', 'error');
+        return;
+    }
+
+    const button = document.getElementById('btn-zv-online-ensure-wise-subscriptions');
+    if (button?.disabled) return;
+
+    setButtonLoading(button, true);
+    try {
+        const result = await window.ensureOnlinePaymentWiseWebhookSubscriptions({});
+        const data = result?.data || {};
+        alertUser(data.note || 'Wise-Subscriptions wurden geprüft.', 'success');
+        await renderOnlinePaymentWiseStatus();
+    } catch (error) {
+        console.error(error);
+        alertUser(error?.message || 'Wise-Subscriptions konnten nicht angelegt werden.', 'error');
+    } finally {
+        setButtonLoading(button, false);
     }
 }
 
@@ -848,6 +971,7 @@ function setupSettingsListeners() {
     document.getElementById('tab-zv-categories')?.addEventListener('click', () => openSettingsTab('categories'));
     document.getElementById('tab-zv-archive')?.addEventListener('click', () => openSettingsTab('archive'));
     document.getElementById('btn-zv-online-check-wise-status')?.addEventListener('click', renderOnlinePaymentWiseStatus);
+    document.getElementById('btn-zv-online-ensure-wise-subscriptions')?.addEventListener('click', ensureOnlinePaymentWiseSubscriptions);
     document.getElementById('btn-save-online-target-account')?.addEventListener('click', saveOnlineTargetAccountSettings);
 
     // Listener für Vorlagen-Liste (Löschen UND Umbenennen)
