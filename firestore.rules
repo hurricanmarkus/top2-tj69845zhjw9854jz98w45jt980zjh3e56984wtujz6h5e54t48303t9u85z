@@ -190,6 +190,10 @@ service cloud.firestore {
       allow create: if isSystemAdminClaim() && !('key' in request.resource.data);
       allow delete: if isSystemAdminClaim();
       allow update: if (isAdminOrSystemAdminClaim() || isSelfAppUser(userId)) && isUserConfigKeyUnchanged();
+
+      match /guestLinkEvents/{documentId} {
+        allow read: if isAuthenticated();
+      }
     }
 
     match /artifacts/20LVob88b3ovXRUyX3ra/private/secrets/{path=**} {
@@ -359,6 +363,14 @@ service cloud.firestore {
       allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId() && request.resource.data.involvedUserIds.hasAny([appUserId()]);
       allow update: if hasAppUserIdClaim() && resource.data.involvedUserIds.hasAny([appUserId()]);
       allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+
+      match /guestLinkEvents/{documentId} {
+        allow read: if isSystemAdminClaim() || hasAppUserIdClaim() && (
+          resource.data == null ||
+          get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/public/data/payments/$(paymentId)).data.createdBy == appUserId() ||
+          get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/public/data/payments/$(paymentId)).data.involvedUserIds.hasAny([appUserId()])
+        );
+      }
     }
 
     // PAYMENT-LINKS: Online-Zahlungslinks
@@ -391,6 +403,10 @@ service cloud.firestore {
       allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
       allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
       allow update, delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+
+      match /guestLinkEvents/{documentId} {
+        allow read: if isSystemAdminClaim() || (hasAppUserIdClaim() && get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/public/data/private-contacts/$(document)).data.createdBy == appUserId());
+      }
     }
 
     // PRIVATE-ACCOUNTS: Private Konten

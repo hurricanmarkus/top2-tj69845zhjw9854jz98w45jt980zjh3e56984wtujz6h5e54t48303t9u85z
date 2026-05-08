@@ -25,8 +25,8 @@
     <meta name="application-name" content="TOP 2 App">
     <meta name="apple-mobile-web-app-title" content="TOP2">
     <meta name="theme-color" content="#4f46e5" />
-    <meta name="top2-app-version" content="1.22.5" />
-    <meta name="top2-build-id" content="20260508-10" />
+    <meta name="top2-app-version" content="1.22.7" />
+    <meta name="top2-build-id" content="20260508-12" />
     <meta name="msapplication-navbutton-color" content="#4f46e5">
     <meta name="apple-mobile-app-status-bar-style" content="black-translucent">
     <style>
@@ -55,7 +55,7 @@
     <link rel="apple-touch-icon" type="image/png" sizes="192x192"
         href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
 
-    <link rel="manifest" href="manifest.json?v=20260508-10">
+    <link rel="manifest" href="manifest.json?v=20260508-12">
 
     <link rel="stylesheet" href="style.css">
     
@@ -6695,7 +6695,7 @@
                                 <h3 class="text-lg font-bold text-gray-800">Zielkonto für Online-Zahlungen</h3>
                                 <p class="text-xs text-gray-500">Dieses eine Konto wird für alle Online-Zahlungslinks verwendet. Es ist unabhängig von „Meine Konten“ und soll für die automatische Wise-Webhook-Erkennung dein Wise-EUR-Zielkonto sein.</p>
                             </div>
-                            <span class="mt-1 rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-cyan-700">Aufklappen</span>
+                            <span class="mt-1 rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-cyan-700">⌄</span>
                         </summary>
                         <div class="px-4 pb-4">
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -6718,7 +6718,7 @@
                                 <h3 class="text-lg font-bold text-gray-800">Wise-Webhooks</h3>
                                 <p class="text-xs text-gray-500">Prüft die Webhook-Konfiguration, zeigt die exakte Wise-Webhook-URL und meldet empfangene Events sowie automatische Treffer.</p>
                             </div>
-                            <span class="mt-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">Aufklappen</span>
+                            <span class="mt-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">⌄</span>
                         </summary>
                         <div class="px-4 pb-4">
                             <div class="flex flex-wrap items-center justify-between gap-2 mb-3 pt-1">
@@ -7659,7 +7659,7 @@
                 </div>
 
                 <div class="p-6 space-y-6">
-                    <div class="text-center p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div id="guest-overview-summary" class="text-center p-4 bg-gray-50 rounded-lg border border-gray-200">
                         <p class="text-xs text-gray-500 uppercase font-bold mb-1">Offener Gesamtbetrag</p>
                         <p class="text-4xl font-extrabold text-gray-800" id="guest-total-display">0,00 €</p>
                         <p class="text-xs text-gray-500 mt-2" id="guest-status-text">Alles ausgeglichen.</p>
@@ -7669,7 +7669,7 @@
 
                     <div id="guest-online-payment-box" class="hidden space-y-3"></div>
 
-                    <div>
+                    <div id="guest-open-posts-section">
                         <h3 class="font-bold text-gray-700 border-b pb-2 mb-2">Offene Posten</h3>
                         <div id="guest-payment-list" class="space-y-2">
                             <div class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-4 text-center text-sm font-medium text-gray-500">Kein offener Eintrag gefunden</div>

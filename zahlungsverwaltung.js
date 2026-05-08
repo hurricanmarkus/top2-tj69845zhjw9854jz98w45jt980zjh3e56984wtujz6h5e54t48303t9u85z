@@ -320,18 +320,29 @@ async function openIssuedLinkHistoryByToken(token = '', event = null) {
     }
     if (!pendingIssuedLinksModalState) return;
 
-    const [kind, id] = String(token || '').split(':');
-    const entry = pendingIssuedLinksModalState.entries.find((item) => item.kind === kind && item.id === id);
-    if (!entry) return;
+    try {
+        const [kind, id] = String(token || '').split(':');
+        const entry = pendingIssuedLinksModalState.entries.find((item) => item.kind === kind && item.id === id);
+        if (!entry) return;
 
-    const entries = await fetchIssuedLinkAccessHistory(entry);
-    pendingIssuedLinksModalState.selectedHistoryHtml = `
-        <div class="space-y-2">
-            <div class="text-sm font-bold text-gray-800">Aufrufhistorie: ${entry.title}</div>
-            ${renderIssuedLinksHistory(entries)}
-        </div>
-    `;
-    renderIssuedLinksManagementModal();
+        const entries = await fetchIssuedLinkAccessHistory(entry);
+        pendingIssuedLinksModalState.selectedHistoryHtml = `
+            <div class="space-y-2">
+                <div class="text-sm font-bold text-gray-800">Aufrufhistorie: ${entry.title}</div>
+                ${renderIssuedLinksHistory(entries)}
+            </div>
+        `;
+        renderIssuedLinksManagementModal();
+    } catch (error) {
+        console.error(error);
+        pendingIssuedLinksModalState.selectedHistoryHtml = `
+            <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+                Die Aufrufhistorie konnte nicht geladen werden. Bitte prüfe die Berechtigungen.
+            </div>
+        `;
+        renderIssuedLinksManagementModal();
+        alertUser(error?.message || 'Aufrufhistorie konnte nicht geladen werden.', 'error');
+    }
 }
 
 window.openIssuedLinkHistoryByToken = openIssuedLinkHistoryByToken;
@@ -8175,8 +8186,7 @@ export async function initializeGuestView(guestId, options = {}) {
             liveStatusIndicator.innerHTML = `
                 <div class="guest-live-status-box">
                     <div class="guest-live-status-box-header">
-                        <span class="guest-live-status-box-title">LIVE-Anzeige Zahlungseingang</span>
-                        <span class="guest-live-status-badge">LIVE</span>
+                        <span class="guest-live-status-box-title">{LIVE}-Anzeige Zahlungseingang</span>
                     </div>
                     <div class="guest-live-status-box-body">
                         <div class="guest-live-status-chip ${liveMeta.className}">
@@ -8261,7 +8271,7 @@ export async function initializeGuestView(guestId, options = {}) {
             const buildCopyRow = (label, value, copyValue = '') => `
                 <div class="flex items-start gap-2 rounded-lg border border-emerald-100 bg-white px-3 py-2 text-[11px] text-gray-700">
                     <span class="w-28 shrink-0 font-bold text-gray-800">${label}:</span>
-                    <button type="button" data-guest-manual-copy="${encodeURIComponent(String(copyValue || ''))}" class="h-6 w-6 shrink-0 rounded border border-emerald-200 bg-emerald-50 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100">&quot;</button>
+                    <button type="button" data-guest-manual-copy="${encodeURIComponent(String(copyValue || ''))}" class="h-6 w-6 shrink-0 rounded border border-emerald-200 bg-emerald-50 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100" aria-label="${label} kopieren">📋</button>
                     <span class="min-w-0 flex-1 break-all">${value || '—'}</span>
                 </div>
             `;
@@ -8427,6 +8437,9 @@ export async function initializeGuestView(guestId, options = {}) {
             onlineBox.querySelector('#guest-start-payment-btn')?.addEventListener('click', () => {
                 launcher?.classList.add('hidden');
                 workspace?.classList.remove('hidden');
+                document.getElementById('guest-overview-summary')?.classList.add('hidden');
+                document.getElementById('guest-open-posts-section')?.classList.add('hidden');
+                document.getElementById('guest-position-add-box')?.classList.add('hidden');
                 activatePaymentMode('manual');
             });
 

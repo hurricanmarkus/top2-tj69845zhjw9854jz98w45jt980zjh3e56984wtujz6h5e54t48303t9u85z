@@ -1,14 +1,34 @@
 {
-  "version": "1.22.5",
-  "buildId": "20260508-10",
+  "version": "1.22.7",
+  "buildId": "20260508-12",
   "releaseDate": "2026-05-08",
-  "releaseTime": "14:58",
+  "releaseTime": "15:18",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Online-Zahlungslinks in den Einstellungen sind jetzt read-only und einklappbar; der Rechte-Dialog kopiert aktive Online-Links wieder aktiv, und der Gastmodus startet mit Ladebildschirm statt Header/Footer-Flash.",
+  "note": "LIVE-Anzeige zeigt jetzt {LIVE}-Label ohne separate Badge, Copy-Felder nutzen ein Kopiersymbol, der Direktzahlungsmodus blendet Übersicht und offene Posten aus, und die Link-Historie ist über die Firestore-Regeln lesbar.",
   "commitId": "5a9e9a2",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.7",
+      "buildId": "20260508-12",
+      "releaseDate": "2026-05-08",
+      "releaseTime": "15:18",
+      "bereich": "Zahlungsverwaltung",
+      "note": "LIVE-Anzeige zeigt jetzt {LIVE}-Label ohne separate Badge, Copy-Felder nutzen ein Kopiersymbol, der Direktzahlungsmodus blendet Übersicht und offene Posten aus, und die Link-Historie ist über die Firestore-Regeln lesbar.",
+      "commitId": "5a9e9a2",
+      "obligation": "false"
+    },
+    {
+      "version": "1.22.6",
+      "buildId": "20260508-11",
+      "releaseDate": "2026-05-08",
+      "releaseTime": "15:10",
+      "bereich": "Zahlungsverwaltung",
+      "note": "LIVE-Anzeige zeigt jetzt {LIVE}-Label ohne separate Badge, Copy-Felder nutzen ein Kopiersymbol, der Direktzahlungsmodus blendet Übersicht und offene Posten aus, und die Link-Historie ist regelkonform lesbar.",
+      "commitId": "5a9e9a2",
+      "obligation": "false"
+    },
     {
       "version": "1.22.5",
       "buildId": "20260508-10",
