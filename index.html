@@ -25,15 +25,15 @@
     <meta name="application-name" content="TOP 2 App">
     <meta name="apple-mobile-web-app-title" content="TOP2">
     <meta name="theme-color" content="#4f46e5" />
-    <meta name="top2-app-version" content="1.19.1" />
-    <meta name="top2-build-id" content="20260508-1" />
+    <meta name="top2-app-version" content="1.20.0" />
+    <meta name="top2-build-id" content="20260508-3" />
     <meta name="msapplication-navbutton-color" content="#4f46e5">
     <meta name="apple-mobile-app-status-bar-style" content="black-translucent">
     <link rel="icon" type="image/png" sizes="192x192" href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
     <link rel="apple-touch-icon" type="image/png" sizes="192x192"
         href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
 
-    <link rel="manifest" href="manifest.json?v=20260508-1">
+    <link rel="manifest" href="manifest.json?v=20260508-3">
 
     <link rel="stylesheet" href="style.css">
     
@@ -6578,6 +6578,31 @@
                                 class="px-4 py-2 bg-teal-600 text-white font-bold rounded-lg hover:bg-teal-700">+</button>
                         </div>
                         <div id="zv-contacts-list" class="space-y-2 max-h-80 overflow-y-auto"></div>
+                    </div>
+                </div>
+
+                <div id="onlineLinkSelectionModal" class="fixed inset-0 z-[90] hidden items-end justify-center bg-slate-950/60 p-0 sm:items-center sm:p-4">
+                    <div class="w-full max-w-2xl overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl">
+                        <div class="flex items-start justify-between gap-3 border-b border-emerald-100 bg-gradient-to-r from-emerald-600 to-teal-500 px-4 py-4 text-white sm:px-6">
+                            <div>
+                                <h3 id="online-link-selection-title" class="text-lg font-bold">Online-Zahlungslink</h3>
+                                <p id="online-link-selection-subtitle" class="mt-1 text-xs text-emerald-50">Wähle die gewünschten Schuldeneinträge aus.</p>
+                            </div>
+                            <button id="close-online-link-selection-modal" class="text-white/80 hover:text-white text-3xl leading-none font-bold">&times;</button>
+                        </div>
+                        <div class="max-h-[78vh] overflow-y-auto px-4 py-4 sm:px-6 sm:py-5 space-y-4">
+                            <div id="online-link-selection-summary" class="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900">0 offene Einträge verfügbar</div>
+                            <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                <button id="btn-online-link-mode-all" type="button" class="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-bold text-gray-700 transition">Alle</button>
+                                <button id="btn-online-link-mode-none" type="button" class="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-bold text-gray-700 transition">Keine</button>
+                                <button id="btn-online-link-mode-selected" type="button" class="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-bold text-gray-700 transition">Ausgewählte</button>
+                            </div>
+                            <div id="online-link-selection-list" class="space-y-2"></div>
+                        </div>
+                        <div class="flex flex-col-reverse gap-2 border-t border-gray-200 bg-gray-50 px-4 py-4 sm:flex-row sm:justify-end sm:px-6">
+                            <button id="btn-cancel-online-link-selection" type="button" class="w-full rounded-xl bg-gray-200 px-4 py-2.5 text-sm font-bold text-gray-800 hover:bg-gray-300 sm:w-auto">Abbrechen</button>
+                            <button id="btn-confirm-online-link-selection" type="button" class="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 sm:w-auto">Link erstellen</button>
+                        </div>
                     </div>
                 </div>
 

@@ -54,6 +54,7 @@ let isTrashAdvancedMode = false;
 let selectedTrashIds = new Set();
 let onlinePaymentLinksCache = [];
 let onlinePaymentTargetAccount = null;
+let pendingOnlineLinkSelectionState = null;
 
 
 
@@ -475,6 +476,182 @@ function resolveGuestIdForPaymentLink(payment) {
     return '';
 }
 
+function getOnlinePaymentReferenceShortId(payment) {
+    if (!payment || typeof payment !== 'object') return '';
+    const stored = String(payment.onlinePaymentReferenceShortId || '').trim().toUpperCase();
+    if (stored) return stored;
+    return String(payment.id || '').trim().slice(-4).toUpperCase();
+}
+
+function getOnlinePaymentReferenceCode(payment) {
+    return String(payment?.onlinePaymentReferenceCode || '').trim().toUpperCase();
+}
+
+function isPaymentCollectableViaOnlineLink(payment, guestId = '') {
+    const targetId = String(guestId || '').trim();
+    if (!payment || !targetId) return false;
+    const status = String(payment.status || '').toLowerCase();
+    if (!['open', 'pending_approval'].includes(status)) return false;
+    if (payment.isTBD === true) return false;
+    if (normalizeMoney(payment.remainingAmount) <= 0.001) return false;
+    if (String(payment.createdBy || '') !== currentUser.mode) return false;
+    if (String(payment.creditorId || '') !== currentUser.mode) return false;
+    if (String(payment.debtorId || '') !== targetId) return false;
+    if (isPaymentLockedByOnlineLink(payment)) return false;
+    return true;
+}
+
+function isPaymentPayableInGuestView(payment) {
+    if (!payment || typeof payment !== 'object') return false;
+    return String(payment.creditorId || '') === String(payment.createdBy || '');
+}
+
+function getOnlineLinkSelectionModeLabel(mode = '') {
+    const token = String(mode || '').trim().toLowerCase();
+    if (token === 'all') return 'Alle';
+    if (token === 'none') return 'Keine';
+    return 'Ausgewählt';
+}
+
+function closeOnlineLinkSelectionModal() {
+    const modal = document.getElementById('onlineLinkSelectionModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.style.display = 'none';
+    pendingOnlineLinkSelectionState = null;
+}
+
+function renderOnlineLinkSelectionModal() {
+    const modal = document.getElementById('onlineLinkSelectionModal');
+    const titleEl = document.getElementById('online-link-selection-title');
+    const subtitleEl = document.getElementById('online-link-selection-subtitle');
+    const summaryEl = document.getElementById('online-link-selection-summary');
+    const listEl = document.getElementById('online-link-selection-list');
+    const confirmBtn = document.getElementById('btn-confirm-online-link-selection');
+    const btnAll = document.getElementById('btn-online-link-mode-all');
+    const btnNone = document.getElementById('btn-online-link-mode-none');
+    const btnSelected = document.getElementById('btn-online-link-mode-selected');
+    if (!modal || !titleEl || !subtitleEl || !summaryEl || !listEl || !confirmBtn || !btnAll || !btnNone || !btnSelected || !pendingOnlineLinkSelectionState) return;
+
+    const state = pendingOnlineLinkSelectionState;
+    const selectedCount = state.selectedPaymentIds.size;
+    titleEl.textContent = state.guestName ? `Online-Zahlungslink für ${state.guestName}` : 'Online-Zahlungslink';
+    subtitleEl.textContent = state.candidatePayments.length
+        ? 'Wähle aus, ob alle, keine oder nur bestimmte Schuldeneinträge in diesem Zahlungslink auftauchen sollen.'
+        : 'Für diese Person gibt es aktuell keine automatisch zuordenbaren offenen Schuldeneinträge. Du kannst trotzdem einen Link ohne Vorauswahl erstellen.';
+    summaryEl.textContent = `${state.candidatePayments.length} offene Einträge verfügbar • Modus: ${getOnlineLinkSelectionModeLabel(state.selectionMode)}${state.selectionMode === 'selected' ? ` • ${selectedCount} markiert` : ''}`;
+
+    [
+        [btnAll, state.selectionMode === 'all'],
+        [btnNone, state.selectionMode === 'none'],
+        [btnSelected, state.selectionMode === 'selected'],
+    ].forEach(([button, isActive]) => {
+        button.classList.toggle('bg-emerald-600', isActive);
+        button.classList.toggle('text-white', isActive);
+        button.classList.toggle('border-emerald-600', isActive);
+        button.classList.toggle('bg-white', !isActive);
+        button.classList.toggle('text-gray-700', !isActive);
+        button.classList.toggle('border-gray-300', !isActive);
+    });
+
+    if (!state.candidatePayments.length) {
+        listEl.innerHTML = '<div class="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-center text-sm text-gray-500">Keine passenden offenen Schuldeneinträge verfügbar.</div>';
+    } else {
+        listEl.innerHTML = state.candidatePayments.map((payment) => `
+            <label class="flex items-start gap-3 rounded-xl border border-gray-200 bg-white px-3 py-3 shadow-sm ${state.selectionMode === 'selected' ? 'cursor-pointer' : 'opacity-80'}">
+                <input type="checkbox" data-online-link-payment-select="${payment.id}" class="mt-1 h-4 w-4 accent-emerald-600" ${state.selectedPaymentIds.has(payment.id) ? 'checked' : ''} ${state.selectionMode === 'selected' ? '' : 'disabled'}>
+                <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="font-bold text-gray-800 break-words">${payment.title || 'Schuldeneintrag'}</span>
+                        <span class="rounded bg-gray-900 px-2 py-0.5 text-[10px] font-mono font-bold text-white">#${getOnlinePaymentReferenceShortId(payment)}</span>
+                    </div>
+                    <div class="mt-1 text-xs text-gray-500">${normalizeMoney(payment.remainingAmount).toFixed(2)} € offen</div>
+                </div>
+            </label>
+        `).join('');
+
+        listEl.querySelectorAll('[data-online-link-payment-select]').forEach((checkbox) => {
+            checkbox.addEventListener('change', () => {
+                const paymentId = checkbox.getAttribute('data-online-link-payment-select') || '';
+                if (!paymentId || !pendingOnlineLinkSelectionState) return;
+                if (checkbox.checked) pendingOnlineLinkSelectionState.selectedPaymentIds.add(paymentId);
+                else pendingOnlineLinkSelectionState.selectedPaymentIds.delete(paymentId);
+                renderOnlineLinkSelectionModal();
+            });
+        });
+    }
+
+    confirmBtn.disabled = state.selectionMode === 'selected' && selectedCount === 0;
+    confirmBtn.textContent = state.selectionMode === 'none'
+        ? 'Link ohne Vorauswahl erstellen'
+        : `Link erstellen${state.selectionMode === 'selected' ? ` (${selectedCount})` : ` (${state.candidatePayments.length})`}`;
+}
+
+function openOnlineLinkSelectionModal(guestId, guestName = '', candidatePayments = []) {
+    const modal = document.getElementById('onlineLinkSelectionModal');
+    if (!modal) return;
+    pendingOnlineLinkSelectionState = {
+        guestId: String(guestId || '').trim(),
+        guestName: String(guestName || '').trim(),
+        candidatePayments: Array.isArray(candidatePayments) ? candidatePayments : [],
+        selectionMode: Array.isArray(candidatePayments) && candidatePayments.length ? 'all' : 'none',
+        selectedPaymentIds: new Set((Array.isArray(candidatePayments) ? candidatePayments : []).map((payment) => payment.id)),
+    };
+    renderOnlineLinkSelectionModal();
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+}
+
+async function executeOnlineLinkSelectionCreation() {
+    if (!pendingOnlineLinkSelectionState || !window.createOnlinePaymentLink) {
+        alertUser('Cloud Function createOnlinePaymentLink ist nicht verfügbar.', 'error');
+        return;
+    }
+
+    const confirmBtn = document.getElementById('btn-confirm-online-link-selection');
+    const state = pendingOnlineLinkSelectionState;
+    const selectedPayments = state.selectionMode === 'all'
+        ? state.candidatePayments
+        : (state.selectionMode === 'selected'
+            ? state.candidatePayments.filter((payment) => state.selectedPaymentIds.has(payment.id))
+            : []);
+
+    if (state.selectionMode === 'selected' && !selectedPayments.length) {
+        alertUser('Bitte mindestens einen Schuldeneintrag auswählen oder den Modus „Keine“ nutzen.', 'error_long');
+        return;
+    }
+
+    const paymentIds = selectedPayments.map((payment) => payment.id);
+    const linkType = paymentIds.length === 1 ? 'single' : (paymentIds.length ? 'group' : 'free');
+    const linkTitle = paymentIds.length === 1
+        ? (selectedPayments[0]?.title || 'Online-Zahlung')
+        : (state.guestName ? `Online-Zahlung ${state.guestName}` : 'Online-Zahlung');
+
+    setButtonLoading(confirmBtn, true);
+    try {
+        const result = await window.createOnlinePaymentLink({
+            guestId: state.guestId,
+            paymentIds,
+            linkType,
+            selectionMode: state.selectionMode,
+            title: linkTitle,
+            baseUrl: window.location.origin + window.location.pathname,
+            banking: deriveOnlinePaymentBankingInfo(),
+        });
+
+        closeOnlineLinkSelectionModal();
+        const linkUrl = result?.data?.linkUrl || buildOnlinePaymentPublicUrl(result?.data?.linkId, result?.data?.token);
+        const copied = await copyTextToClipboardSafe(linkUrl);
+        alertUser(copied ? 'Online-Zahlungslink kopiert.' : 'Online-Zahlungslink erstellt.', 'success');
+        await renderOnlinePaymentLinks();
+    } catch (error) {
+        console.error(error);
+        alertUser(error?.message || 'Online-Zahlungslink konnte nicht erstellt werden.', 'error');
+    } finally {
+        setButtonLoading(confirmBtn, false);
+    }
+}
+
 async function copyTextToClipboardSafe(text) {
     const payload = String(text || '').trim();
     if (!payload) return false;
@@ -515,10 +692,16 @@ async function createOnlineLinkForPayment(paymentId) {
         return;
     }
 
+    if (!isPaymentCollectableViaOnlineLink(payment, guestId)) {
+        alertUser('Online-Zahlungslinks sind nur für offene Einträge mit festem Betrag möglich, bei denen dir die Zielperson Geld schuldet.', 'error_long');
+        return;
+    }
+
     const result = await window.createOnlinePaymentLink({
         guestId,
         paymentIds: [paymentId],
         linkType: 'single',
+        selectionMode: 'selected',
         title: payment.title || 'Online-Zahlung',
         baseUrl: window.location.origin + window.location.pathname,
         banking: deriveOnlinePaymentBankingInfo(),
@@ -547,27 +730,15 @@ async function createOnlineLinkForGuestContact(guestId, guestName = '') {
         return;
     }
 
-    const candidatePaymentIds = allPayments
-        .filter((entry) => entry.createdBy === currentUser.mode)
-        .filter((entry) => ['open', 'pending_approval'].includes(String(entry.status || '').toLowerCase()))
-        .filter((entry) => String(entry.debtorId || '') === targetId || String(entry.creditorId || '') === targetId)
-        .filter((entry) => !isPaymentLockedByOnlineLink(entry))
-        .map((entry) => entry.id);
+    const candidatePayments = allPayments
+        .filter((entry) => isPaymentCollectableViaOnlineLink(entry, targetId))
+        .sort((left, right) => {
+            const leftTime = new Date(left.deadline || left.startDate || left.createdAt || 0).getTime() || 0;
+            const rightTime = new Date(right.deadline || right.startDate || right.createdAt || 0).getTime() || 0;
+            return leftTime - rightTime;
+        });
 
-    const linkType = candidatePaymentIds.length ? 'group' : 'free';
-    const result = await window.createOnlinePaymentLink({
-        guestId: targetId,
-        paymentIds: candidatePaymentIds,
-        linkType,
-        title: guestName ? `Online-Zahlung ${guestName}` : 'Online-Zahlung',
-        baseUrl: window.location.origin + window.location.pathname,
-        banking: deriveOnlinePaymentBankingInfo(),
-    });
-
-    const linkUrl = result?.data?.linkUrl || buildOnlinePaymentPublicUrl(result?.data?.linkId, result?.data?.token);
-    const copied = await copyTextToClipboardSafe(linkUrl);
-    alertUser(copied ? 'Online-Zahlungslink kopiert.' : 'Online-Zahlungslink erstellt.', 'success');
-    await renderOnlinePaymentLinks();
+    openOnlineLinkSelectionModal(targetId, guestName, candidatePayments);
 }
 
 async function renderOnlinePaymentLinks() {
@@ -581,7 +752,7 @@ async function renderOnlinePaymentLinks() {
 
     const targetAccount = getOnlineTargetAccount();
     const syncHint = hasConfiguredOnlineTargetAccount()
-        ? `<div class="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">Automatische Erkennung läuft über <span class="font-bold">Wise-Webhooks</span>. Der Referenzcode muss exakt im Verwendungszweck stehen und das gespeicherte Zielkonto soll dein <span class="font-bold">Wise-EUR-Konto</span> sein.</div>`
+        ? `<div class="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">Automatische Erkennung läuft über <span class="font-bold">Wise-Webhooks</span>. Entscheidend sind jetzt <span class="font-bold">Verwendungszweck + Betrag pro Schuldeneintrag</span>. Das gespeicherte Zielkonto soll dein <span class="font-bold">Wise-EUR-Konto</span> sein.</div>`
         : '';
 
     container.innerHTML = `${syncHint}<p class="text-center text-gray-400 italic py-4">Lade Online-Zahlungslinks...</p>`;
@@ -606,12 +777,21 @@ async function renderOnlinePaymentLinks() {
             const syncLabel = link.syncMode === 'wise_webhook' ? 'Wise-Webhook' : (link.syncMode === 'wise_statement' ? 'Legacy-Statement' : '—');
             const lastMatchText = link.lastWiseBookedAt ? new Date(link.lastWiseBookedAt).toLocaleString('de-DE') : 'Noch kein Wise-Webhook-Match';
             const wiseMatchCount = Number(link.wiseMatchCount || 0);
+            const paymentCount = Number(link.paymentCount || (Array.isArray(link.paymentIds) ? link.paymentIds.length : 0));
+            const selectionLabel = getOnlineLinkSelectionModeLabel(link.selectionMode || (link.linkType === 'free' ? 'none' : 'selected'));
+            const targetPreview = Array.isArray(link.paymentTargets)
+                ? link.paymentTargets.slice(0, 3).map((entry) => `#${entry.paymentShortId || ''}`).filter(Boolean).join(', ')
+                : '';
+            const referenceLine = link.referenceCode
+                ? `Ref: ${link.referenceCode}`
+                : `Auswahl: ${selectionLabel} • Einträge: ${paymentCount || '0'}`;
             return `
                 <div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
                     <div class="flex flex-wrap items-center justify-between gap-2">
                         <div class="min-w-0">
                             <div class="text-sm font-bold text-gray-800 truncate">${link.title || 'Online-Zahlung'}</div>
-                            <div class="text-[11px] text-gray-500 truncate">Ref: ${link.referenceCode || '—'} • Gast: ${link.guestName || link.guestId || 'Gast'}</div>
+                            <div class="text-[11px] text-gray-500 truncate">${referenceLine} • Gast: ${link.guestName || link.guestId || 'Gast'}</div>
+                            <div class="text-[11px] text-gray-400 truncate">Typ: ${link.linkType === 'single' ? 'Einzel-Eintrag' : 'Adressbuch-Link'}${targetPreview ? ` • IDs: ${targetPreview}` : ''}</div>
                             <div class="text-[11px] text-gray-400">Erstellt: ${createdAt} • Aufrufe: ${Number(link.tokenViews || 0)} • Zielbank: ${bankLabel}</div>
                             <div class="text-[11px] text-gray-400">Webhook: ${syncLabel} • Wise-Matches: ${wiseMatchCount} • Letzter Eingang: ${lastMatchText}</div>
                         </div>
@@ -973,6 +1153,31 @@ function setupSettingsListeners() {
     document.getElementById('btn-zv-online-check-wise-status')?.addEventListener('click', renderOnlinePaymentWiseStatus);
     document.getElementById('btn-zv-online-ensure-wise-subscriptions')?.addEventListener('click', ensureOnlinePaymentWiseSubscriptions);
     document.getElementById('btn-save-online-target-account')?.addEventListener('click', saveOnlineTargetAccountSettings);
+    document.getElementById('close-online-link-selection-modal')?.addEventListener('click', closeOnlineLinkSelectionModal);
+    document.getElementById('btn-cancel-online-link-selection')?.addEventListener('click', closeOnlineLinkSelectionModal);
+    document.getElementById('btn-confirm-online-link-selection')?.addEventListener('click', executeOnlineLinkSelectionCreation);
+    document.getElementById('btn-online-link-mode-all')?.addEventListener('click', () => {
+        if (!pendingOnlineLinkSelectionState) return;
+        pendingOnlineLinkSelectionState.selectionMode = 'all';
+        renderOnlineLinkSelectionModal();
+    });
+    document.getElementById('btn-online-link-mode-none')?.addEventListener('click', () => {
+        if (!pendingOnlineLinkSelectionState) return;
+        pendingOnlineLinkSelectionState.selectionMode = 'none';
+        renderOnlineLinkSelectionModal();
+    });
+    document.getElementById('btn-online-link-mode-selected')?.addEventListener('click', () => {
+        if (!pendingOnlineLinkSelectionState) return;
+        pendingOnlineLinkSelectionState.selectionMode = 'selected';
+        renderOnlineLinkSelectionModal();
+    });
+
+    const onlineLinkSelectionModal = document.getElementById('onlineLinkSelectionModal');
+    if (onlineLinkSelectionModal) {
+        onlineLinkSelectionModal.addEventListener('click', (event) => {
+            if (event.target === onlineLinkSelectionModal) closeOnlineLinkSelectionModal();
+        });
+    }
 
     // Listener für Vorlagen-Liste (Löschen UND Umbenennen)
     document.getElementById('zv-templates-list')?.addEventListener('click', (e) => {
@@ -7342,26 +7547,37 @@ export async function initializeGuestView(guestId) {
 
         if (paymentLinkData && onlineBox) {
             const bankInfo = paymentLinkData.bankInfo || {};
-            const referenceCode = paymentLinkData.referenceCode || '—';
             const statusText = getOnlineLinkStatusLabel(paymentLinkData.status || 'open');
             const expectedAmount = normalizeMoney(paymentLinkData.expectedAmount);
             const paidAmount = normalizeMoney(paymentLinkData.paidAmount);
             const remainingAmount = normalizeMoney(paymentLinkData.remainingAmount);
-            const payAmount = remainingAmount > 0 ? remainingAmount : expectedAmount;
-            const canStartOnlinePayment = Boolean(bankInfo.accountHolder && bankInfo.iban && payAmount > 0);
             const popularBanks = getPopularEuBankLabels();
+            const payableItems = activeItems
+                .filter((payment) => isPaymentPayableInGuestView(payment))
+                .filter((payment) => payment.isTBD !== true)
+                .filter((payment) => normalizeMoney(payment.remainingAmount) > 0.001)
+                .map((payment) => ({
+                    id: payment.id,
+                    title: payment.title || 'Schuldeneintrag',
+                    amount: normalizeMoney(payment.remainingAmount),
+                    referenceCode: getOnlinePaymentReferenceCode(payment),
+                    shortId: getOnlinePaymentReferenceShortId(payment),
+                }))
+                .filter((payment) => payment.referenceCode);
+            let selectedInstruction = payableItems[0] || null;
+            const canStartOnlinePayment = Boolean(bankInfo.accountHolder && bankInfo.iban && selectedInstruction && selectedInstruction.amount > 0);
             const autoMatchInfo = paymentLinkData.lastWiseReference
                 ? `<div class="rounded-lg border border-emerald-100 bg-emerald-50 p-2 text-[11px] text-emerald-800">Letzter Wise-Webhook-Treffer: <span class="font-bold">${paymentLinkData.lastWiseReference}</span>${paymentLinkData.lastWiseBookedAt ? ` • ${new Date(paymentLinkData.lastWiseBookedAt).toLocaleString('de-DE')}` : ''}</div>`
-                : '<div class="rounded-lg border border-amber-100 bg-amber-50 p-2 text-[11px] text-amber-800">Automatische Erkennung läuft über Wise-Webhooks. Bitte den Referenzcode exakt im Verwendungszweck angeben.</div>';
-            const sepaPaymentData = {
+                : '<div class="rounded-lg border border-amber-100 bg-amber-50 p-2 text-[11px] text-amber-800">Automatische Erkennung läuft über Wise-Webhooks. Entscheidend sind Verwendungszweck und Betrag des ausgewählten Schuldeneintrags.</div>';
+            const buildSepaPaymentData = (instruction) => ({
                 iban: bankInfo.iban || '',
                 bic: bankInfo.bic || '',
                 accountHolder: bankInfo.accountHolder || '',
                 bankName: bankInfo.bankName || '',
-                amount: payAmount,
-                reference: referenceCode,
-                purpose: paymentLinkData.title || 'Online-Zahlung',
-            };
+                amount: instruction?.amount || 0,
+                reference: instruction?.referenceCode || '',
+                purpose: instruction?.title || paymentLinkData.title || 'Online-Zahlung',
+            });
 
             onlineBox.innerHTML = `
                 <div class="flex items-start justify-between gap-2">
@@ -7377,18 +7593,27 @@ export async function initializeGuestView(guestId) {
                     <div class="rounded bg-white/70 p-2 border border-emerald-100"><span class="text-emerald-800 block">Offen</span><span class="font-bold text-orange-700">${remainingAmount.toFixed(2)} €</span></div>
                 </div>
                 ${autoMatchInfo}
+                ${payableItems.length > 1 ? `
+                    <div class="rounded-lg border border-emerald-100 bg-white/90 p-2 space-y-2">
+                        <div class="text-[11px] font-bold text-gray-700">Schuldeneintrag auswählen</div>
+                        <div id="guest-payment-choice-list" class="flex flex-wrap gap-1.5">
+                            ${payableItems.map((item, index) => `<button type="button" data-guest-payment-choice="${item.id}" class="guest-payment-choice-btn px-2 py-1 rounded border text-[10px] font-bold ${index === 0 ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-emerald-200 bg-white text-emerald-700'}">#${item.shortId} • ${item.amount.toFixed(2)} €</button>`).join('')}
+                        </div>
+                    </div>
+                ` : ''}
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <button id="guest-manual-mode-btn" type="button" class="py-2 px-3 rounded-lg border border-emerald-400 bg-emerald-600 text-white text-xs font-bold transition">Manuell</button>
                     <button id="guest-online-mode-btn" type="button" class="py-2 px-3 rounded-lg border border-emerald-300 bg-white text-emerald-700 text-xs font-bold transition ${canStartOnlinePayment ? 'hover:bg-emerald-100' : 'opacity-50 cursor-not-allowed'}" ${canStartOnlinePayment ? '' : 'disabled'}>Online-Zahlung starten</button>
                 </div>
                 <div id="guest-manual-payment-panel" class="rounded-lg bg-white/80 border border-emerald-100 p-2 text-[11px] text-gray-700 space-y-1">
-                    <div><span class="font-bold text-gray-800">Verwendungszweck:</span> ${referenceCode}</div>
+                    <div><span class="font-bold text-gray-800">Eintrag:</span> <span id="guest-selected-payment-title">${selectedInstruction ? `${selectedInstruction.title} (#${selectedInstruction.shortId})` : 'Kein Schuldeneintrag ausgewählt'}</span></div>
+                    <div><span class="font-bold text-gray-800">Verwendungszweck:</span> <span id="guest-selected-reference">${selectedInstruction?.referenceCode || '—'}</span></div>
                     ${bankInfo.accountHolder ? `<div><span class="font-bold text-gray-800">Empfänger:</span> ${bankInfo.accountHolder}</div>` : ''}
                     ${bankInfo.bankName ? `<div><span class="font-bold text-gray-800">Bank:</span> ${bankInfo.bankName}</div>` : ''}
                     ${bankInfo.iban ? `<div><span class="font-bold text-gray-800">IBAN:</span> ${bankInfo.iban}</div>` : ''}
                     ${bankInfo.bic ? `<div><span class="font-bold text-gray-800">BIC:</span> ${bankInfo.bic}</div>` : ''}
-                    <div><span class="font-bold text-gray-800">Betrag:</span> ${payAmount.toFixed(2)} €</div>
-                    <div class="text-amber-700 font-semibold">Wichtig: Bitte den Referenzcode exakt im Verwendungszweck angeben, damit die Zahlung automatisch erkannt wird.</div>
+                    <div><span class="font-bold text-gray-800">Betrag:</span> <span id="guest-selected-amount">${selectedInstruction ? `${selectedInstruction.amount.toFixed(2)} €` : '—'}</span></div>
+                    <div class="text-amber-700 font-semibold">Wichtig: Bitte genau den angezeigten Verwendungszweck und Betrag des ausgewählten Schuldeneintrags verwenden.</div>
                 </div>
                 <div id="guest-online-start-panel" class="hidden rounded-lg bg-white/90 border border-cyan-200 p-3 text-[11px] text-gray-700 space-y-3">
                     <div>
@@ -7404,11 +7629,11 @@ export async function initializeGuestView(guestId) {
                     <div class="rounded-lg border border-cyan-100 bg-cyan-50 p-2">
                         <div class="text-[10px] uppercase tracking-wide text-cyan-700 font-bold">Aktuelle Auswahl</div>
                         <div id="guest-online-selected-bank" class="text-sm font-bold text-cyan-900 mt-1">${popularBanks[0] || 'Banking-App'}</div>
-                        <div class="text-[11px] text-gray-600 mt-1">Danach in der App „Überweisung“ oder „QR-Code scannen“ wählen.</div>
+                        <div id="guest-online-selected-instruction" class="text-[11px] text-gray-600 mt-1">${selectedInstruction ? `${selectedInstruction.title} • ${selectedInstruction.amount.toFixed(2)} €` : 'Kein Schuldeneintrag ausgewählt'}</div>
                     </div>
                     <div class="flex flex-col items-center gap-2 rounded-lg border border-dashed border-cyan-300 bg-white p-3">
                         <div id="guest-sepa-qr-code" class="min-h-[168px] flex items-center justify-center"></div>
-                        <div class="text-center text-[11px] text-gray-500">SEPA/EPC-QR mit vorausgefüllter IBAN, Betrag und Referenzcode</div>
+                        <div class="text-center text-[11px] text-gray-500">SEPA/EPC-QR mit vorausgefüllter IBAN, Betrag und Verwendungszweck des ausgewählten Eintrags</div>
                     </div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <button id="guest-copy-sepa-data-btn" type="button" class="py-2 px-3 rounded-lg border border-cyan-300 bg-white text-cyan-700 text-xs font-bold hover:bg-cyan-50 transition">Zahlungsdaten kopieren</button>
@@ -7429,7 +7654,12 @@ export async function initializeGuestView(guestId) {
             const manualModeBtn = onlineBox.querySelector('#guest-manual-mode-btn');
             const onlineModeBtn = onlineBox.querySelector('#guest-online-mode-btn');
             const selectedBankLabel = onlineBox.querySelector('#guest-online-selected-bank');
+            const selectedInstructionLabel = onlineBox.querySelector('#guest-online-selected-instruction');
             const qrContainer = onlineBox.querySelector('#guest-sepa-qr-code');
+            const selectedPaymentTitleEl = onlineBox.querySelector('#guest-selected-payment-title');
+            const selectedReferenceEl = onlineBox.querySelector('#guest-selected-reference');
+            const selectedAmountEl = onlineBox.querySelector('#guest-selected-amount');
+            let currentSepaPaymentData = buildSepaPaymentData(selectedInstruction);
 
             const activatePaymentMode = (mode) => {
                 const isOnline = mode === 'online' && canStartOnlinePayment;
@@ -7449,12 +7679,51 @@ export async function initializeGuestView(guestId) {
 
             activatePaymentMode('manual');
 
-            if (canStartOnlinePayment && qrContainer) {
-                renderSepaQrCode(qrContainer, sepaPaymentData);
-            }
+            const updateSelectedInstruction = (instructionId = '') => {
+                const nextInstruction = payableItems.find((item) => item.id === instructionId) || payableItems[0] || null;
+                selectedInstruction = nextInstruction;
+                currentSepaPaymentData = buildSepaPaymentData(selectedInstruction);
+
+                if (selectedPaymentTitleEl) {
+                    selectedPaymentTitleEl.textContent = selectedInstruction ? `${selectedInstruction.title} (#${selectedInstruction.shortId})` : 'Kein Schuldeneintrag ausgewählt';
+                }
+                if (selectedReferenceEl) {
+                    selectedReferenceEl.textContent = selectedInstruction?.referenceCode || '—';
+                }
+                if (selectedAmountEl) {
+                    selectedAmountEl.textContent = selectedInstruction ? `${selectedInstruction.amount.toFixed(2)} €` : '—';
+                }
+                if (selectedInstructionLabel) {
+                    selectedInstructionLabel.textContent = selectedInstruction ? `${selectedInstruction.title} • ${selectedInstruction.amount.toFixed(2)} €` : 'Kein Schuldeneintrag ausgewählt';
+                }
+                if (qrContainer) {
+                    qrContainer.innerHTML = '';
+                    if (canStartOnlinePayment && selectedInstruction) {
+                        renderSepaQrCode(qrContainer, currentSepaPaymentData);
+                    }
+                }
+
+                onlineBox.querySelectorAll('[data-guest-payment-choice]').forEach((button) => {
+                    const isActive = (button.getAttribute('data-guest-payment-choice') || '') === selectedInstruction?.id;
+                    button.classList.toggle('border-emerald-500', isActive);
+                    button.classList.toggle('bg-emerald-600', isActive);
+                    button.classList.toggle('text-white', isActive);
+                    button.classList.toggle('border-emerald-200', !isActive);
+                    button.classList.toggle('bg-white', !isActive);
+                    button.classList.toggle('text-emerald-700', !isActive);
+                });
+            };
+
+            updateSelectedInstruction(selectedInstruction?.id || '');
 
             manualModeBtn?.addEventListener('click', () => activatePaymentMode('manual'));
             onlineModeBtn?.addEventListener('click', () => activatePaymentMode('online'));
+
+            onlineBox.querySelectorAll('[data-guest-payment-choice]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    updateSelectedInstruction(button.getAttribute('data-guest-payment-choice') || '');
+                });
+            });
 
             onlineBox.querySelectorAll('.guest-online-bank-btn').forEach((button) => {
                 button.addEventListener('click', () => {
@@ -7470,12 +7739,12 @@ export async function initializeGuestView(guestId) {
             });
 
             onlineBox.querySelector('#guest-copy-reference-btn')?.addEventListener('click', async () => {
-                const copied = await copyTextToClipboardSafe(referenceCode);
+                const copied = await copyTextToClipboardSafe(selectedInstruction?.referenceCode || '');
                 alertUser(copied ? 'Referenzcode kopiert.' : 'Referenzcode bereit.', 'success');
             });
 
             onlineBox.querySelector('#guest-copy-sepa-data-btn')?.addEventListener('click', async () => {
-                const copied = await copyTextToClipboardSafe(buildSepaCopyText(sepaPaymentData));
+                const copied = await copyTextToClipboardSafe(buildSepaCopyText(currentSepaPaymentData));
                 alertUser(copied ? 'Zahlungsdaten kopiert.' : 'Zahlungsdaten bereit.', 'success');
             });
 
