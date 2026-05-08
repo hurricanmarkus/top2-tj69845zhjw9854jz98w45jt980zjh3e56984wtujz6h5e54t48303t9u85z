@@ -418,6 +418,131 @@ body.guest-link-mode #guestView {
     padding: 1rem;
 }
 
+.guest-live-status-chip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-width: 12rem;
+    min-height: 3rem;
+    padding: 0.75rem 1rem;
+    border-radius: 9999px;
+    border: 2px solid currentColor;
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    animation: guestLiveStatusPulse 1.35s ease-in-out infinite;
+}
+
+.guest-live-status-chip--open {
+    color: #4f46e5;
+    background: rgba(238, 242, 255, 0.95);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.08);
+}
+
+.guest-live-status-chip--progress {
+    color: #d97706;
+    background: rgba(255, 247, 237, 0.95);
+    box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.08);
+}
+
+.guest-live-status-chip--paid {
+    color: #059669;
+    background: rgba(236, 253, 245, 0.95);
+    box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.08);
+}
+
+.guest-live-status-dot {
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 9999px;
+    background: currentColor;
+    box-shadow: 0 0 0 0 rgba(0, 0, 0, 0.08);
+}
+
+.guest-live-status-label {
+    position: relative;
+    z-index: 2;
+}
+
+.guest-live-status-text {
+    position: relative;
+    z-index: 2;
+    font-size: 0.65rem;
+    opacity: 0.8;
+}
+
+.guest-live-status-arrows {
+    position: absolute;
+    inset: -0.45rem;
+    pointer-events: none;
+}
+
+.guest-live-status-arrow {
+    position: absolute;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.15rem;
+    height: 1.15rem;
+    font-size: 0.75rem;
+    font-weight: 900;
+    color: currentColor;
+    opacity: 0.85;
+    animation: guestLiveArrowOrbit 1.6s linear infinite;
+}
+
+.guest-live-status-arrow--top {
+    top: -0.55rem;
+    left: 50%;
+    transform: translateX(-50%) rotate(0deg);
+}
+
+.guest-live-status-arrow--right {
+    top: 50%;
+    right: -0.55rem;
+    transform: translateY(-50%) rotate(90deg);
+    animation-delay: 0.4s;
+}
+
+.guest-live-status-arrow--bottom {
+    bottom: -0.55rem;
+    left: 50%;
+    transform: translateX(-50%) rotate(180deg);
+    animation-delay: 0.8s;
+}
+
+.guest-live-status-arrow--left {
+    top: 50%;
+    left: -0.55rem;
+    transform: translateY(-50%) rotate(270deg);
+    animation-delay: 1.2s;
+}
+
+@keyframes guestLiveStatusPulse {
+    0%,
+    100% {
+        transform: scale(0.98);
+        box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.08);
+    }
+    50% {
+        transform: scale(1);
+        box-shadow: 0 0 0 6px rgba(79, 70, 229, 0.06);
+    }
+}
+
+@keyframes guestLiveArrowOrbit {
+    0%,
+    100% {
+        opacity: 0.28;
+    }
+    50% {
+        opacity: 1;
+    }
+}
+
 #entranceView {
     gap: 0.25rem;
     margin: -0.35rem;

@@ -1,14 +1,24 @@
 {
-  "version": "1.22.1",
-  "buildId": "20260508-6",
+  "version": "1.22.2",
+  "buildId": "20260508-7",
   "releaseDate": "2026-05-08",
-  "releaseTime": "13:30",
+  "releaseTime": "13:40",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Gastlinks scrollen wieder sauber ohne Footer-Leiste; Zahlungslinks zeigen eine aufgeräumte Direktzahlungsansicht mit Position-hinzufügen-Modal.",
+  "note": "Gast-Zahlungslinks blenden den Direktzahlungsbutton bei 0 € aus, zeigen einen Live-Statuschip und aktualisieren Verwendungszweck sowie Status ohne Seitenreload.",
   "commitId": "d1d00dd",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.2",
+      "buildId": "20260508-7",
+      "releaseDate": "2026-05-08",
+      "releaseTime": "13:40",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Gast-Zahlungslinks blenden den Direktzahlungsbutton bei 0 € aus, zeigen einen Live-Statuschip und aktualisieren Verwendungszweck sowie Status ohne Seitenreload.",
+      "commitId": "d1d00dd",
+      "obligation": "false"
+    },
     {
       "version": "1.22.1",
       "buildId": "20260508-6",

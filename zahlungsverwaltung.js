@@ -56,9 +56,10 @@ let onlinePaymentLinksCache = [];
 let onlinePaymentTargetAccount = null;
 let pendingOnlineLinkSelectionState = null;
 let pendingIssuedLinksModalState = null;
-
-
-
+let guestViewLiveRefreshTimer = null;
+let guestViewLiveRefreshGuestId = '';
+let guestViewLiveRefreshInFlight = false;
+let guestViewLastSignature = '';
 
 // STANDARD KATEGORIEN (Unveränderlich)
 const SYSTEM_CATEGORIES = [
@@ -90,6 +91,97 @@ function getOnlineLinkStatusBadgeClass(status) {
     if (token === 'closed') return 'bg-gray-100 text-gray-700 border-gray-200';
     if (token === 'error') return 'bg-red-100 text-red-700 border-red-200';
     return 'bg-indigo-100 text-indigo-700 border-indigo-200';
+}
+
+function getGuestLiveStatusMeta(status) {
+    const token = String(status || '').trim().toLowerCase();
+    if (token === 'paid' || token === 'closed') {
+        return { label: 'Bezahlt', className: 'guest-live-status-chip--paid' };
+    }
+    if (token === 'in_progress') {
+        return { label: 'In Bearbeitung', className: 'guest-live-status-chip--progress' };
+    }
+    return { label: 'Offen', className: 'guest-live-status-chip--open' };
+}
+
+function buildGuestViewLiveSignature(resultData = {}) {
+    const payments = Array.isArray(resultData?.payments)
+        ? resultData.payments.map((entry) => ({
+            id: String(entry?.id || ''),
+            status: String(entry?.status || ''),
+            remainingAmount: normalizeMoney(entry?.remainingAmount),
+            onlinePaymentReferenceCode: String(entry?.onlinePaymentReferenceCode || ''),
+            onlinePaymentReferenceShortId: String(entry?.onlinePaymentReferenceShortId || ''),
+        }))
+        : [];
+    const paymentTargets = Array.isArray(resultData?.paymentLink?.paymentTargets)
+        ? resultData.paymentLink.paymentTargets.map((entry) => ({
+            paymentId: String(entry?.paymentId || ''),
+            referenceCode: String(entry?.referenceCode || ''),
+            amount: normalizeMoney(entry?.amount),
+            status: String(entry?.status || ''),
+        }))
+        : [];
+    const link = resultData?.paymentLink
+        ? {
+            status: String(resultData.paymentLink.status || ''),
+            expectedAmount: normalizeMoney(resultData.paymentLink.expectedAmount),
+            paidAmount: normalizeMoney(resultData.paymentLink.paidAmount),
+            remainingAmount: normalizeMoney(resultData.paymentLink.remainingAmount),
+            referenceCode: String(resultData.paymentLink.referenceCode || ''),
+            lastWiseReference: String(resultData.paymentLink.lastWiseReference || ''),
+            lastWiseBookedAt: String(resultData.paymentLink.lastWiseBookedAt || ''),
+            pendingOverpaymentStatus: String(resultData.paymentLink.pendingOverpayment?.status || ''),
+            pendingOverpaymentAmount: normalizeMoney(resultData.paymentLink.pendingOverpayment?.amount),
+        }
+        : null;
+    return JSON.stringify({ payments, paymentTargets, link });
+}
+
+function stopGuestViewLiveRefresh() {
+    if (guestViewLiveRefreshTimer) {
+        window.clearInterval(guestViewLiveRefreshTimer);
+        guestViewLiveRefreshTimer = null;
+    }
+    guestViewLiveRefreshGuestId = '';
+    guestViewLiveRefreshInFlight = false;
+}
+
+function startGuestViewLiveRefresh(guestId, token) {
+    const normalizedGuestId = String(guestId || '').trim();
+    const normalizedToken = String(token || '').trim();
+    if (!normalizedGuestId || !normalizedToken || typeof window.getGuestPayments !== 'function') {
+        stopGuestViewLiveRefresh();
+        return;
+    }
+    if (guestViewLiveRefreshTimer && guestViewLiveRefreshGuestId === normalizedGuestId) return;
+
+    stopGuestViewLiveRefresh();
+    guestViewLiveRefreshGuestId = normalizedGuestId;
+    guestViewLiveRefreshTimer = window.setInterval(async () => {
+        const guestView = document.getElementById('guestView');
+        if (!guestView || !guestView.classList.contains('active') || guestViewLiveRefreshInFlight || document.hidden) return;
+
+        guestViewLiveRefreshInFlight = true;
+        try {
+            const liveResult = await window.getGuestPayments({ guestId: normalizedGuestId, token: normalizedToken, skipTracking: true });
+            if (!liveResult?.data || liveResult.data.status !== 'success') return;
+
+            const nextSignature = buildGuestViewLiveSignature(liveResult.data);
+            if (nextSignature === guestViewLastSignature) return;
+
+            guestViewLastSignature = nextSignature;
+            await initializeGuestView(normalizedGuestId, {
+                skipTracking: true,
+                skipLiveSetup: true,
+                prefetchedResult: liveResult.data,
+            });
+        } catch (error) {
+            console.warn('Gastansicht Live-Refresh fehlgeschlagen:', error);
+        } finally {
+            guestViewLiveRefreshInFlight = false;
+        }
+    }, 1000);
 }
 
 function buildOnlinePaymentPublicUrl(linkId, token) {
@@ -7773,10 +7865,11 @@ async function shareContactLink(contactId) {
 
 // --- GAST VIEW INITIALISIERUNG & DETAILS ---
 
-export async function initializeGuestView(guestId) {
+export async function initializeGuestView(guestId, options = {}) {
     const view = document.getElementById('guestView');
     if (!view) return;
     view.classList.add('active');
+    const { skipTracking = false, skipLiveSetup = false, prefetchedResult = null } = options;
 
     const appContainer = document.querySelector('.app-container');
     document.body.classList.add('guest-link-mode');
@@ -7807,21 +7900,30 @@ export async function initializeGuestView(guestId) {
         const urlToken = urlParams.get('token');
         let docsList = [];
         let isSinglePaymentMode = false;
+        let resultData = prefetchedResult;
 
-        console.log("initializeGuestView: starte - rufe Cloud Function getGuestPayments an...");
-        if (!window.getGuestPayments) {
-            throw new Error("Cloud Function 'getGuestPayments' ist nicht initialisiert.");
+        if (!resultData) {
+            console.log("initializeGuestView: starte - rufe Cloud Function getGuestPayments an...");
+            if (!window.getGuestPayments) {
+                throw new Error("Cloud Function 'getGuestPayments' ist nicht initialisiert.");
+            }
+
+            const result = await window.getGuestPayments({ guestId: guestId, token: urlToken, skipTracking });
+            if (!result.data || result.data.status !== 'success') {
+                throw new Error("Fehler: Ungültige Antwort von getGuestPayments.");
+            }
+            resultData = result.data;
         }
 
-        const result = await window.getGuestPayments({ guestId: guestId, token: urlToken });
-        if (!result.data || result.data.status !== 'success') {
-            throw new Error("Fehler: Ungültige Antwort von getGuestPayments.");
+        docsList = resultData.payments || [];
+        isSinglePaymentMode = !!resultData.isSinglePaymentMode;
+        guestRealName = resultData.guestRealName || "Gast";
+        paymentLinkData = resultData.paymentLink || null;
+        guestViewLastSignature = buildGuestViewLiveSignature(resultData);
+        if (!skipLiveSetup) {
+            if (paymentLinkData && urlToken) startGuestViewLiveRefresh(guestId, urlToken);
+            else stopGuestViewLiveRefresh();
         }
-
-        docsList = result.data.payments || [];
-        isSinglePaymentMode = !!result.data.isSinglePaymentMode;
-        guestRealName = result.data.guestRealName || "Gast";
-        paymentLinkData = result.data.paymentLink || null;
 
         // --- RENDERING ---
         const listContainer = document.getElementById('guest-payment-list');
@@ -7829,6 +7931,7 @@ export async function initializeGuestView(guestId) {
         const positionAddBox = document.getElementById('guest-position-add-box');
         const addPositionModal = document.getElementById('guestAddPositionModal');
         const addPositionAmountInput = document.getElementById('guest-add-position-amount');
+        const liveStatusIndicator = document.getElementById('guest-live-status-indicator');
         listContainer.innerHTML = '';
         if (onlineBox) {
             onlineBox.innerHTML = '';
@@ -7837,6 +7940,10 @@ export async function initializeGuestView(guestId) {
         if (positionAddBox) {
             positionAddBox.innerHTML = '';
             positionAddBox.classList.add('hidden');
+        }
+        if (liveStatusIndicator) {
+            liveStatusIndicator.innerHTML = '';
+            liveStatusIndicator.classList.add('hidden');
         }
 
         const closeGuestAddPositionModal = () => {
@@ -8029,6 +8136,24 @@ export async function initializeGuestView(guestId) {
             statusEl.innerHTML = `${baseText}<br><span class="text-[11px] text-orange-600 font-semibold">Hinweis: Es gibt Posten mit "Betrag unbekannt". Dieser Wert kann spaeter nachgetragen werden.</span>`;
         }
 
+        if (paymentLinkData && liveStatusIndicator) {
+            const liveMeta = getGuestLiveStatusMeta(paymentLinkData.status || 'open');
+            liveStatusIndicator.innerHTML = `
+                <div class="guest-live-status-chip ${liveMeta.className}">
+                    <span class="guest-live-status-dot"></span>
+                    <span class="guest-live-status-label">${liveMeta.label}</span>
+                    <span class="guest-live-status-text">Live</span>
+                    <span class="guest-live-status-arrows" aria-hidden="true">
+                        <span class="guest-live-status-arrow guest-live-status-arrow--top">➜</span>
+                        <span class="guest-live-status-arrow guest-live-status-arrow--right">➜</span>
+                        <span class="guest-live-status-arrow guest-live-status-arrow--bottom">➜</span>
+                        <span class="guest-live-status-arrow guest-live-status-arrow--left">➜</span>
+                    </span>
+                </div>
+            `;
+            liveStatusIndicator.classList.remove('hidden');
+        }
+
         if (paymentLinkData && onlineBox) {
             const bankInfo = paymentLinkData.bankInfo || {};
             const statusText = getOnlineLinkStatusLabel(paymentLinkData.status || 'open');
@@ -8037,6 +8162,20 @@ export async function initializeGuestView(guestId) {
             const remainingAmount = normalizeMoney(paymentLinkData.remainingAmount);
             const overpaymentState = getOnlineOverpaymentDecisionState(paymentLinkData.pendingOverpayment || {});
             const popularBanks = getPopularEuBankLabels();
+            const paymentTargetsById = new Map(
+                (Array.isArray(paymentLinkData.paymentTargets) ? paymentLinkData.paymentTargets : []).map((entry) => [String(entry?.paymentId || ''), entry || {}])
+            );
+            const resolveInstructionReferenceCode = (payment) => {
+                const directCode = getOnlinePaymentReferenceCode(payment);
+                if (directCode) return directCode;
+
+                const targetCode = String(paymentTargetsById.get(String(payment?.id || ''))?.referenceCode || '').trim().toUpperCase();
+                if (targetCode) return targetCode;
+
+                const linkCode = String(paymentLinkData.referenceCode || '').trim().toUpperCase();
+                if (linkCode && (!Array.isArray(paymentLinkData.paymentIds) || paymentLinkData.paymentIds.length <= 1)) return linkCode;
+                return '';
+            };
             const payableItems = activeItems
                 .filter((payment) => isPaymentPayableInGuestView(payment))
                 .filter((payment) => payment.isTBD !== true)
@@ -8045,12 +8184,12 @@ export async function initializeGuestView(guestId) {
                     id: payment.id,
                     title: payment.title || 'Schuldeneintrag',
                     amount: normalizeMoney(payment.remainingAmount),
-                    referenceCode: getOnlinePaymentReferenceCode(payment),
+                    referenceCode: resolveInstructionReferenceCode(payment),
                     shortId: getOnlinePaymentReferenceShortId(payment),
                 }))
                 .filter((payment) => payment.referenceCode);
             let selectedInstruction = payableItems[0] || null;
-            const canStartOnlinePayment = Boolean(bankInfo.accountHolder && bankInfo.iban && selectedInstruction && selectedInstruction.amount > 0);
+            const payableTotal = payableItems.reduce((sum, item) => sum + normalizeMoney(item.amount), 0);
             const overpaymentHtml = overpaymentState.isPending
                 ? `<div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900 space-y-2">
                         <div class="font-bold text-sm">Überzahlung erkannt: ${overpaymentState.amount.toFixed(2)} €</div>
@@ -8075,6 +8214,9 @@ export async function initializeGuestView(guestId) {
                 reference: instruction?.referenceCode || '',
                 purpose: instruction?.title || paymentLinkData.title || 'Online-Zahlung',
             });
+            const showPaymentLauncher = payableTotal > 0.001 && payableItems.length > 0;
+            const shouldShowPaymentWorkspace = !showPaymentLauncher && Boolean(overpaymentHtml);
+            const canStartOnlinePayment = Boolean(bankInfo.accountHolder && bankInfo.iban && selectedInstruction && selectedInstruction.amount > 0);
             const buildCopyRow = (label, value, copyValue = '') => `
                 <div class="flex items-start gap-2 rounded-lg border border-emerald-100 bg-white px-3 py-2 text-[11px] text-gray-700">
                     <span class="w-28 shrink-0 font-bold text-gray-800">${label}:</span>
@@ -8084,12 +8226,12 @@ export async function initializeGuestView(guestId) {
             `;
 
             onlineBox.innerHTML = `
-                ${payableItems.length ? `
+                ${showPaymentLauncher ? `
                     <div id="guest-payment-launcher" class="rounded-xl border border-emerald-200 bg-white p-3 shadow-sm">
                         <button id="guest-start-payment-btn" type="button" class="w-full rounded-lg bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700">Jetzt direkt bezahlen</button>
                     </div>
                 ` : ''}
-                <div id="guest-payment-workspace" class="${payableItems.length ? 'hidden ' : ''}space-y-3">
+                <div id="guest-payment-workspace" class="${shouldShowPaymentWorkspace ? '' : 'hidden '}space-y-3">
                     <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-3">
                         <div class="flex items-start justify-between gap-2">
                             <div>
@@ -8157,7 +8299,9 @@ export async function initializeGuestView(guestId) {
                     </div>
                 </div>
             `;
-            onlineBox.classList.remove('hidden');
+            if (showPaymentLauncher || overpaymentHtml) {
+                onlineBox.classList.remove('hidden');
+            }
 
             const launcher = onlineBox.querySelector('#guest-payment-launcher');
             const workspace = onlineBox.querySelector('#guest-payment-workspace');
