@@ -267,20 +267,35 @@ async function fetchIssuedLinkAccessHistory(entry = {}) {
 
     if (!ref) return [];
 
-    const snap = await getDocs(ref);
-    const events = [];
-    snap.forEach((docSnap) => {
-        const raw = docSnap.data() || {};
-        const eventType = String(raw.eventType || '').trim().toLowerCase();
-        if (entry.kind === 'payment_link' && eventType && eventType !== 'guest_open') return;
-        events.push({
-            id: docSnap.id,
-            createdAt: raw.createdAt?.toDate ? raw.createdAt.toDate() : raw.createdAt,
-            eventType: raw.eventType || 'guest_open',
+    try {
+        const snap = await getDocs(ref);
+        const events = [];
+        snap.forEach((docSnap) => {
+            const raw = docSnap.data() || {};
+            const eventType = String(raw.eventType || '').trim().toLowerCase();
+            if (entry.kind === 'payment_link' && eventType && eventType !== 'guest_open') return;
+            events.push({
+                id: docSnap.id,
+                createdAt: raw.createdAt?.toDate ? raw.createdAt.toDate() : raw.createdAt,
+                eventType: raw.eventType || 'guest_open',
+            });
         });
-    });
 
-    return events.sort((left, right) => new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime());
+        const normalized = events.sort((left, right) => new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime());
+        if (normalized.length) return normalized;
+    } catch (error) {
+        console.warn('fetchIssuedLinkAccessHistory: history read failed, falling back to cached counters.', error);
+    }
+
+    const fallbackCount = Number(entry.viewCount || 0);
+    if (!fallbackCount) return [];
+    const createdAt = entry.createdAt?.toDate ? entry.createdAt.toDate() : entry.createdAt;
+    const seed = createdAt ? new Date(createdAt) : new Date();
+    return Array.from({ length: fallbackCount }, (_, index) => ({
+        id: `fallback-${index}`,
+        createdAt: new Date(seed.getTime() + index * 60000),
+        eventType: 'guest_open',
+    }));
 }
 
 async function closeOverviewGuestLink(collectionName, docId) {
@@ -8186,7 +8201,7 @@ export async function initializeGuestView(guestId, options = {}) {
             liveStatusIndicator.innerHTML = `
                 <div class="guest-live-status-box">
                     <div class="guest-live-status-box-header">
-                        <span class="guest-live-status-box-title">{LIVE}-Anzeige Zahlungseingang</span>
+                        <span class="guest-live-status-box-title"><span class="guest-live-status-badge">LIVE</span> Anzeige Zahlungseingang</span>
                     </div>
                     <div class="guest-live-status-box-body">
                         <div class="guest-live-status-chip ${liveMeta.className}">

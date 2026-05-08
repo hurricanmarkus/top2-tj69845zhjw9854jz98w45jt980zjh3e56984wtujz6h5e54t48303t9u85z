@@ -1,14 +1,24 @@
 {
-  "version": "1.22.7",
-  "buildId": "20260508-12",
+  "version": "1.22.8",
+  "buildId": "20260508-13",
   "releaseDate": "2026-05-08",
-  "releaseTime": "15:18",
+  "releaseTime": "15:28",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "LIVE-Anzeige zeigt jetzt {LIVE}-Label ohne separate Badge, Copy-Felder nutzen ein Kopiersymbol, der Direktzahlungsmodus blendet Übersicht und offene Posten aus, und die Link-Historie ist über die Firestore-Regeln lesbar.",
+  "note": "LIVE-Anzeige zeigt wieder eine rote pulsierende Badge im Titel, die Link-Historie fällt bei leeren Events auf den Zähler zurück, und das Zahnrad steht rechts neben '+ Neu'.",
   "commitId": "5a9e9a2",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.8",
+      "buildId": "20260508-13",
+      "releaseDate": "2026-05-08",
+      "releaseTime": "15:28",
+      "bereich": "Zahlungsverwaltung",
+      "note": "LIVE-Anzeige zeigt wieder eine rote pulsierende Badge im Titel, die Link-Historie fällt bei leeren Events auf den Zähler zurück, und das Zahnrad steht rechts neben '+ Neu'.",
+      "commitId": "5a9e9a2",
+      "obligation": "false"
+    },
     {
       "version": "1.22.7",
       "buildId": "20260508-12",
