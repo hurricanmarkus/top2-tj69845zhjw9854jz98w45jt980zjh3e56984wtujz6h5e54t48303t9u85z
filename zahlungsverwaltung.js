@@ -110,14 +110,14 @@ function buildGuestViewLiveSignature(resultData = {}) {
             id: String(entry?.id || ''),
             status: String(entry?.status || ''),
             remainingAmount: normalizeMoney(entry?.remainingAmount),
-            onlinePaymentReferenceCode: String(entry?.onlinePaymentReferenceCode || ''),
+            onlinePaymentReferenceCode: normalizeOnlinePaymentReferenceCode(entry?.onlinePaymentReferenceCode || ''),
             onlinePaymentReferenceShortId: String(entry?.onlinePaymentReferenceShortId || ''),
         }))
         : [];
     const paymentTargets = Array.isArray(resultData?.paymentLink?.paymentTargets)
         ? resultData.paymentLink.paymentTargets.map((entry) => ({
             paymentId: String(entry?.paymentId || ''),
-            referenceCode: String(entry?.referenceCode || ''),
+            referenceCode: normalizeOnlinePaymentReferenceCode(entry?.referenceCode || ''),
             amount: normalizeMoney(entry?.amount),
             status: String(entry?.status || ''),
         }))
@@ -1065,8 +1065,17 @@ function getOnlinePaymentReferenceShortId(payment) {
     return String(payment.id || '').trim().slice(-4).toUpperCase();
 }
 
+function normalizeOnlinePaymentReferenceCode(referenceCode = '') {
+    const token = String(referenceCode || '').trim().toUpperCase();
+    const legacyMatch = token.match(/^TOP2-([A-Z0-9]{4})-([A-Z0-9]{4})-([A-Z0-9]{4})$/);
+    if (legacyMatch) {
+        return `TOP2-ID-${legacyMatch[1]}-${legacyMatch[2]}-${legacyMatch[3]}`;
+    }
+    return token;
+}
+
 function getOnlinePaymentReferenceCode(payment) {
-    return String(payment?.onlinePaymentReferenceCode || '').trim().toUpperCase();
+    return normalizeOnlinePaymentReferenceCode(payment?.onlinePaymentReferenceCode || '');
 }
 
 function isPaymentCollectableViaOnlineLink(payment, guestId = '') {
@@ -1085,6 +1094,7 @@ function isPaymentCollectableViaOnlineLink(payment, guestId = '') {
 
 function isPaymentPayableInGuestView(payment) {
     if (!payment || typeof payment !== 'object') return false;
+    if (payment.isAdditionalPost === true) return true;
     return String(payment.creditorId || '') === String(payment.createdBy || '');
 }
 
@@ -7226,8 +7236,8 @@ async function renderContactList() {
                         </div>
                     </div>
                     <div class="flex gap-1">
-                        <button class="copy-contact-online-link-btn px-2 py-1.5 bg-emerald-50 text-emerald-700 text-xs font-bold rounded hover:bg-emerald-100 transition border border-emerald-200" title="Online-Zahlungslink kopieren">
-                            💶 Online
+                        <button class="copy-contact-online-link-btn px-2 py-1.5 bg-emerald-50 text-emerald-700 text-xs font-bold rounded hover:bg-emerald-100 transition border border-emerald-200" title="Zahlungslink kopieren">
+                            Zahlungslink
                         </button>
                         <button class="copy-contact-link-btn px-2 py-1.5 bg-blue-50 text-blue-600 text-xs font-bold rounded hover:bg-blue-100 transition border border-blue-200" title="Link kopieren">
                             🔗 Link
@@ -7288,8 +7298,8 @@ async function renderContactList() {
                 </div>
                 <div class="flex flex-wrap justify-end gap-1.5">
                     <button class="manage-user-links-btn px-3 py-1 bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded hover:bg-teal-50 hover:text-teal-700 hover:border-teal-200 transition shadow-sm">${activeLinkCount} aktive Links</button>
-                    <button class="copy-user-online-link-btn px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold rounded hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition shadow-sm">
-                        💶 Online
+                    <button class="copy-user-online-link-btn px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold rounded hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition shadow-sm" title="Zahlungslink kopieren">
+                        Zahlungslink
                     </button>
                     <button class="copy-user-link-btn px-3 py-1 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition shadow-sm">
                         🔗 Link
@@ -7981,7 +7991,18 @@ export async function initializeGuestView(guestId, options = {}) {
         docsList = resultData.payments || [];
         isSinglePaymentMode = !!resultData.isSinglePaymentMode;
         guestRealName = resultData.guestRealName || "Gast";
-        paymentLinkData = resultData.paymentLink || null;
+        paymentLinkData = resultData.paymentLink
+            ? {
+                ...resultData.paymentLink,
+                referenceCode: normalizeOnlinePaymentReferenceCode(resultData.paymentLink.referenceCode || ''),
+                paymentTargets: Array.isArray(resultData.paymentLink.paymentTargets)
+                    ? resultData.paymentLink.paymentTargets.map((entry) => ({
+                        ...entry,
+                        referenceCode: normalizeOnlinePaymentReferenceCode(entry?.referenceCode || ''),
+                    }))
+                    : [],
+            }
+            : null;
         guestViewLastSignature = buildGuestViewLiveSignature(resultData);
         if (!skipLiveSetup) {
             if (paymentLinkData && urlToken) startGuestViewLiveRefresh(guestId, urlToken);
@@ -8051,7 +8072,7 @@ export async function initializeGuestView(guestId, options = {}) {
         if (docsList.length > 0) {
             docsList.forEach(p => {
                 // Filter: Nur Offene (außer Einzel-Link, der zeigt auch erledigte)
-                if (!isSinglePaymentMode && p.status !== 'open' && p.status !== 'pending_approval') return;
+                if (!isSinglePaymentMode && p.status !== 'open' && p.status !== 'pending_approval' && p.status !== 'partially_paid') return;
 
                 // Zeit-Check
                 let isFuture = false;
@@ -8069,11 +8090,11 @@ export async function initializeGuestView(guestId, options = {}) {
                 if (!isFuture) {
                     let amount = parseFloat(p.remainingAmount);
                     const safeAmount = Number.isFinite(amount) ? amount : 0;
-                    let isMyDebt = (p.createdBy === p.creditorId); // Ersteller kriegt Geld -> Gast schuldet
+                    let isMyDebt = (p.isAdditionalPost === true) || (p.createdBy === p.creditorId); // Ersteller kriegt Geld -> Gast schuldet
                     // Logik Check:
                     // Wenn Ersteller = Creditor, dann schuldet Gast (Debtor) mir -> Gast hat Schuld (-)
                     // Wenn Ersteller = Debtor, dann schuldet Ersteller mir -> Gast hat Guthaben (+)
-                    if (p.creditorId === p.createdBy) totalDebt -= safeAmount; // Gast muss zahlen
+                    if (p.isAdditionalPost === true || p.creditorId === p.createdBy) totalDebt -= safeAmount; // Gast muss zahlen
                     else totalDebt += safeAmount; // Gast bekommt Geld
                 }
             });
@@ -8088,7 +8109,7 @@ export async function initializeGuestView(guestId, options = {}) {
                 const amount = isUnknownAmount ? null : parseFloat(p.remainingAmount);
                 // Logik für Gast-Sicht:
                 // Wenn Ersteller (Admin) = Creditor, dann schulde ICH (Gast) das Geld. -> Rot
-                let isMyDebt = (p.creditorId === p.createdBy);
+                let isMyDebt = (p.isAdditionalPost === true) || (p.creditorId === p.createdBy);
                 
                 const div = document.createElement('div');
                 div.className = "p-3 bg-white border rounded shadow-sm flex justify-between items-center cursor-pointer hover:bg-indigo-50 transition mb-2";
@@ -8139,7 +8160,7 @@ export async function initializeGuestView(guestId, options = {}) {
                 futureItems.forEach(p => {
                     const isUnknownAmount = p.isTBD === true;
                     const amount = isUnknownAmount ? null : parseFloat(p.remainingAmount);
-                    let isMyDebt = (p.creditorId === p.createdBy);
+                    let isMyDebt = (p.isAdditionalPost === true) || (p.creditorId === p.createdBy);
 
                     const startObj = new Date(p.startDate);
                     const diffMs = startObj - now;
