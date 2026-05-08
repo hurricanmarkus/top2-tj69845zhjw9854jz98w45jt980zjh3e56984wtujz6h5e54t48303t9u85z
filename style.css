@@ -389,6 +389,35 @@ option {
     display: none !important;
 }
 
+body.guest-link-mode {
+    overflow-y: auto;
+}
+
+body.guest-link-mode #appHeader,
+body.guest-link-mode #appFooter {
+    display: none !important;
+}
+
+body.guest-link-mode .app-container,
+.app-container.guest-link-mode {
+    position: static;
+    min-height: 100vh;
+    max-width: 640px;
+    box-shadow: none;
+}
+
+body.guest-link-mode .main-content,
+.main-content.guest-main-content {
+    overflow-y: visible !important;
+    min-height: 100vh;
+    padding: 0 !important;
+}
+
+body.guest-link-mode #guestView {
+    min-height: 100vh;
+    padding: 1rem;
+}
+
 #entranceView {
     gap: 0.25rem;
     margin: -0.35rem;

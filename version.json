@@ -1,14 +1,44 @@
 {
-  "version": "1.20.0",
-  "buildId": "20260508-3",
+  "version": "1.22.1",
+  "buildId": "20260508-6",
   "releaseDate": "2026-05-08",
-  "releaseTime": "10:58",
+  "releaseTime": "13:30",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Online-Zahlungslinks nutzen jetzt schuldenbezogene TOP2-ID-Referenzen und erlauben im Adressbuch die Auswahl Alle/Keine/Ausgewählte Schuldeneinträge.",
-  "commitId": "fe25f6a",
+  "note": "Gastlinks scrollen wieder sauber ohne Footer-Leiste; Zahlungslinks zeigen eine aufgeräumte Direktzahlungsansicht mit Position-hinzufügen-Modal.",
+  "commitId": "d1d00dd",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.1",
+      "buildId": "20260508-6",
+      "releaseDate": "2026-05-08",
+      "releaseTime": "13:30",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Gastlinks scrollen wieder sauber ohne Footer-Leiste; Zahlungslinks zeigen eine aufgeräumte Direktzahlungsansicht mit Position-hinzufügen-Modal.",
+      "commitId": "d1d00dd",
+      "obligation": "false"
+    },
+    {
+      "version": "1.22.0",
+      "buildId": "20260508-5",
+      "releaseDate": "2026-05-08",
+      "releaseTime": "13:00",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Adressbuch und Direkt-Links haben jetzt eine eigene Link-Verwaltung mit Aufrufhistorie; abgelaufene Überzahlungen entscheidet der Link-Ersteller.",
+      "commitId": "d1d00dd",
+      "obligation": "false"
+    },
+    {
+      "version": "1.21.0",
+      "buildId": "20260508-4",
+      "releaseDate": "2026-05-08",
+      "releaseTime": "12:55",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Online-Zahlungslinks buchen jetzt Teilzahlungen direkt auf die Schuld und lassen Überzahlungen im Gastlink 18 Stunden lang als Trinkgeld oder Guthaben entscheiden.",
+      "commitId": "d1d00dd",
+      "obligation": "false"
+    },
     {
       "version": "1.20.0",
       "buildId": "20260508-3",

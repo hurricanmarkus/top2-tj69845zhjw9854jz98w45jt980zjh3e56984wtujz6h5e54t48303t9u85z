@@ -55,6 +55,7 @@ let selectedTrashIds = new Set();
 let onlinePaymentLinksCache = [];
 let onlinePaymentTargetAccount = null;
 let pendingOnlineLinkSelectionState = null;
+let pendingIssuedLinksModalState = null;
 
 
 
@@ -94,6 +95,444 @@ function getOnlineLinkStatusBadgeClass(status) {
 function buildOnlinePaymentPublicUrl(linkId, token) {
     const baseUrl = window.location.origin + window.location.pathname;
     return `${baseUrl}?guest_id=PAYMENTLINK:${encodeURIComponent(linkId)}&token=${encodeURIComponent(token || '')}`;
+}
+
+function buildOverviewGuestUrl(docId, token) {
+    const baseUrl = window.location.origin + window.location.pathname;
+    return `${baseUrl}?guest_id=${encodeURIComponent(docId)}&token=${encodeURIComponent(token || '')}`;
+}
+
+function buildDirectPaymentGuestUrl(paymentId, token) {
+    const baseUrl = window.location.origin + window.location.pathname;
+    return `${baseUrl}?guest_id=PAYMENT:${encodeURIComponent(paymentId)}&token=${encodeURIComponent(token || '')}`;
+}
+
+function getSimpleLinkValidityLabel(isActive) {
+    return isActive ? 'Gültig' : 'Beendet';
+}
+
+function getSimpleLinkValidityBadgeClass(isActive) {
+    return isActive
+        ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+        : 'bg-gray-100 text-gray-700 border-gray-200';
+}
+
+function isGuestTokenLinkActive(entry = {}) {
+    const status = String(entry?.guestTokenStatus || '').trim().toLowerCase();
+    return Boolean(entry?.guestToken) && status !== 'closed';
+}
+
+function formatLinkDateTime(value) {
+    if (!value) return '—';
+    const raw = value?.toDate ? value.toDate() : value;
+    const date = new Date(raw);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleString('de-DE');
+}
+
+function getPaymentPartnerName(payment = {}) {
+    if (payment.debtorId === currentUser.mode) {
+        return payment.creditorName || payment.creditorId || 'Unbekannt';
+    }
+    return payment.debtorName || payment.debtorId || 'Unbekannt';
+}
+
+async function ensureOnlinePaymentLinksCacheLoaded(forceReload = false) {
+    if (!window.listOnlinePaymentLinks) return onlinePaymentLinksCache;
+    if (!forceReload && Array.isArray(onlinePaymentLinksCache) && onlinePaymentLinksCache.length) {
+        return onlinePaymentLinksCache;
+    }
+    const result = await window.listOnlinePaymentLinks({});
+    onlinePaymentLinksCache = Array.isArray(result?.data?.links) ? result.data.links : [];
+    return onlinePaymentLinksCache;
+}
+
+function getIssuedOnlineLinksForGuest(targetId = '') {
+    const token = String(targetId || '').trim();
+    if (!token) return [];
+    return (Array.isArray(onlinePaymentLinksCache) ? onlinePaymentLinksCache : [])
+        .filter((link) => String(link?.guestId || '').trim() === token)
+        .sort((left, right) => new Date(right?.createdAt || 0).getTime() - new Date(left?.createdAt || 0).getTime());
+}
+
+function getActiveIssuedLinkCount(target = {}) {
+    const overviewActive = isGuestTokenLinkActive(target.raw || {});
+    const onlineActiveCount = getIssuedOnlineLinksForGuest(target.id).filter((link) => String(link?.status || '').trim().toLowerCase() !== 'closed').length;
+    return (overviewActive ? 1 : 0) + onlineActiveCount;
+}
+
+async function fetchIssuedLinkAccessHistory(entry = {}) {
+    if (!entry?.kind || !entry?.id) return [];
+    let ref = null;
+
+    if (entry.kind === 'payment_link') {
+        ref = collection(db, 'artifacts', appId, 'public', 'data', 'payment-links', entry.id, 'events');
+    } else if (entry.kind === 'overview_link') {
+        ref = collection(db, 'artifacts', appId, 'public', 'data', entry.collectionName, entry.id, 'guestLinkEvents');
+    } else if (entry.kind === 'direct_payment_link') {
+        ref = collection(db, 'artifacts', appId, 'public', 'data', 'payments', entry.id, 'guestLinkEvents');
+    }
+
+    if (!ref) return [];
+
+    const snap = await getDocs(ref);
+    const events = [];
+    snap.forEach((docSnap) => {
+        const raw = docSnap.data() || {};
+        const eventType = String(raw.eventType || '').trim().toLowerCase();
+        if (entry.kind === 'payment_link' && eventType && eventType !== 'guest_open') return;
+        events.push({
+            id: docSnap.id,
+            createdAt: raw.createdAt?.toDate ? raw.createdAt.toDate() : raw.createdAt,
+            eventType: raw.eventType || 'guest_open',
+        });
+    });
+
+    return events.sort((left, right) => new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime());
+}
+
+async function closeOverviewGuestLink(collectionName, docId) {
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', collectionName, docId), {
+        guestTokenStatus: 'closed',
+        guestTokenClosedAt: serverTimestamp(),
+    });
+}
+
+async function closeDirectPaymentGuestLink(paymentId) {
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payments', paymentId), {
+        guestTokenStatus: 'closed',
+        guestTokenClosedAt: serverTimestamp(),
+    });
+}
+
+async function resolveOnlinePaymentOverpaymentByOwnerAction(linkId, resolution) {
+    if (!window.resolveOnlinePaymentOverpaymentByOwner) {
+        alertUser('Überzahlungs-Entscheidung ist nicht verfügbar.', 'error');
+        return;
+    }
+    await window.resolveOnlinePaymentOverpaymentByOwner({ linkId, resolution });
+}
+
+function closeIssuedLinksManagementModal() {
+    pendingIssuedLinksModalState = null;
+    const modal = document.getElementById('issuedLinksManagementModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.style.display = 'none';
+}
+
+function renderIssuedLinksHistory(entries = []) {
+    if (!entries.length) {
+        return '<p class="text-xs text-gray-400 italic">Noch keine Aufrufdaten vorhanden.</p>';
+    }
+    return entries.map((entry, index) => `<div class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs"><span class="font-semibold text-gray-700">Aufruf ${entries.length - index}</span><span class="text-gray-500">${formatLinkDateTime(entry.createdAt)}</span></div>`).join('');
+}
+
+function renderIssuedLinksManagementModal() {
+    const modal = document.getElementById('issuedLinksManagementModal');
+    const title = document.getElementById('issued-links-management-title');
+    const subtitle = document.getElementById('issued-links-management-subtitle');
+    const list = document.getElementById('issued-links-management-list');
+    const history = document.getElementById('issued-links-history');
+    if (!modal || !title || !subtitle || !list || !history || !pendingIssuedLinksModalState) return;
+
+    const state = pendingIssuedLinksModalState;
+    title.textContent = `${state.targetName} • Link-Verwaltung`;
+    subtitle.textContent = `${state.activeCount} aktive Links`;
+
+    list.innerHTML = state.entries.length
+        ? state.entries.map((entry) => {
+            const valid = entry.isActive === true;
+            const overpaymentState = getOnlineOverpaymentDecisionState(entry.pendingOverpayment || {});
+            const ownerDecisionButtons = entry.kind === 'payment_link' && overpaymentState.status === 'pending' && overpaymentState.isExpired
+                ? `<div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2"><button type="button" data-issued-link-owner-tip="${entry.id}" class="rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-white hover:bg-amber-600">Überzahlung als Trinkgeld</button><button type="button" data-issued-link-owner-credit="${entry.id}" class="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-50">Überzahlung als Guthaben</button></div>`
+                : '';
+            return `
+                <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+                    <div class="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                            <div class="text-sm font-bold text-gray-800">${entry.title}</div>
+                            <div class="text-[11px] text-gray-500">Typ: ${entry.type} • Erstellt: ${formatLinkDateTime(entry.createdAt)}</div>
+                            ${entry.meta ? `<div class="text-[11px] text-gray-400 mt-1">${entry.meta}</div>` : ''}
+                        </div>
+                        <span class="inline-flex items-center rounded border px-2 py-1 text-[11px] font-bold ${getSimpleLinkValidityBadgeClass(valid)}">${getSimpleLinkValidityLabel(valid)}</span>
+                    </div>
+                    <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-center">
+                        <div class="text-[12px] text-gray-700">Aufrufe: <span class="font-bold">${entry.viewCount}</span> <button type="button" data-issued-link-history="${entry.kind}:${entry.id}" class="font-bold text-indigo-600 hover:text-indigo-800">[anzeigen]</button></div>
+                        <div class="text-[12px] text-gray-700">${entry.type}</div>
+                        <div class="flex flex-wrap justify-start gap-2 sm:justify-end">
+                            ${entry.copyUrl ? `<button type="button" data-issued-link-copy="${entry.kind}:${entry.id}" class="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100">Link</button>` : ''}
+                            <button type="button" data-issued-link-close="${entry.kind}:${entry.id}" class="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50" ${valid ? '' : 'disabled'}>Link beenden</button>
+                        </div>
+                    </div>
+                    ${ownerDecisionButtons}
+                </div>
+            `;
+        }).join('')
+        : '<p class="text-sm text-gray-400 italic">Keine ausgestellten Links gefunden.</p>';
+
+    history.innerHTML = state.selectedHistoryHtml || '<p class="text-xs text-gray-400 italic">Klicke bei einem Link auf <strong>[anzeigen]</strong>, um Datum und Uhrzeit der Aufrufe zu sehen.</p>';
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+
+    list.querySelectorAll('[data-issued-link-history]').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const token = button.getAttribute('data-issued-link-history') || '';
+            const [kind, id] = token.split(':');
+            const entry = state.entries.find((item) => item.kind === kind && item.id === id);
+            if (!entry) return;
+            const entries = await fetchIssuedLinkAccessHistory(entry);
+            pendingIssuedLinksModalState.selectedHistoryHtml = `
+                <div class="space-y-2">
+                    <div class="text-sm font-bold text-gray-800">Aufrufhistorie: ${entry.title}</div>
+                    ${renderIssuedLinksHistory(entries)}
+                </div>
+            `;
+            renderIssuedLinksManagementModal();
+        });
+    });
+
+    list.querySelectorAll('[data-issued-link-copy]').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const token = button.getAttribute('data-issued-link-copy') || '';
+            const [kind, id] = token.split(':');
+            const entry = state.entries.find((item) => item.kind === kind && item.id === id);
+            if (!entry?.copyUrl) return;
+            const copied = await navigator.clipboard.writeText(entry.copyUrl).then(() => true).catch(() => false);
+            if (!copied) {
+                prompt('Link kopieren:', entry.copyUrl);
+            } else {
+                alertUser('Link kopiert.', 'success');
+            }
+        });
+    });
+
+    list.querySelectorAll('[data-issued-link-close]').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const token = button.getAttribute('data-issued-link-close') || '';
+            const [kind, id] = token.split(':');
+            const entry = state.entries.find((item) => item.kind === kind && item.id === id);
+            if (!entry || !entry.isActive) return;
+            if (!confirm('Diesen Link wirklich beenden?')) return;
+            try {
+                if (entry.kind === 'overview_link') {
+                    await closeOverviewGuestLink(entry.collectionName, entry.id);
+                } else if (entry.kind === 'payment_link') {
+                    await window.closeOnlinePaymentLink({ linkId: entry.id });
+                    await ensureOnlinePaymentLinksCacheLoaded(true);
+                }
+                alertUser('Link beendet.', 'success');
+                await renderContactList();
+                await openIssuedLinksManagementModal({
+                    id: state.targetId,
+                    targetName: state.targetName,
+                    collectionName: state.collectionName,
+                    raw: state.collectionName === 'private-contacts'
+                        ? (allContacts.find((entry) => entry.id === state.targetId) || {})
+                        : ((allSystemUsers.find((entry) => entry.id === state.targetId) || USERS[state.targetId] || {})),
+                });
+            } catch (error) {
+                console.error(error);
+                alertUser(error?.message || 'Link konnte nicht beendet werden.', 'error');
+            }
+        });
+    });
+
+    list.querySelectorAll('[data-issued-link-owner-tip]').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const linkId = button.getAttribute('data-issued-link-owner-tip') || '';
+            try {
+                await resolveOnlinePaymentOverpaymentByOwnerAction(linkId, 'tip');
+                await ensureOnlinePaymentLinksCacheLoaded(true);
+                alertUser('Überzahlung als Trinkgeld entschieden.', 'success');
+                await renderContactList();
+                await openIssuedLinksManagementModal({
+                    id: state.targetId,
+                    targetName: state.targetName,
+                    collectionName: state.collectionName,
+                    raw: state.collectionName === 'private-contacts'
+                        ? (allContacts.find((entry) => entry.id === state.targetId) || {})
+                        : ((allSystemUsers.find((entry) => entry.id === state.targetId) || USERS[state.targetId] || {})),
+                });
+            } catch (error) {
+                console.error(error);
+                alertUser(error?.message || 'Überzahlung konnte nicht entschieden werden.', 'error');
+            }
+        });
+    });
+
+    list.querySelectorAll('[data-issued-link-owner-credit]').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const linkId = button.getAttribute('data-issued-link-owner-credit') || '';
+            try {
+                await resolveOnlinePaymentOverpaymentByOwnerAction(linkId, 'credit');
+                await ensureOnlinePaymentLinksCacheLoaded(true);
+                alertUser('Überzahlung als Guthaben entschieden.', 'success');
+                await renderContactList();
+                await openIssuedLinksManagementModal({
+                    id: state.targetId,
+                    targetName: state.targetName,
+                    collectionName: state.collectionName,
+                    raw: state.collectionName === 'private-contacts'
+                        ? (allContacts.find((entry) => entry.id === state.targetId) || {})
+                        : ((allSystemUsers.find((entry) => entry.id === state.targetId) || USERS[state.targetId] || {})),
+                });
+            } catch (error) {
+                console.error(error);
+                alertUser(error?.message || 'Überzahlung konnte nicht entschieden werden.', 'error');
+            }
+        });
+    });
+}
+
+async function openIssuedLinksManagementModal(target = {}) {
+    await ensureOnlinePaymentLinksCacheLoaded();
+    const raw = target.raw || {};
+    const entries = [];
+    const overviewExists = Boolean(raw.guestToken || raw.guestTokenCreatedAt || raw.guestTokenStatus === 'closed');
+    if (overviewExists) {
+        entries.push({
+            id: target.id,
+            kind: 'overview_link',
+            type: 'Übersichtslink',
+            title: `${target.targetName} • Übersicht`,
+            meta: target.collectionName === 'private-contacts' ? 'Manueller Kontakt' : 'Registrierte Person',
+            isActive: isGuestTokenLinkActive(raw),
+            viewCount: Number(raw.guestTokenViews || 0),
+            createdAt: raw.guestTokenCreatedAt,
+            collectionName: target.collectionName,
+            copyUrl: isGuestTokenLinkActive(raw) ? buildOverviewGuestUrl(target.id, raw.guestToken) : '',
+            pendingOverpayment: null,
+        });
+    }
+
+    getIssuedOnlineLinksForGuest(target.id).forEach((link) => {
+        entries.push({
+            id: link.id,
+            kind: 'payment_link',
+            type: 'Zahlungslink',
+            title: link.title || 'Online-Zahlungslink',
+            meta: `Status intern: ${getOnlineLinkStatusLabel(link.status || 'open')} • Aufrufe: ${Number(link.tokenViews || 0)}`,
+            isActive: String(link.status || '').trim().toLowerCase() !== 'closed',
+            viewCount: Number(link.tokenViews || 0),
+            createdAt: link.createdAt,
+            copyUrl: buildOnlinePaymentPublicUrl(link.id, link.token || ''),
+            pendingOverpayment: link.pendingOverpayment || null,
+        });
+    });
+
+    pendingIssuedLinksModalState = {
+        targetId: target.id,
+        targetName: target.targetName,
+        collectionName: target.collectionName,
+        activeCount: getActiveIssuedLinkCount(target),
+        entries,
+        selectedHistoryHtml: '',
+    };
+    renderIssuedLinksManagementModal();
+}
+
+async function renderDirectLinksManagementBox() {
+    const container = document.getElementById('zv-direct-links-list');
+    if (!container) return;
+
+    const directLinks = allPayments
+        .filter((payment) => String(payment?.createdBy || '').trim() === currentUser.mode)
+        .filter((payment) => payment?.guestToken || payment?.guestTokenCreatedAt || String(payment?.guestTokenStatus || '').trim().toLowerCase() === 'closed')
+        .sort((left, right) => new Date(right?.guestTokenCreatedAt?.toDate ? right.guestTokenCreatedAt.toDate() : right?.guestTokenCreatedAt || 0).getTime() - new Date(left?.guestTokenCreatedAt?.toDate ? left.guestTokenCreatedAt.toDate() : left?.guestTokenCreatedAt || 0).getTime());
+
+    if (!directLinks.length) {
+        container.innerHTML = '<p class="text-sm text-gray-400 italic">Noch keine Direkt-Links aus Einzel-Einträgen vorhanden.</p>';
+        return;
+    }
+
+    container.innerHTML = directLinks.map((payment) => {
+        const active = isGuestTokenLinkActive(payment);
+        return `
+            <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+                <div class="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                        <div class="text-sm font-bold text-gray-800">${payment.title || 'Direkt-Link'}</div>
+                        <div class="text-[11px] text-gray-500">Partner: ${getPaymentPartnerName(payment)} • Erstellt: ${formatLinkDateTime(payment.guestTokenCreatedAt)}</div>
+                        <div class="text-[11px] text-gray-400">Typ: Direkt-Link • Aufrufe: <span class="font-bold">${Number(payment.guestTokenViews || 0)}</span> <button type="button" data-direct-link-history="${payment.id}" class="font-bold text-indigo-600 hover:text-indigo-800">[anzeigen]</button></div>
+                    </div>
+                    <span class="inline-flex items-center rounded border px-2 py-1 text-[11px] font-bold ${getSimpleLinkValidityBadgeClass(active)}">${getSimpleLinkValidityLabel(active)}</span>
+                </div>
+                <div class="mt-2 flex flex-wrap gap-2">
+                    ${active ? `<button type="button" data-direct-link-copy="${payment.id}" class="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100">Link</button>` : ''}
+                    <button type="button" data-direct-link-close="${payment.id}" class="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50" ${active ? '' : 'disabled'}>Link beenden</button>
+                </div>
+                <div id="direct-link-history-${payment.id}" class="mt-2 hidden space-y-2"></div>
+            </div>
+        `;
+    }).join('');
+
+    container.querySelectorAll('[data-direct-link-history]').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const paymentId = button.getAttribute('data-direct-link-history') || '';
+            const target = directLinks.find((entry) => entry.id === paymentId);
+            const historyBox = document.getElementById(`direct-link-history-${paymentId}`);
+            if (!target || !historyBox) return;
+            const historyEntries = await fetchIssuedLinkAccessHistory({ kind: 'direct_payment_link', id: paymentId });
+            historyBox.innerHTML = renderIssuedLinksHistory(historyEntries);
+            historyBox.classList.remove('hidden');
+        });
+    });
+
+    container.querySelectorAll('[data-direct-link-copy]').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const paymentId = button.getAttribute('data-direct-link-copy') || '';
+            const target = directLinks.find((entry) => entry.id === paymentId);
+            if (!target?.guestToken) return;
+            const link = buildDirectPaymentGuestUrl(paymentId, target.guestToken);
+            const copied = await navigator.clipboard.writeText(link).then(() => true).catch(() => false);
+            if (!copied) {
+                prompt('Link kopieren:', link);
+            } else {
+                alertUser('Direkt-Link kopiert.', 'success');
+            }
+        });
+    });
+
+    container.querySelectorAll('[data-direct-link-close]').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const paymentId = button.getAttribute('data-direct-link-close') || '';
+            if (!paymentId) return;
+            if (!confirm('Diesen Direkt-Link wirklich beenden?')) return;
+            try {
+                await closeDirectPaymentGuestLink(paymentId);
+                alertUser('Direkt-Link beendet.', 'success');
+                await renderDirectLinksManagementBox();
+            } catch (error) {
+                console.error(error);
+                alertUser(error?.message || 'Direkt-Link konnte nicht beendet werden.', 'error');
+            }
+        });
+    });
+}
+
+function getOnlineOverpaymentDecisionState(pending = {}) {
+    const status = String(pending?.status || '').trim().toLowerCase();
+    const amount = normalizeMoney(pending?.amount);
+    const expiresAt = pending?.expiresAt ? new Date(pending.expiresAt) : null;
+    const isExpired = expiresAt instanceof Date && !Number.isNaN(expiresAt.getTime()) ? expiresAt.getTime() < Date.now() : false;
+    const resolution = String(pending?.resolution || '').trim().toLowerCase();
+    return {
+        status,
+        amount,
+        expiresAt,
+        isExpired,
+        isPending: status === 'pending' && amount > 0.001 && !isExpired,
+        isResolved: status === 'resolved',
+        resolution,
+    };
+}
+
+function getOnlineOverpaymentResolutionLabel(value = '') {
+    const token = String(value || '').trim().toLowerCase();
+    if (token === 'tip' || token === 'trinkgeld') return 'Trinkgeld';
+    if (token === 'credit' || token === 'guthaben') return 'Als Guthaben';
+    return 'Offen';
 }
 
 function normalizeOnlineTargetAccount(raw = {}) {
@@ -644,6 +1083,7 @@ async function executeOnlineLinkSelectionCreation() {
         const copied = await copyTextToClipboardSafe(linkUrl);
         alertUser(copied ? 'Online-Zahlungslink kopiert.' : 'Online-Zahlungslink erstellt.', 'success');
         await renderOnlinePaymentLinks();
+        await renderContactList();
     } catch (error) {
         console.error(error);
         alertUser(error?.message || 'Online-Zahlungslink konnte nicht erstellt werden.', 'error');
@@ -711,6 +1151,7 @@ async function createOnlineLinkForPayment(paymentId) {
     const copied = await copyTextToClipboardSafe(linkUrl);
     alertUser(copied ? 'Online-Zahlungslink kopiert.' : 'Online-Zahlungslink erstellt.', 'success');
     await renderOnlinePaymentLinks();
+    await renderContactList();
 }
 
 async function createOnlineLinkForGuestContact(guestId, guestName = '') {
@@ -758,9 +1199,7 @@ async function renderOnlinePaymentLinks() {
     container.innerHTML = `${syncHint}<p class="text-center text-gray-400 italic py-4">Lade Online-Zahlungslinks...</p>`;
 
     try {
-        const result = await window.listOnlinePaymentLinks({});
-        const links = Array.isArray(result?.data?.links) ? result.data.links : [];
-        onlinePaymentLinksCache = links;
+        const links = await ensureOnlinePaymentLinksCacheLoaded(true);
 
         if (!links.length) {
             container.innerHTML = `${syncHint}<p class="text-center text-gray-400 italic py-4">Noch keine Online-Zahlungslinks erzeugt.</p>`;
@@ -779,12 +1218,23 @@ async function renderOnlinePaymentLinks() {
             const wiseMatchCount = Number(link.wiseMatchCount || 0);
             const paymentCount = Number(link.paymentCount || (Array.isArray(link.paymentIds) ? link.paymentIds.length : 0));
             const selectionLabel = getOnlineLinkSelectionModeLabel(link.selectionMode || (link.linkType === 'free' ? 'none' : 'selected'));
+            const overpaymentState = getOnlineOverpaymentDecisionState(link.pendingOverpayment || {});
             const targetPreview = Array.isArray(link.paymentTargets)
                 ? link.paymentTargets.slice(0, 3).map((entry) => `#${entry.paymentShortId || ''}`).filter(Boolean).join(', ')
                 : '';
             const referenceLine = link.referenceCode
                 ? `Ref: ${link.referenceCode}`
                 : `Auswahl: ${selectionLabel} • Einträge: ${paymentCount || '0'}`;
+            const overpaymentLine = overpaymentState.isPending
+                ? `<div class="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">Überzahlung offen: <span class="font-bold">${overpaymentState.amount.toFixed(2)} €</span>${overpaymentState.expiresAt ? ` • Entscheidung bis ${overpaymentState.expiresAt.toLocaleString('de-DE')}` : ''}</div>`
+                : (overpaymentState.isResolved
+                    ? `<div class="mt-2 rounded border border-emerald-200 bg-emerald-50 p-2 text-[11px] text-emerald-800">Überzahlung entschieden: <span class="font-bold">${overpaymentState.amount.toFixed(2)} €</span> • ${getOnlineOverpaymentResolutionLabel(overpaymentState.resolution)}</div>`
+                    : (overpaymentState.status === 'pending' && overpaymentState.isExpired
+                        ? `<div class="mt-2 rounded border border-gray-200 bg-gray-50 p-2 text-[11px] text-gray-700">Überzahlung ${overpaymentState.amount.toFixed(2)} € • 18h-Frist abgelaufen</div>`
+                        : ''));
+            const ownerDecisionLine = overpaymentState.status === 'pending' && overpaymentState.isExpired
+                ? `<div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2"><button type="button" data-owner-overpayment-tip="${link.id}" class="rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-white hover:bg-amber-600">Überzahlung als Trinkgeld</button><button type="button" data-owner-overpayment-credit="${link.id}" class="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-50">Überzahlung als Guthaben</button></div>`
+                : '';
             return `
                 <div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
                     <div class="flex flex-wrap items-center justify-between gap-2">
@@ -802,6 +1252,8 @@ async function renderOnlinePaymentLinks() {
                         <div class="rounded bg-gray-50 p-1.5 border border-gray-200"><span class="text-gray-500 block">Eingang</span><span class="font-bold text-emerald-700">${paid.toFixed(2)} €</span></div>
                         <div class="rounded bg-gray-50 p-1.5 border border-gray-200"><span class="text-gray-500 block">Offen</span><span class="font-bold text-orange-700">${remaining.toFixed(2)} €</span></div>
                     </div>
+                    ${overpaymentLine}
+                    ${ownerDecisionLine}
                     <div class="mt-2 flex gap-2">
                         <button type="button" data-online-link-copy="${link.id}" data-online-link-token="${link.token || ''}" class="flex-1 py-1.5 rounded border border-indigo-200 text-indigo-700 text-xs font-bold hover:bg-indigo-50">🔗 Link</button>
                         <button type="button" data-online-link-close="${link.id}" class="flex-1 py-1.5 rounded border border-red-200 text-red-700 text-xs font-bold hover:bg-red-50" ${status === 'closed' ? 'disabled' : ''}>Beenden</button>
@@ -832,6 +1284,34 @@ async function renderOnlinePaymentLinks() {
                 } catch (error) {
                     console.error(error);
                     alertUser(error?.message || 'Beenden fehlgeschlagen.', 'error');
+                }
+            });
+        });
+
+        container.querySelectorAll('[data-owner-overpayment-tip]').forEach((button) => {
+            button.addEventListener('click', async () => {
+                const linkId = button.getAttribute('data-owner-overpayment-tip') || '';
+                try {
+                    await resolveOnlinePaymentOverpaymentByOwnerAction(linkId, 'tip');
+                    await renderOnlinePaymentLinks();
+                    alertUser('Überzahlung als Trinkgeld entschieden.', 'success');
+                } catch (error) {
+                    console.error(error);
+                    alertUser(error?.message || 'Überzahlung konnte nicht entschieden werden.', 'error');
+                }
+            });
+        });
+
+        container.querySelectorAll('[data-owner-overpayment-credit]').forEach((button) => {
+            button.addEventListener('click', async () => {
+                const linkId = button.getAttribute('data-owner-overpayment-credit') || '';
+                try {
+                    await resolveOnlinePaymentOverpaymentByOwnerAction(linkId, 'credit');
+                    await renderOnlinePaymentLinks();
+                    alertUser('Überzahlung als Guthaben entschieden.', 'success');
+                } catch (error) {
+                    console.error(error);
+                    alertUser(error?.message || 'Überzahlung konnte nicht entschieden werden.', 'error');
                 }
             });
         });
@@ -1179,6 +1659,15 @@ function setupSettingsListeners() {
         });
     }
 
+    document.getElementById('close-issued-links-management-modal')?.addEventListener('click', closeIssuedLinksManagementModal);
+    document.getElementById('btn-close-issued-links-management')?.addEventListener('click', closeIssuedLinksManagementModal);
+    const issuedLinksManagementModal = document.getElementById('issuedLinksManagementModal');
+    if (issuedLinksManagementModal) {
+        issuedLinksManagementModal.addEventListener('click', (event) => {
+            if (event.target === issuedLinksManagementModal) closeIssuedLinksManagementModal();
+        });
+    }
+
     // Listener für Vorlagen-Liste (Löschen UND Umbenennen)
     document.getElementById('zv-templates-list')?.addEventListener('click', (e) => {
         if (e.target.closest('.delete-tpl-btn')) deleteTemplate(e.target.closest('.delete-tpl-btn').dataset.id);
@@ -1268,9 +1757,9 @@ function listenForPayments() {
         updateHomeAlerts();
 
         // Falls Settings offen sind -> Liste aktualisieren
-        const requestsTab = document.getElementById('content-zv-requests');
-        if (requestsTab && !requestsTab.classList.contains('hidden')) {
+        if (document.getElementById('zahlungsverwaltungSettingsView').classList.contains('active')) {
             renderRequestOverview();
+            renderDirectLinksManagementBox();
         }
 
         // Detail-Ansicht refreshen
@@ -6523,67 +7012,25 @@ function generateGuestToken() {
 }
 
 
-function renderContactList() {
+async function renderContactList() {
     const container = document.getElementById('zv-contacts-list');
     if (!container) return;
     container.innerHTML = '';
-
-    // Helper zum Rendern der Token-Infos
-    const renderTokenInfo = (obj, collectionName, docId) => {
-        const hasToken = !!obj.guestToken;
-        let infoHtml = '<span class="text-[10px] text-gray-400 italic">Kein Link aktiv</span>';
-        
-        if (hasToken) {
-            const date = obj.guestTokenCreatedAt?.toDate ? obj.guestTokenCreatedAt.toDate() : new Date();
-            const dateStr = date.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-            const count = obj.guestTokenViews || 0;
-            infoHtml = `<span class="text-[10px] text-indigo-400 font-medium">Generiert: ${dateStr} • Aufrufe: ${count}</span>`;
-        }
-
-        return { hasToken, infoHtml };
-    };
-
-    // Helper: Token neu generieren (FÜR ALLE ERLAUBT)
-    const handleRegenerate = async (collectionName, docId, currentToken, btnElement) => {
-        if (currentToken && !confirm("Achtung: Wenn du einen neuen Link generierst, wird der alte Link SOFORT ungültig!\n\nFortfahren?")) return;
-        
-        const btnContent = btnElement.innerHTML;
-        btnElement.innerHTML = '⏳';
-        btnElement.disabled = true;
-
-        try {
-            const newToken = generateGuestToken();
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', collectionName, docId), {
-                guestToken: newToken,
-                guestTokenCreatedAt: serverTimestamp(),
-                guestTokenViews: 0
-            });
-            
-            alertUser("Neuer Link generiert!", "success");
-        } catch (e) {
-            console.error(e);
-            if (e.code === 'permission-denied') {
-                alertUser("Fehler: Fehlende Schreibrechte in der Datenbank für diesen Benutzer.", "error");
-            } else {
-                alertUser("Fehler beim Generieren: " + e.message, "error");
-            }
-        } finally {
-            btnElement.innerHTML = btnContent;
-            btnElement.disabled = false;
-        }
-    };
+    await ensureOnlinePaymentLinksCacheLoaded();
 
     // Helper: Link kopieren (FÜR ALLE ERLAUBT)
-    const handleCopyLink = async (collectionName, docId, currentToken) => {
+    const handleCopyLink = async (collectionName, docId, currentToken, currentStatus = '') => {
         let tokenToUse = currentToken;
 
-        if (!tokenToUse) {
+        if (!tokenToUse || String(currentStatus || '').trim().toLowerCase() === 'closed') {
             try {
                 tokenToUse = generateGuestToken();
                 await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', collectionName, docId), {
                     guestToken: tokenToUse,
                     guestTokenCreatedAt: serverTimestamp(),
-                    guestTokenViews: 0
+                    guestTokenViews: 0,
+                    guestTokenStatus: 'open',
+                    guestTokenClosedAt: deleteField()
                 });
             } catch (e) {
                 console.error(e);
@@ -6618,7 +7065,7 @@ function renderContactList() {
         container.appendChild(empty);
     } else {
         allContacts.forEach(c => {
-            const { hasToken, infoHtml } = renderTokenInfo(c, 'private-contacts', c.id);
+            const activeLinkCount = getActiveIssuedLinkCount({ id: c.id, raw: c });
 
             const div = document.createElement('div');
             div.className = "p-3 bg-white rounded-lg shadow-sm border hover:shadow-md transition mb-2";
@@ -6630,7 +7077,6 @@ function renderContactList() {
                         </div>
                         <div>
                             <span class="font-bold text-gray-700 block leading-tight">${c.name}</span>
-                            ${infoHtml}
                         </div>
                     </div>
                     <div class="flex gap-1">
@@ -6640,13 +7086,11 @@ function renderContactList() {
                         <button class="copy-contact-link-btn px-2 py-1.5 bg-blue-50 text-blue-600 text-xs font-bold rounded hover:bg-blue-100 transition border border-blue-200" title="Link kopieren">
                             🔗 Link
                         </button>
-                        <button class="regen-contact-token-btn px-2 py-1.5 bg-gray-50 text-gray-600 text-xs font-bold rounded hover:bg-gray-100 transition border border-gray-200" title="Link erneuern / ungültig machen">
-                            ↻
-                        </button>
                     </div>
                 </div>
                 
-                <div class="flex gap-1 justify-end pt-2 border-t border-gray-100">
+                <div class="flex gap-1 justify-end pt-2 border-t border-gray-100 flex-wrap">
+                    <button class="manage-contact-links-btn p-1.5 text-gray-500 hover:bg-teal-50 hover:text-teal-700 rounded text-xs font-bold" data-id="${c.id}">${activeLinkCount} aktive Links</button>
                     <button class="migrate-contact-btn p-1.5 text-gray-400 hover:bg-orange-50 hover:text-orange-600 rounded text-xs" data-id="${c.id}" title="In User umwandeln">🔄 User</button>
                     <button class="edit-contact-btn p-1.5 text-gray-400 hover:bg-indigo-50 hover:text-indigo-600 rounded text-xs" data-id="${c.id}" title="Umbenennen">✏️ Edit</button>
                     <button class="delete-contact-btn p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 rounded text-xs" data-id="${c.id}" title="Löschen">🗑️ Löschen</button>
@@ -6654,8 +7098,8 @@ function renderContactList() {
             `;
             
             div.querySelector('.copy-contact-online-link-btn').onclick = () => createOnlineLinkForGuestContact(c.id, c.name);
-            div.querySelector('.copy-contact-link-btn').onclick = () => handleCopyLink('private-contacts', c.id, c.guestToken);
-            div.querySelector('.regen-contact-token-btn').onclick = (e) => handleRegenerate('private-contacts', c.id, c.guestToken, e.target);
+            div.querySelector('.copy-contact-link-btn').onclick = () => handleCopyLink('private-contacts', c.id, c.guestToken, c.guestTokenStatus);
+            div.querySelector('.manage-contact-links-btn').onclick = () => openIssuedLinksManagementModal({ id: c.id, targetName: c.name, collectionName: 'private-contacts', raw: c });
 
             container.appendChild(div);
         });
@@ -6681,7 +7125,7 @@ function renderContactList() {
     } else {
         systemUsers.forEach(user => {
             const displayName = user.realName || user.name;
-            const { hasToken, infoHtml } = renderTokenInfo(user, 'user-config', user.id);
+            const activeLinkCount = getActiveIssuedLinkCount({ id: user.id, raw: user });
             
             const div = document.createElement('div');
             div.className = "flex justify-between items-center p-3 bg-indigo-50/50 border border-indigo-100 rounded-lg shadow-sm hover:shadow-md transition mb-2";
@@ -6694,29 +7138,28 @@ function renderContactList() {
                     <div>
                         <span class="font-bold text-gray-800 block leading-tight">${displayName}</span>
                         <span class="text-[10px] text-indigo-400 block mb-0.5">Registrierter Nutzer</span>
-                        ${infoHtml}
                     </div>
                 </div>
                 <div class="flex flex-col gap-1">
+                    <button class="manage-user-links-btn px-3 py-1 bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded hover:bg-teal-50 hover:text-teal-700 hover:border-teal-200 transition shadow-sm">${activeLinkCount} aktive Links</button>
                     <button class="copy-user-online-link-btn px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold rounded hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition shadow-sm">
                         💶 Online
                     </button>
                     <button class="copy-user-link-btn px-3 py-1 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition shadow-sm">
                         🔗 Link
                     </button>
-                    <button class="regen-user-token-btn px-3 py-1 bg-white border border-gray-200 text-gray-400 text-xs font-bold rounded hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition shadow-sm">
-                        ↻ Neu
-                    </button>
                 </div>
             `;
 
             div.querySelector('.copy-user-online-link-btn').onclick = () => createOnlineLinkForGuestContact(user.id, displayName);
-            div.querySelector('.copy-user-link-btn').onclick = () => handleCopyLink('user-config', user.id, user.guestToken);
-            div.querySelector('.regen-user-token-btn').onclick = (e) => handleRegenerate('user-config', user.id, user.guestToken, e.target);
+            div.querySelector('.copy-user-link-btn').onclick = () => handleCopyLink('user-config', user.id, user.guestToken, user.guestTokenStatus);
+            div.querySelector('.manage-user-links-btn').onclick = () => openIssuedLinksManagementModal({ id: user.id, targetName: displayName, collectionName: 'user-config', raw: user });
 
             container.appendChild(div);
         });
     }
+
+    await renderDirectLinksManagementBox();
 }
 
 
@@ -7335,13 +7778,20 @@ export async function initializeGuestView(guestId) {
     if (!view) return;
     view.classList.add('active');
 
+    const appContainer = document.querySelector('.app-container');
+    document.body.classList.add('guest-link-mode');
+    if (appContainer) appContainer.classList.add('guest-link-mode');
+    document.getElementById('appHeader')?.style.setProperty('display', 'none', 'important');
+    document.getElementById('appFooter')?.style.setProperty('display', 'none', 'important');
+
     // Gastmodus: keine erzwungene, leere Scroll-Leiste + kein künstlicher Top-Abstand
     const mainContent = document.querySelector('.main-content');
     if (mainContent) {
         mainContent.classList.add('guest-main-content');
         mainContent.classList.remove('space-y-4');
-        mainContent.style.setProperty('overflow-y', 'auto', 'important');
+        mainContent.style.setProperty('overflow-y', 'visible', 'important');
         mainContent.style.setProperty('scrollbar-gutter', 'auto', 'important');
+        mainContent.style.setProperty('padding', '0', 'important');
     }
 
     // Close Button Listener
@@ -7376,10 +7826,42 @@ export async function initializeGuestView(guestId) {
         // --- RENDERING ---
         const listContainer = document.getElementById('guest-payment-list');
         const onlineBox = document.getElementById('guest-online-payment-box');
+        const positionAddBox = document.getElementById('guest-position-add-box');
+        const addPositionModal = document.getElementById('guestAddPositionModal');
+        const addPositionAmountInput = document.getElementById('guest-add-position-amount');
         listContainer.innerHTML = '';
         if (onlineBox) {
             onlineBox.innerHTML = '';
             onlineBox.classList.add('hidden');
+        }
+        if (positionAddBox) {
+            positionAddBox.innerHTML = '';
+            positionAddBox.classList.add('hidden');
+        }
+
+        const closeGuestAddPositionModal = () => {
+            if (!addPositionModal) return;
+            addPositionModal.classList.add('hidden');
+            addPositionModal.style.display = 'none';
+        };
+
+        const openGuestAddPositionModal = () => {
+            if (!addPositionModal) return;
+            if (addPositionAmountInput) addPositionAmountInput.value = '';
+            const defaultRadio = document.querySelector('input[name="guest-add-position-type"][value="TRINKGELD"]');
+            if (defaultRadio) defaultRadio.checked = true;
+            addPositionModal.classList.remove('hidden');
+            addPositionModal.style.display = 'flex';
+        };
+
+        const closeGuestAddPositionModalBtn = document.getElementById('close-guest-add-position-modal');
+        const cancelGuestAddPositionBtn = document.getElementById('btn-cancel-guest-add-position');
+        if (closeGuestAddPositionModalBtn) closeGuestAddPositionModalBtn.onclick = closeGuestAddPositionModal;
+        if (cancelGuestAddPositionBtn) cancelGuestAddPositionBtn.onclick = closeGuestAddPositionModal;
+        if (addPositionModal) {
+            addPositionModal.onclick = (event) => {
+                if (event.target === addPositionModal) closeGuestAddPositionModal();
+            };
         }
 
         let totalDebt = 0; // Summe NUR für aktive Posten
@@ -7396,9 +7878,7 @@ export async function initializeGuestView(guestId) {
         const activeItems = [];
         const futureItems = [];
 
-        if (docsList.length === 0) {
-            listContainer.innerHTML = '<p class="text-center text-gray-500">Keine offenen Einträge gefunden.</p>';
-        } else {
+        if (docsList.length > 0) {
             docsList.forEach(p => {
                 // Filter: Nur Offene (außer Einzel-Link, der zeigt auch erledigte)
                 if (!isSinglePaymentMode && p.status !== 'open' && p.status !== 'pending_approval') return;
@@ -7427,6 +7907,10 @@ export async function initializeGuestView(guestId) {
                     else totalDebt += safeAmount; // Gast bekommt Geld
                 }
             });
+
+            if (activeItems.length === 0) {
+                listContainer.innerHTML = '<div class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-4 text-center text-sm font-medium text-gray-500">Kein offener Eintrag gefunden</div>';
+            }
 
             // 1. RENDER AKTIVE ITEMS
             activeItems.forEach(p => {
@@ -7551,6 +8035,7 @@ export async function initializeGuestView(guestId) {
             const expectedAmount = normalizeMoney(paymentLinkData.expectedAmount);
             const paidAmount = normalizeMoney(paymentLinkData.paidAmount);
             const remainingAmount = normalizeMoney(paymentLinkData.remainingAmount);
+            const overpaymentState = getOnlineOverpaymentDecisionState(paymentLinkData.pendingOverpayment || {});
             const popularBanks = getPopularEuBankLabels();
             const payableItems = activeItems
                 .filter((payment) => isPaymentPayableInGuestView(payment))
@@ -7566,9 +8051,21 @@ export async function initializeGuestView(guestId) {
                 .filter((payment) => payment.referenceCode);
             let selectedInstruction = payableItems[0] || null;
             const canStartOnlinePayment = Boolean(bankInfo.accountHolder && bankInfo.iban && selectedInstruction && selectedInstruction.amount > 0);
-            const autoMatchInfo = paymentLinkData.lastWiseReference
-                ? `<div class="rounded-lg border border-emerald-100 bg-emerald-50 p-2 text-[11px] text-emerald-800">Letzter Wise-Webhook-Treffer: <span class="font-bold">${paymentLinkData.lastWiseReference}</span>${paymentLinkData.lastWiseBookedAt ? ` • ${new Date(paymentLinkData.lastWiseBookedAt).toLocaleString('de-DE')}` : ''}</div>`
-                : '<div class="rounded-lg border border-amber-100 bg-amber-50 p-2 text-[11px] text-amber-800">Automatische Erkennung läuft über Wise-Webhooks. Entscheidend sind Verwendungszweck und Betrag des ausgewählten Schuldeneintrags.</div>';
+            const overpaymentHtml = overpaymentState.isPending
+                ? `<div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900 space-y-2">
+                        <div class="font-bold text-sm">Überzahlung erkannt: ${overpaymentState.amount.toFixed(2)} €</div>
+                        <div>Deine Überweisung war höher als der offene Betrag. Bitte entscheide innerhalb von <span class="font-bold">18 Stunden</span>, was mit dem Rest passieren soll.</div>
+                        <div class="font-semibold">Frist bis: ${overpaymentState.expiresAt ? overpaymentState.expiresAt.toLocaleString('de-DE') : '—'}</div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <button id="guest-overpayment-tip-btn" type="button" class="py-2 px-3 rounded-lg bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition">Als Trinkgeld</button>
+                            <button id="guest-overpayment-credit-btn" type="button" class="py-2 px-3 rounded-lg border border-amber-300 bg-white text-amber-800 text-xs font-bold hover:bg-amber-100 transition">Als Guthaben</button>
+                        </div>
+                    </div>`
+                : (overpaymentState.isResolved
+                    ? `<div class="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-[11px] text-emerald-900">Überzahlung <span class="font-bold">${overpaymentState.amount.toFixed(2)} €</span> wurde bereits entschieden: <span class="font-bold">${getOnlineOverpaymentResolutionLabel(overpaymentState.resolution)}</span>.</div>`
+                    : (overpaymentState.status === 'expired'
+                        ? `<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-[11px] text-gray-700">Die 18-Stunden-Frist für die Überzahlungsentscheidung ist abgelaufen.</div>`
+                        : ''));
             const buildSepaPaymentData = (instruction) => ({
                 iban: bankInfo.iban || '',
                 bic: bankInfo.bic || '',
@@ -7578,77 +8075,92 @@ export async function initializeGuestView(guestId) {
                 reference: instruction?.referenceCode || '',
                 purpose: instruction?.title || paymentLinkData.title || 'Online-Zahlung',
             });
+            const buildCopyRow = (label, value, copyValue = '') => `
+                <div class="flex items-start gap-2 rounded-lg border border-emerald-100 bg-white px-3 py-2 text-[11px] text-gray-700">
+                    <span class="w-28 shrink-0 font-bold text-gray-800">${label}:</span>
+                    <button type="button" data-guest-manual-copy="${encodeURIComponent(String(copyValue || ''))}" class="h-6 w-6 shrink-0 rounded border border-emerald-200 bg-emerald-50 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100">&quot;</button>
+                    <span class="min-w-0 flex-1 break-all">${value || '—'}</span>
+                </div>
+            `;
 
             onlineBox.innerHTML = `
-                <div class="flex items-start justify-between gap-2">
-                    <div>
-                        <div class="text-sm font-bold text-emerald-900">Online-Zahlung aktiv</div>
-                        <div class="text-[11px] text-emerald-800">Status: <span class="font-bold">${statusText}</span></div>
-                    </div>
-                    <span class="inline-flex items-center px-2 py-1 rounded border text-[10px] font-bold ${getOnlineLinkStatusBadgeClass(paymentLinkData.status || 'open')}">${statusText}</span>
-                </div>
-                <div class="grid grid-cols-3 gap-2 text-[11px]">
-                    <div class="rounded bg-white/70 p-2 border border-emerald-100"><span class="text-emerald-800 block">Soll</span><span class="font-bold text-gray-800">${expectedAmount.toFixed(2)} €</span></div>
-                    <div class="rounded bg-white/70 p-2 border border-emerald-100"><span class="text-emerald-800 block">Erfasst</span><span class="font-bold text-emerald-700">${paidAmount.toFixed(2)} €</span></div>
-                    <div class="rounded bg-white/70 p-2 border border-emerald-100"><span class="text-emerald-800 block">Offen</span><span class="font-bold text-orange-700">${remainingAmount.toFixed(2)} €</span></div>
-                </div>
-                ${autoMatchInfo}
-                ${payableItems.length > 1 ? `
-                    <div class="rounded-lg border border-emerald-100 bg-white/90 p-2 space-y-2">
-                        <div class="text-[11px] font-bold text-gray-700">Schuldeneintrag auswählen</div>
-                        <div id="guest-payment-choice-list" class="flex flex-wrap gap-1.5">
-                            ${payableItems.map((item, index) => `<button type="button" data-guest-payment-choice="${item.id}" class="guest-payment-choice-btn px-2 py-1 rounded border text-[10px] font-bold ${index === 0 ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-emerald-200 bg-white text-emerald-700'}">#${item.shortId} • ${item.amount.toFixed(2)} €</button>`).join('')}
-                        </div>
+                ${payableItems.length ? `
+                    <div id="guest-payment-launcher" class="rounded-xl border border-emerald-200 bg-white p-3 shadow-sm">
+                        <button id="guest-start-payment-btn" type="button" class="w-full rounded-lg bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700">Jetzt direkt bezahlen</button>
                     </div>
                 ` : ''}
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <button id="guest-manual-mode-btn" type="button" class="py-2 px-3 rounded-lg border border-emerald-400 bg-emerald-600 text-white text-xs font-bold transition">Manuell</button>
-                    <button id="guest-online-mode-btn" type="button" class="py-2 px-3 rounded-lg border border-emerald-300 bg-white text-emerald-700 text-xs font-bold transition ${canStartOnlinePayment ? 'hover:bg-emerald-100' : 'opacity-50 cursor-not-allowed'}" ${canStartOnlinePayment ? '' : 'disabled'}>Online-Zahlung starten</button>
-                </div>
-                <div id="guest-manual-payment-panel" class="rounded-lg bg-white/80 border border-emerald-100 p-2 text-[11px] text-gray-700 space-y-1">
-                    <div><span class="font-bold text-gray-800">Eintrag:</span> <span id="guest-selected-payment-title">${selectedInstruction ? `${selectedInstruction.title} (#${selectedInstruction.shortId})` : 'Kein Schuldeneintrag ausgewählt'}</span></div>
-                    <div><span class="font-bold text-gray-800">Verwendungszweck:</span> <span id="guest-selected-reference">${selectedInstruction?.referenceCode || '—'}</span></div>
-                    ${bankInfo.accountHolder ? `<div><span class="font-bold text-gray-800">Empfänger:</span> ${bankInfo.accountHolder}</div>` : ''}
-                    ${bankInfo.bankName ? `<div><span class="font-bold text-gray-800">Bank:</span> ${bankInfo.bankName}</div>` : ''}
-                    ${bankInfo.iban ? `<div><span class="font-bold text-gray-800">IBAN:</span> ${bankInfo.iban}</div>` : ''}
-                    ${bankInfo.bic ? `<div><span class="font-bold text-gray-800">BIC:</span> ${bankInfo.bic}</div>` : ''}
-                    <div><span class="font-bold text-gray-800">Betrag:</span> <span id="guest-selected-amount">${selectedInstruction ? `${selectedInstruction.amount.toFixed(2)} €` : '—'}</span></div>
-                    <div class="text-amber-700 font-semibold">Wichtig: Bitte genau den angezeigten Verwendungszweck und Betrag des ausgewählten Schuldeneintrags verwenden.</div>
-                </div>
-                <div id="guest-online-start-panel" class="hidden rounded-lg bg-white/90 border border-cyan-200 p-3 text-[11px] text-gray-700 space-y-3">
-                    <div>
-                        <div class="font-bold text-cyan-900">Online-Zahlung starten</div>
-                        <div class="text-cyan-700">Öffne deine Banking-App, scanne den QR-Code oder übernimm die vorausgefüllten Daten.</div>
-                    </div>
-                    <div>
-                        <div class="mb-2 text-[11px] font-bold text-gray-700">Bank auswählen</div>
-                        <div id="guest-online-bank-list" class="flex flex-wrap gap-1.5">
-                            ${popularBanks.map((bank, index) => `<button type="button" class="guest-online-bank-btn px-2 py-1 rounded border text-[10px] font-bold ${index === 0 ? 'border-cyan-400 bg-cyan-600 text-white' : 'border-cyan-200 bg-white text-cyan-700'}" data-bank-name="${bank}">${bank}</button>`).join('')}
+                <div id="guest-payment-workspace" class="${payableItems.length ? 'hidden ' : ''}space-y-3">
+                    <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-3">
+                        <div class="flex items-start justify-between gap-2">
+                            <div>
+                                <div class="text-sm font-bold text-emerald-900">Online-Zahlung aktiv</div>
+                                <div class="text-[11px] text-emerald-800">Status: <span class="font-bold">${statusText}</span></div>
+                            </div>
+                            <span class="inline-flex items-center px-2 py-1 rounded border text-[10px] font-bold ${getOnlineLinkStatusBadgeClass(paymentLinkData.status || 'open')}">${statusText}</span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2 text-[11px]">
+                            <div class="rounded bg-white/70 p-2 border border-emerald-100"><span class="text-emerald-800 block">Soll</span><span class="font-bold text-gray-800">${expectedAmount.toFixed(2)} €</span></div>
+                            <div class="rounded bg-white/70 p-2 border border-emerald-100"><span class="text-emerald-800 block">Erfasst</span><span class="font-bold text-emerald-700">${paidAmount.toFixed(2)} €</span></div>
+                            <div class="rounded bg-white/70 p-2 border border-emerald-100"><span class="text-emerald-800 block">Offen</span><span class="font-bold text-orange-700">${remainingAmount.toFixed(2)} €</span></div>
+                        </div>
+                        ${overpaymentHtml}
+                        ${payableItems.length > 1 ? `
+                            <div class="rounded-lg border border-emerald-100 bg-white/90 p-2 space-y-2">
+                                <div class="text-[11px] font-bold text-gray-700">Schuldeneintrag auswählen</div>
+                                <div id="guest-payment-choice-list" class="flex flex-wrap gap-1.5">
+                                    ${payableItems.map((item, index) => `<button type="button" data-guest-payment-choice="${item.id}" class="guest-payment-choice-btn px-2 py-1 rounded border text-[10px] font-bold ${index === 0 ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-emerald-200 bg-white text-emerald-700'}">#${item.shortId} • ${item.amount.toFixed(2)} €</button>`).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <button id="guest-manual-mode-btn" type="button" class="py-2 px-3 rounded-lg border border-emerald-400 bg-emerald-600 text-white text-xs font-bold transition">Manuell</button>
+                            <button id="guest-online-mode-btn" type="button" class="py-2 px-3 rounded-lg border border-emerald-300 bg-white text-emerald-700 text-xs font-bold transition ${canStartOnlinePayment ? 'hover:bg-emerald-100' : 'opacity-50 cursor-not-allowed'}" ${canStartOnlinePayment ? '' : 'disabled'}>Online-Zahlung starten</button>
+                        </div>
+                        <div id="guest-manual-payment-panel" class="space-y-2 text-[11px] text-gray-700">
+                            ${buildCopyRow('IBAN', bankInfo.iban || '—', bankInfo.iban || '')}
+                            ${buildCopyRow('Betrag', selectedInstruction ? `${selectedInstruction.amount.toFixed(2)} €` : '—', selectedInstruction ? `${selectedInstruction.amount.toFixed(2)} €` : '')}
+                            ${buildCopyRow('Empfänger', bankInfo.accountHolder || '—', bankInfo.accountHolder || '')}
+                            ${buildCopyRow('Verwendungszweck', selectedInstruction?.referenceCode || '—', selectedInstruction?.referenceCode || '')}
+                            <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">EXAKT und NUR dies angeben (für automatische Erkennung)</div>
+                            ${buildCopyRow('Bank', bankInfo.bankName || '—', bankInfo.bankName || '')}
+                            ${buildCopyRow('BIC', bankInfo.bic || '—', bankInfo.bic || '')}
+                        </div>
+                        <div id="guest-online-start-panel" class="hidden rounded-lg bg-white/90 border border-cyan-200 p-3 text-[11px] text-gray-700 space-y-3">
+                            <div>
+                                <div class="font-bold text-cyan-900">Online-Zahlung starten</div>
+                                <div class="text-cyan-700">Öffne deine Banking-App, scanne den QR-Code oder übernimm die vorausgefüllten Daten.</div>
+                            </div>
+                            <div>
+                                <div class="mb-2 text-[11px] font-bold text-gray-700">Bank auswählen</div>
+                                <div id="guest-online-bank-list" class="flex flex-wrap gap-1.5">
+                                    ${popularBanks.map((bank, index) => `<button type="button" class="guest-online-bank-btn px-2 py-1 rounded border text-[10px] font-bold ${index === 0 ? 'border-cyan-400 bg-cyan-600 text-white' : 'border-cyan-200 bg-white text-cyan-700'}" data-bank-name="${bank}">${bank}</button>`).join('')}
+                                </div>
+                            </div>
+                            <div class="rounded-lg border border-cyan-100 bg-cyan-50 p-2">
+                                <div class="text-[10px] uppercase tracking-wide text-cyan-700 font-bold">Aktuelle Auswahl</div>
+                                <div id="guest-online-selected-bank" class="text-sm font-bold text-cyan-900 mt-1">${popularBanks[0] || 'Banking-App'}</div>
+                                <div id="guest-online-selected-instruction" class="text-[11px] text-gray-600 mt-1">${selectedInstruction ? `${selectedInstruction.title} • ${selectedInstruction.amount.toFixed(2)} €` : 'Kein Schuldeneintrag ausgewählt'}</div>
+                            </div>
+                            <div class="flex flex-col items-center gap-2 rounded-lg border border-dashed border-cyan-300 bg-white p-3">
+                                <div id="guest-sepa-qr-code" class="min-h-[168px] flex items-center justify-center"></div>
+                                <div class="text-center text-[11px] text-gray-500">SEPA/EPC-QR mit vorausgefüllter IBAN, Betrag und Verwendungszweck des ausgewählten Eintrags</div>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <button id="guest-copy-sepa-data-btn" type="button" class="py-2 px-3 rounded-lg border border-cyan-300 bg-white text-cyan-700 text-xs font-bold hover:bg-cyan-50 transition">Zahlungsdaten kopieren</button>
+                                <button id="guest-copy-iban-btn" type="button" class="py-2 px-3 rounded-lg border border-cyan-300 bg-white text-cyan-700 text-xs font-bold hover:bg-cyan-50 transition">IBAN kopieren</button>
+                            </div>
+                            ${canStartOnlinePayment ? '' : '<div class="text-xs text-red-600 font-semibold">Für den Online-Start fehlen noch vollständige Zielkontodaten.</div>'}
+                        </div>
+                        <div class="grid grid-cols-1 gap-2">
+                            <button id="guest-mark-paid-btn" type="button" class="py-2 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition">Ich habe bezahlt</button>
                         </div>
                     </div>
-                    <div class="rounded-lg border border-cyan-100 bg-cyan-50 p-2">
-                        <div class="text-[10px] uppercase tracking-wide text-cyan-700 font-bold">Aktuelle Auswahl</div>
-                        <div id="guest-online-selected-bank" class="text-sm font-bold text-cyan-900 mt-1">${popularBanks[0] || 'Banking-App'}</div>
-                        <div id="guest-online-selected-instruction" class="text-[11px] text-gray-600 mt-1">${selectedInstruction ? `${selectedInstruction.title} • ${selectedInstruction.amount.toFixed(2)} €` : 'Kein Schuldeneintrag ausgewählt'}</div>
-                    </div>
-                    <div class="flex flex-col items-center gap-2 rounded-lg border border-dashed border-cyan-300 bg-white p-3">
-                        <div id="guest-sepa-qr-code" class="min-h-[168px] flex items-center justify-center"></div>
-                        <div class="text-center text-[11px] text-gray-500">SEPA/EPC-QR mit vorausgefüllter IBAN, Betrag und Verwendungszweck des ausgewählten Eintrags</div>
-                    </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <button id="guest-copy-sepa-data-btn" type="button" class="py-2 px-3 rounded-lg border border-cyan-300 bg-white text-cyan-700 text-xs font-bold hover:bg-cyan-50 transition">Zahlungsdaten kopieren</button>
-                        <button id="guest-copy-iban-btn" type="button" class="py-2 px-3 rounded-lg border border-cyan-300 bg-white text-cyan-700 text-xs font-bold hover:bg-cyan-50 transition">IBAN kopieren</button>
-                    </div>
-                    ${canStartOnlinePayment ? '' : '<div class="text-xs text-red-600 font-semibold">Für den Online-Start fehlen noch vollständige Zielkontodaten.</div>'}
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <button id="guest-copy-reference-btn" type="button" class="py-2 px-3 rounded-lg border border-emerald-300 bg-white text-emerald-700 text-xs font-bold hover:bg-emerald-100 transition">Ref. kopieren</button>
-                    <button id="guest-mark-paid-btn" type="button" class="py-2 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition">Ich habe bezahlt</button>
-                    <button id="guest-add-post-btn" type="button" class="py-2 px-3 rounded-lg border border-indigo-300 bg-white text-indigo-700 text-xs font-bold hover:bg-indigo-50 transition">Post hinzufügen</button>
                 </div>
             `;
             onlineBox.classList.remove('hidden');
 
+            const launcher = onlineBox.querySelector('#guest-payment-launcher');
+            const workspace = onlineBox.querySelector('#guest-payment-workspace');
             const manualPanel = onlineBox.querySelector('#guest-manual-payment-panel');
             const onlinePanel = onlineBox.querySelector('#guest-online-start-panel');
             const manualModeBtn = onlineBox.querySelector('#guest-manual-mode-btn');
@@ -7656,10 +8168,17 @@ export async function initializeGuestView(guestId) {
             const selectedBankLabel = onlineBox.querySelector('#guest-online-selected-bank');
             const selectedInstructionLabel = onlineBox.querySelector('#guest-online-selected-instruction');
             const qrContainer = onlineBox.querySelector('#guest-sepa-qr-code');
-            const selectedPaymentTitleEl = onlineBox.querySelector('#guest-selected-payment-title');
-            const selectedReferenceEl = onlineBox.querySelector('#guest-selected-reference');
-            const selectedAmountEl = onlineBox.querySelector('#guest-selected-amount');
             let currentSepaPaymentData = buildSepaPaymentData(selectedInstruction);
+
+            const bindManualCopyButtons = () => {
+                onlineBox.querySelectorAll('[data-guest-manual-copy]').forEach((button) => {
+                    button.onclick = async () => {
+                        const raw = button.getAttribute('data-guest-manual-copy') || '';
+                        const copied = await copyTextToClipboardSafe(decodeURIComponent(raw));
+                        alertUser(copied ? 'Wert kopiert.' : 'Wert bereit.', 'success');
+                    };
+                });
+            };
 
             const activatePaymentMode = (mode) => {
                 const isOnline = mode === 'online' && canStartOnlinePayment;
@@ -7684,14 +8203,18 @@ export async function initializeGuestView(guestId) {
                 selectedInstruction = nextInstruction;
                 currentSepaPaymentData = buildSepaPaymentData(selectedInstruction);
 
-                if (selectedPaymentTitleEl) {
-                    selectedPaymentTitleEl.textContent = selectedInstruction ? `${selectedInstruction.title} (#${selectedInstruction.shortId})` : 'Kein Schuldeneintrag ausgewählt';
-                }
-                if (selectedReferenceEl) {
-                    selectedReferenceEl.textContent = selectedInstruction?.referenceCode || '—';
-                }
-                if (selectedAmountEl) {
-                    selectedAmountEl.textContent = selectedInstruction ? `${selectedInstruction.amount.toFixed(2)} €` : '—';
+                const manualRows = onlineBox.querySelector('#guest-manual-payment-panel');
+                if (manualRows) {
+                    manualRows.innerHTML = `
+                        ${buildCopyRow('IBAN', bankInfo.iban || '—', bankInfo.iban || '')}
+                        ${buildCopyRow('Betrag', selectedInstruction ? `${selectedInstruction.amount.toFixed(2)} €` : '—', selectedInstruction ? `${selectedInstruction.amount.toFixed(2)} €` : '')}
+                        ${buildCopyRow('Empfänger', bankInfo.accountHolder || '—', bankInfo.accountHolder || '')}
+                        ${buildCopyRow('Verwendungszweck', selectedInstruction?.referenceCode || '—', selectedInstruction?.referenceCode || '')}
+                        <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">EXAKT und NUR dies angeben (für automatische Erkennung)</div>
+                        ${buildCopyRow('Bank', bankInfo.bankName || '—', bankInfo.bankName || '')}
+                        ${buildCopyRow('BIC', bankInfo.bic || '—', bankInfo.bic || '')}
+                    `;
+                    bindManualCopyButtons();
                 }
                 if (selectedInstructionLabel) {
                     selectedInstructionLabel.textContent = selectedInstruction ? `${selectedInstruction.title} • ${selectedInstruction.amount.toFixed(2)} €` : 'Kein Schuldeneintrag ausgewählt';
@@ -7716,6 +8239,12 @@ export async function initializeGuestView(guestId) {
 
             updateSelectedInstruction(selectedInstruction?.id || '');
 
+            onlineBox.querySelector('#guest-start-payment-btn')?.addEventListener('click', () => {
+                launcher?.classList.add('hidden');
+                workspace?.classList.remove('hidden');
+                activatePaymentMode('manual');
+            });
+
             manualModeBtn?.addEventListener('click', () => activatePaymentMode('manual'));
             onlineModeBtn?.addEventListener('click', () => activatePaymentMode('online'));
 
@@ -7736,11 +8265,6 @@ export async function initializeGuestView(guestId) {
                     button.classList.remove('border-cyan-200', 'bg-white', 'text-cyan-700');
                     button.classList.add('border-cyan-400', 'bg-cyan-600', 'text-white');
                 });
-            });
-
-            onlineBox.querySelector('#guest-copy-reference-btn')?.addEventListener('click', async () => {
-                const copied = await copyTextToClipboardSafe(selectedInstruction?.referenceCode || '');
-                alertUser(copied ? 'Referenzcode kopiert.' : 'Referenzcode bereit.', 'success');
             });
 
             onlineBox.querySelector('#guest-copy-sepa-data-btn')?.addEventListener('click', async () => {
@@ -7774,40 +8298,73 @@ export async function initializeGuestView(guestId) {
                 }
             });
 
-            onlineBox.querySelector('#guest-add-post-btn')?.addEventListener('click', async () => {
+            const resolveOverpayment = async (resolution) => {
+                if (!window.guestResolveOnlinePaymentOverpayment) {
+                    alertUser('Überzahlungs-Funktion ist nicht verfügbar.', 'error');
+                    return;
+                }
+                try {
+                    await window.guestResolveOnlinePaymentOverpayment({
+                        linkId: paymentLinkData.id,
+                        token: urlToken,
+                        resolution,
+                    });
+                    alertUser(resolution === 'tip' ? 'Überzahlung als Trinkgeld gespeichert.' : 'Überzahlung als Guthaben gespeichert.', 'success');
+                    await initializeGuestView(guestId);
+                } catch (error) {
+                    console.error(error);
+                    alertUser(error?.message || 'Überzahlungsentscheidung konnte nicht gespeichert werden.', 'error');
+                }
+            };
+
+            onlineBox.querySelector('#guest-overpayment-tip-btn')?.addEventListener('click', async () => resolveOverpayment('tip'));
+            onlineBox.querySelector('#guest-overpayment-credit-btn')?.addEventListener('click', async () => resolveOverpayment('credit'));
+        }
+
+        if (paymentLinkData && positionAddBox) {
+            positionAddBox.innerHTML = `<button id="guest-open-add-position-btn" type="button" class="w-full rounded-lg border border-indigo-300 bg-white px-4 py-2.5 text-sm font-bold text-indigo-700 hover:bg-indigo-50">Position hinzufügen</button>`;
+            positionAddBox.classList.remove('hidden');
+
+            positionAddBox.querySelector('#guest-open-add-position-btn')?.addEventListener('click', () => {
+                if (!window.guestAddOnlinePaymentPost) {
+                    alertUser('Zusatzposten-Funktion ist nicht verfügbar.', 'error');
+                    return;
+                }
+                openGuestAddPositionModal();
+            });
+
+            const saveGuestAddPositionBtn = document.getElementById('btn-save-guest-add-position');
+            if (saveGuestAddPositionBtn) saveGuestAddPositionBtn.onclick = async () => {
                 if (!window.guestAddOnlinePaymentPost) {
                     alertUser('Zusatzposten-Funktion ist nicht verfügbar.', 'error');
                     return;
                 }
 
-                const purpose = prompt('Worum geht es? (z.B. Trinkgeld, Korrektur, fehlender Posten)', '');
-                if (!purpose || !purpose.trim()) return;
-
-                const amountRaw = prompt('Betrag in Euro', '0.00');
-                const amount = parseFloat(String(amountRaw || '').replace(',', '.'));
-                if (isNaN(amount) || amount <= 0) {
-                    alertUser('Bitte einen gültigen Betrag eingeben.', 'error');
+                const selectedType = document.querySelector('input[name="guest-add-position-type"]:checked');
+                const group = String(selectedType?.value || 'TRINKGELD').trim().toUpperCase();
+                const amount = parseFloat(String(addPositionAmountInput?.value || '').replace(',', '.'));
+                if (!Number.isFinite(amount) || amount <= 0) {
+                    alertUser('Der Betrag muss größer als 0,00 € sein.', 'error');
                     return;
                 }
 
-                const groupRaw = prompt('Gruppe: TRINKGELD, GUTHABEN oder KORREKTUR', 'TRINKGELD');
-                const group = String(groupRaw || 'TRINKGELD').trim().toUpperCase();
-
+                const purpose = group === 'GUTHABEN' ? 'Guthaben aufladen' : 'Trinkgeld';
                 try {
                     await window.guestAddOnlinePaymentPost({
                         linkId: paymentLinkData.id,
                         token: urlToken,
-                        purpose: purpose.trim(),
+                        purpose,
                         amount,
                         group,
                     });
-                    alertUser('Zusatzposten gespeichert.', 'success');
+                    closeGuestAddPositionModal();
+                    alertUser('Position gespeichert.', 'success');
                     await initializeGuestView(guestId);
                 } catch (error) {
                     console.error(error);
-                    alertUser(error?.message || 'Zusatzposten konnte nicht gespeichert werden.', 'error');
+                    alertUser(error?.message || 'Position konnte nicht gespeichert werden.', 'error');
                 }
-            });
+            };
         }
 
     } catch (e) {
@@ -8969,16 +9526,20 @@ function openShareModal(id) {
 
         (async () => {
             let tokenToUse = p.guestToken || null;
+            const tokenStatus = String(p.guestTokenStatus || '').trim().toLowerCase();
 
-            if (!tokenToUse) {
+            if (!tokenToUse || tokenStatus === 'closed') {
                 try {
                     tokenToUse = generateGuestToken();
                     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payments', id), {
                         guestToken: tokenToUse,
                         guestTokenCreatedAt: serverTimestamp(),
-                        guestTokenViews: 0
+                        guestTokenViews: 0,
+                        guestTokenStatus: 'open',
+                        guestTokenClosedAt: deleteField()
                     });
                     p.guestToken = tokenToUse;
+                    p.guestTokenStatus = 'open';
                 } catch (e) {
                     console.error(e);
                 }

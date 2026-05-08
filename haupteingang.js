@@ -1657,6 +1657,8 @@ async function initializeFirebase() {
                 window.closeOnlinePaymentLink = httpsCallable(functions, 'closeOnlinePaymentLink');
                 window.guestMarkOnlinePaymentInProgress = httpsCallable(functions, 'guestMarkOnlinePaymentInProgress');
                 window.guestAddOnlinePaymentPost = httpsCallable(functions, 'guestAddOnlinePaymentPost');
+                window.guestResolveOnlinePaymentOverpayment = httpsCallable(functions, 'guestResolveOnlinePaymentOverpayment');
+                window.resolveOnlinePaymentOverpaymentByOwner = httpsCallable(functions, 'resolveOnlinePaymentOverpaymentByOwner');
 
                 window.firebaseFunctionsInitialised = true;
                 console.log("Firebase Functions initialisiert und global verfügbar gemacht.");

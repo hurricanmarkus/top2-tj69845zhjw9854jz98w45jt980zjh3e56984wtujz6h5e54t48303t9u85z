@@ -25,15 +25,15 @@
     <meta name="application-name" content="TOP 2 App">
     <meta name="apple-mobile-web-app-title" content="TOP2">
     <meta name="theme-color" content="#4f46e5" />
-    <meta name="top2-app-version" content="1.20.0" />
-    <meta name="top2-build-id" content="20260508-3" />
+    <meta name="top2-app-version" content="1.22.1" />
+    <meta name="top2-build-id" content="20260508-6" />
     <meta name="msapplication-navbutton-color" content="#4f46e5">
     <meta name="apple-mobile-app-status-bar-style" content="black-translucent">
     <link rel="icon" type="image/png" sizes="192x192" href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
     <link rel="apple-touch-icon" type="image/png" sizes="192x192"
         href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
 
-    <link rel="manifest" href="manifest.json?v=20260508-3">
+    <link rel="manifest" href="manifest.json?v=20260508-6">
 
     <link rel="stylesheet" href="style.css">
     
@@ -6579,6 +6579,36 @@
                         </div>
                         <div id="zv-contacts-list" class="space-y-2 max-h-80 overflow-y-auto"></div>
                     </div>
+                    <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-indigo-500">
+                        <h3 class="text-lg font-bold text-gray-800 mb-2">Direkt-Links Verwaltung</h3>
+                        <p class="text-xs text-gray-500 mb-3">Hier erscheinen alle Einzel-Links, die direkt über einen offenen Eintrag bei <span class="font-bold">Rechte</span> erzeugt wurden.</p>
+                        <div id="zv-direct-links-list" class="space-y-2"></div>
+                    </div>
+                </div>
+
+                <div id="issuedLinksManagementModal" class="fixed inset-0 z-[95] hidden items-end justify-center bg-slate-950/60 p-0 sm:items-center sm:p-4">
+                    <div class="w-full max-w-4xl overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl">
+                        <div class="flex items-start justify-between gap-3 border-b border-indigo-100 bg-gradient-to-r from-indigo-600 to-cyan-500 px-4 py-4 text-white sm:px-6">
+                            <div>
+                                <h3 id="issued-links-management-title" class="text-lg font-bold">Link-Verwaltung</h3>
+                                <p id="issued-links-management-subtitle" class="mt-1 text-xs text-cyan-50">0 aktive Links</p>
+                            </div>
+                            <button id="close-issued-links-management-modal" class="text-3xl font-bold leading-none text-white/80 hover:text-white">&times;</button>
+                        </div>
+                        <div class="grid grid-cols-1 gap-4 px-4 py-4 sm:grid-cols-[minmax(0,2fr)_minmax(260px,1fr)] sm:px-6 sm:py-5">
+                            <div>
+                                <div class="mb-2 text-sm font-bold text-gray-800">Ausgestellte Links</div>
+                                <div id="issued-links-management-list" class="max-h-[60vh] space-y-3 overflow-y-auto"></div>
+                            </div>
+                            <div>
+                                <div class="mb-2 text-sm font-bold text-gray-800">Aufrufhistorie</div>
+                                <div id="issued-links-history" class="max-h-[60vh] space-y-2 overflow-y-auto rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700"></div>
+                            </div>
+                        </div>
+                        <div class="flex justify-end border-t border-gray-200 bg-gray-50 px-4 py-4 sm:px-6">
+                            <button id="btn-close-issued-links-management" type="button" class="rounded-xl bg-gray-200 px-4 py-2.5 text-sm font-bold text-gray-800 hover:bg-gray-300">Schließen</button>
+                        </div>
+                    </div>
                 </div>
 
                 <div id="onlineLinkSelectionModal" class="fixed inset-0 z-[90] hidden items-end justify-center bg-slate-950/60 p-0 sm:items-center sm:p-4">
@@ -6817,6 +6847,33 @@
 
                 <div id="pendingNotificationsList" class="flex-grow overflow-y-auto space-y-3 mb-4">
                     <p class="text-sm text-gray-400 text-center">Keine ausstehenden Benachrichtigungen</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="guestAddPositionModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-[105]">
+            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md">
+                <div class="flex justify-between items-center mb-4 border-b pb-2">
+                    <h3 class="text-xl font-bold text-gray-800">Position hinzufügen</h3>
+                    <button id="close-guest-add-position-modal" class="text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+                </div>
+                <div class="space-y-4">
+                    <label class="flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-2 cursor-pointer hover:bg-gray-50">
+                        <input type="radio" name="guest-add-position-type" value="TRINKGELD" checked>
+                        <span class="font-semibold text-gray-800">Trinkgeld</span>
+                    </label>
+                    <label class="flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-2 cursor-pointer hover:bg-gray-50">
+                        <input type="radio" name="guest-add-position-type" value="GUTHABEN">
+                        <span class="font-semibold text-gray-800">Guthaben aufladen</span>
+                    </label>
+                    <div>
+                        <label for="guest-add-position-amount" class="block text-sm font-semibold text-gray-700 mb-1">Betrag in Euro</label>
+                        <input id="guest-add-position-amount" type="number" min="0.01" step="0.01" inputmode="decimal" class="w-full rounded-lg border border-gray-300 px-3 py-2" placeholder="0,00">
+                    </div>
+                </div>
+                <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <button id="btn-cancel-guest-add-position" type="button" class="rounded-lg bg-gray-200 px-4 py-2 font-bold text-gray-800 hover:bg-gray-300">Abbrechen</button>
+                    <button id="btn-save-guest-add-position" type="button" class="rounded-lg bg-indigo-600 px-4 py-2 font-bold text-white hover:bg-indigo-700">Speichern</button>
                 </div>
             </div>
         </div>
@@ -7566,13 +7623,14 @@
                         <p class="text-xs text-gray-500 mt-2" id="guest-status-text">Alles ausgeglichen.</p>
                     </div>
 
-                    <div id="guest-online-payment-box" class="hidden p-3 rounded-lg border border-emerald-200 bg-emerald-50 space-y-2"></div>
+                    <div id="guest-online-payment-box" class="hidden space-y-3"></div>
 
                     <div>
                         <h3 class="font-bold text-gray-700 border-b pb-2 mb-2">Offene Posten</h3>
-                        <div id="guest-payment-list" class="space-y-2 max-h-96 overflow-y-auto">
-                            <p class="text-center text-gray-400 italic py-4">Keine offenen Einträge.</p>
+                        <div id="guest-payment-list" class="space-y-2">
+                            <div class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-4 text-center text-sm font-medium text-gray-500">Kein offener Eintrag gefunden</div>
                         </div>
+                        <div id="guest-position-add-box" class="hidden mt-3"></div>
                     </div>
 
                     <div class="text-center text-xs text-gray-400 pt-4 border-t">
