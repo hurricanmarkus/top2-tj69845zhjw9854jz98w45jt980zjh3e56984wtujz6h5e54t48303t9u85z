@@ -61,6 +61,9 @@ let guestViewLiveRefreshTimer = null;
 let guestViewLiveRefreshGuestId = '';
 let guestViewLiveRefreshInFlight = false;
 let guestViewLastSignature = '';
+let guestViewTrackedAccessKeys = new Set();
+const GUEST_LINK_TRACKING_SESSION_KEY = 'zv_guest_link_tracking_v1';
+const GUEST_LINK_TRACKING_PENDING_MS = 30000;
 
 // STANDARD KATEGORIEN (Unveränderlich)
 const SYSTEM_CATEGORIES = [
@@ -137,6 +140,84 @@ function buildGuestViewLiveSignature(resultData = {}) {
         }
         : null;
     return JSON.stringify({ payments, paymentTargets, link });
+}
+
+function buildGuestLinkTrackingKey(guestId = '', token = '') {
+    const normalizedGuestId = String(guestId || '').trim();
+    const normalizedToken = String(token || '').trim();
+    if (!normalizedGuestId || !normalizedToken) return '';
+    return `${encodeURIComponent(normalizedGuestId)}::${encodeURIComponent(normalizedToken)}`;
+}
+
+function readGuestLinkTrackingSessionState() {
+    try {
+        const raw = window.sessionStorage?.getItem(GUEST_LINK_TRACKING_SESSION_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+        return {};
+    }
+}
+
+function writeGuestLinkTrackingSessionState(state = {}) {
+    try {
+        window.sessionStorage?.setItem(GUEST_LINK_TRACKING_SESSION_KEY, JSON.stringify(state || {}));
+    } catch {}
+}
+
+function pruneGuestLinkTrackingSessionState(state = {}) {
+    const now = Date.now();
+    const next = {};
+    Object.entries(state || {}).forEach(([key, value]) => {
+        if (!key) return;
+        const status = String(value?.status || '').trim().toLowerCase();
+        const ts = Number(value?.ts || 0);
+        if (status === 'tracked') {
+            next[key] = { status: 'tracked', ts: ts || now };
+            return;
+        }
+        if (status === 'pending' && ts > 0 && (now - ts) <= GUEST_LINK_TRACKING_PENDING_MS) {
+            next[key] = { status: 'pending', ts };
+        }
+    });
+    return next;
+}
+
+function reserveGuestLinkTracking(guestId = '', token = '', skipTracking = false) {
+    const key = buildGuestLinkTrackingKey(guestId, token);
+    if (skipTracking || !key) {
+        return { shouldTrack: false, key };
+    }
+    if (guestViewTrackedAccessKeys.has(key)) {
+        return { shouldTrack: false, key };
+    }
+
+    const state = pruneGuestLinkTrackingSessionState(readGuestLinkTrackingSessionState());
+    const existing = state[key] || null;
+    if (existing?.status === 'tracked' || existing?.status === 'pending') {
+        guestViewTrackedAccessKeys.add(key);
+        writeGuestLinkTrackingSessionState(state);
+        return { shouldTrack: false, key };
+    }
+
+    state[key] = { status: 'pending', ts: Date.now() };
+    guestViewTrackedAccessKeys.add(key);
+    writeGuestLinkTrackingSessionState(state);
+    return { shouldTrack: true, key };
+}
+
+function finalizeGuestLinkTrackingReservation(key = '', tracked = false) {
+    if (!key) return;
+    const state = pruneGuestLinkTrackingSessionState(readGuestLinkTrackingSessionState());
+    if (tracked) {
+        state[key] = { status: 'tracked', ts: Date.now() };
+        guestViewTrackedAccessKeys.add(key);
+    } else {
+        delete state[key];
+        guestViewTrackedAccessKeys.delete(key);
+    }
+    writeGuestLinkTrackingSessionState(state);
 }
 
 function stopGuestViewLiveRefresh() {
@@ -7975,6 +8056,7 @@ export async function initializeGuestView(guestId, options = {}) {
     if (!view) return;
     view.classList.add('active');
     const { skipTracking = false, skipLiveSetup = false, prefetchedResult = null } = options;
+    let trackingReservation = { shouldTrack: false, key: '' };
 
     const clearGuestLoadingState = () => {
         document.documentElement.classList.remove('guest-link-pending');
@@ -8022,9 +8104,16 @@ export async function initializeGuestView(guestId, options = {}) {
                 throw new Error("Cloud Function 'getGuestPayments' ist nicht initialisiert.");
             }
 
-            const result = await window.getGuestPayments({ guestId: guestId, token: urlToken, skipTracking });
+            trackingReservation = reserveGuestLinkTracking(guestId, urlToken, skipTracking);
+            const result = await window.getGuestPayments({ guestId: guestId, token: urlToken, skipTracking: !trackingReservation.shouldTrack });
             if (!result.data || result.data.status !== 'success') {
+                if (trackingReservation.shouldTrack) {
+                    finalizeGuestLinkTrackingReservation(trackingReservation.key, false);
+                }
                 throw new Error("Fehler: Ungültige Antwort von getGuestPayments.");
+            }
+            if (trackingReservation.shouldTrack) {
+                finalizeGuestLinkTrackingReservation(trackingReservation.key, true);
             }
             resultData = result.data;
         }
@@ -8645,8 +8734,10 @@ export async function initializeGuestView(guestId, options = {}) {
         }
 
         clearGuestLoadingState();
-
     } catch (e) {
+        if (trackingReservation.shouldTrack) {
+            finalizeGuestLinkTrackingReservation(trackingReservation.key, false);
+        }
         clearGuestLoadingState();
         console.error(e);
         if (e && (e.code === 'functions/permission-denied' || String(e.message || '').toLowerCase().includes('abgelaufen'))) {
