@@ -1,14 +1,24 @@
 {
-  "version": "1.22.23",
-  "buildId": "20260510-2",
+  "version": "1.22.24",
+  "buildId": "20260510-3",
   "releaseDate": "2026-05-10",
-  "releaseTime": "00:19",
+  "releaseTime": "00:50",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Zahlungslink erweitert: Online-Start jetzt mit Auswahl 'via Link' oder 'via QR-Code', EU-Bankliste (AT zuerst) und Bank-Weiterleitung mit vorausgefüllten SEPA-Daten; Wise-Webhook robuster bei Signatur-/Payload-Varianten und Referenz-Erkennung.",
+  "note": "Wise-Webhook-Hotfix: Eingänge werden auch bei unvollständiger Profile/Konto-Konfiguration nicht mehr per 503 verworfen, liefern Delivery-Logs im Fallback-Modus und nutzen zusätzlich Statement-Fallback für automatische Link-Zuordnung.",
   "commitId": "pending",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.24",
+      "buildId": "20260510-3",
+      "releaseDate": "2026-05-10",
+      "releaseTime": "00:50",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Wise-Webhook-Hotfix: Eingänge werden auch bei unvollständiger Profile/Konto-Konfiguration nicht mehr per 503 verworfen, liefern Delivery-Logs im Fallback-Modus und nutzen zusätzlich Statement-Fallback für automatische Link-Zuordnung.",
+      "commitId": "pending",
+      "obligation": "false"
+    },
     {
       "version": "1.22.23",
       "buildId": "20260510-2",
