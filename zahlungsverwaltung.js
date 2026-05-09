@@ -2336,17 +2336,140 @@ function buildSepaCopyText(payment = {}) {
     ].filter(Boolean).join('\n');
 }
 
-function getPopularEuBankLabels() {
+function getPopularEuBankEntries() {
     return [
-        'Sparkasse',
-        'Volksbank/Raiffeisen',
-        'ING',
-        'Erste Bank',
-        'N26',
-        'Revolut',
-        'UniCredit',
-        'Santander',
+        { id: 'at-erstebank', name: 'Erste Bank / Sparkasse', country: 'AT', webUrl: 'https://www.sparkasse.at/' },
+        { id: 'at-raiffeisen', name: 'Raiffeisen Bankengruppe', country: 'AT', webUrl: 'https://www.raiffeisen.at/' },
+        { id: 'at-volksbank', name: 'Volksbank Österreich', country: 'AT', webUrl: 'https://www.volksbank.at/' },
+        { id: 'at-bawag', name: 'BAWAG P.S.K.', country: 'AT', webUrl: 'https://www.bawag.at/' },
+        { id: 'at-bank-austria', name: 'Bank Austria', country: 'AT', webUrl: 'https://www.bankaustria.at/' },
+        { id: 'at-oberbank', name: 'Oberbank', country: 'AT', webUrl: 'https://www.oberbank.at/' },
+        { id: 'at-hypo-noe', name: 'HYPO NOE', country: 'AT', webUrl: 'https://www.hyponoe.at/' },
+        { id: 'at-easybank', name: 'easybank', country: 'AT', webUrl: 'https://www.easybank.at/' },
+        { id: 'at-anadi', name: 'Anadi Bank', country: 'AT', webUrl: 'https://www.anadibank.com/' },
+        { id: 'at-schelhammer', name: 'Schelhammer Capital', country: 'AT', webUrl: 'https://www.schelhammer.at/' },
+
+        { id: 'de-sparkasse', name: 'Sparkasse Deutschland', country: 'DE', webUrl: 'https://www.sparkasse.de/' },
+        { id: 'de-volksbank', name: 'Volksbanken / Raiffeisenbanken', country: 'DE', webUrl: 'https://www.vr.de/' },
+        { id: 'de-ing', name: 'ING Deutschland', country: 'DE', webUrl: 'https://www.ing.de/' },
+        { id: 'de-deutsche-bank', name: 'Deutsche Bank', country: 'DE', webUrl: 'https://www.deutsche-bank.de/' },
+        { id: 'de-commerzbank', name: 'Commerzbank', country: 'DE', webUrl: 'https://www.commerzbank.de/' },
+        { id: 'de-dkb', name: 'DKB', country: 'DE', webUrl: 'https://www.dkb.de/' },
+        { id: 'de-comdirect', name: 'Comdirect', country: 'DE', webUrl: 'https://www.comdirect.de/' },
+        { id: 'de-n26', name: 'N26', country: 'DE', webUrl: 'https://n26.com/' },
+        { id: 'de-postbank', name: 'Postbank', country: 'DE', webUrl: 'https://www.postbank.de/' },
+
+        { id: 'it-unicredit', name: 'UniCredit Italia', country: 'IT', webUrl: 'https://www.unicredit.it/' },
+        { id: 'it-intesa', name: 'Intesa Sanpaolo', country: 'IT', webUrl: 'https://www.intesasanpaolo.com/' },
+        { id: 'it-poste', name: 'Poste Italiane / BancoPosta', country: 'IT', webUrl: 'https://www.poste.it/' },
+        { id: 'it-bpm', name: 'Banco BPM', country: 'IT', webUrl: 'https://www.bancobpm.it/' },
+        { id: 'it-bper', name: 'BPER Banca', country: 'IT', webUrl: 'https://www.bper.it/' },
+
+        { id: 'es-santander', name: 'Santander', country: 'ES', webUrl: 'https://www.bancosantander.es/' },
+        { id: 'es-bbva', name: 'BBVA', country: 'ES', webUrl: 'https://www.bbva.es/' },
+        { id: 'es-caixabank', name: 'CaixaBank', country: 'ES', webUrl: 'https://www.caixabank.es/' },
+        { id: 'es-sabadell', name: 'Banco Sabadell', country: 'ES', webUrl: 'https://www.bancsabadell.com/' },
+
+        { id: 'fr-bnp', name: 'BNP Paribas', country: 'FR', webUrl: 'https://mabanque.bnpparibas/' },
+        { id: 'fr-ca', name: 'Crédit Agricole', country: 'FR', webUrl: 'https://www.credit-agricole.fr/' },
+        { id: 'fr-socgen', name: 'Société Générale', country: 'FR', webUrl: 'https://particuliers.sg.fr/' },
+        { id: 'fr-cm', name: 'Crédit Mutuel', country: 'FR', webUrl: 'https://www.creditmutuel.fr/' },
+
+        { id: 'nl-ing', name: 'ING Nederland', country: 'NL', webUrl: 'https://www.ing.nl/' },
+        { id: 'nl-rabobank', name: 'Rabobank', country: 'NL', webUrl: 'https://www.rabobank.nl/' },
+        { id: 'nl-abnamro', name: 'ABN AMRO', country: 'NL', webUrl: 'https://www.abnamro.nl/' },
+        { id: 'nl-bunq', name: 'bunq', country: 'NL', webUrl: 'https://www.bunq.com/' },
+
+        { id: 'be-kbc', name: 'KBC', country: 'BE', webUrl: 'https://www.kbc.be/' },
+        { id: 'be-belfius', name: 'Belfius', country: 'BE', webUrl: 'https://www.belfius.be/' },
+        { id: 'be-ing', name: 'ING België', country: 'BE', webUrl: 'https://www.ing.be/' },
+        { id: 'be-fortis', name: 'BNP Paribas Fortis', country: 'BE', webUrl: 'https://www.bnpparibasfortis.be/' },
+
+        { id: 'pt-cgd', name: 'Caixa Geral de Depósitos', country: 'PT', webUrl: 'https://www.cgd.pt/' },
+        { id: 'pt-millennium', name: 'Millennium bcp', country: 'PT', webUrl: 'https://ind.millenniumbcp.pt/' },
+        { id: 'pt-novobanco', name: 'Novo Banco', country: 'PT', webUrl: 'https://www.novobanco.pt/' },
+
+        { id: 'ie-aib', name: 'AIB', country: 'IE', webUrl: 'https://aib.ie/' },
+        { id: 'ie-boi', name: 'Bank of Ireland', country: 'IE', webUrl: 'https://www.bankofireland.com/' },
+        { id: 'ie-ptsb', name: 'Permanent TSB', country: 'IE', webUrl: 'https://www.permanenttsb.ie/' },
+
+        { id: 'lu-spuerkeess', name: 'Spuerkeess', country: 'LU', webUrl: 'https://www.spuerkeess.lu/' },
+        { id: 'lu-bgl', name: 'BGL BNP Paribas', country: 'LU', webUrl: 'https://www.bgl.lu/' },
+
+        { id: 'pl-pkobp', name: 'PKO Bank Polski', country: 'PL', webUrl: 'https://www.pkobp.pl/' },
+        { id: 'pl-mbank', name: 'mBank', country: 'PL', webUrl: 'https://www.mbank.pl/' },
+        { id: 'pl-santander', name: 'Santander Bank Polska', country: 'PL', webUrl: 'https://www.santander.pl/' },
+        { id: 'pl-pekao', name: 'Bank Pekao', country: 'PL', webUrl: 'https://www.pekao.com.pl/' },
+
+        { id: 'cz-cs', name: 'Česká spořitelna', country: 'CZ', webUrl: 'https://www.csas.cz/' },
+        { id: 'cz-csob', name: 'ČSOB', country: 'CZ', webUrl: 'https://www.csob.cz/' },
+        { id: 'cz-kb', name: 'Komerční banka', country: 'CZ', webUrl: 'https://www.kb.cz/' },
+
+        { id: 'sk-slsp', name: 'Slovenská sporiteľňa', country: 'SK', webUrl: 'https://www.slsp.sk/' },
+        { id: 'sk-vub', name: 'VÚB banka', country: 'SK', webUrl: 'https://www.vub.sk/' },
+        { id: 'sk-tatra', name: 'Tatra banka', country: 'SK', webUrl: 'https://www.tatrabanka.sk/' },
+
+        { id: 'hu-otp', name: 'OTP Bank', country: 'HU', webUrl: 'https://www.otpbank.hu/' },
+        { id: 'si-nlb', name: 'NLB', country: 'SI', webUrl: 'https://www.nlb.si/' },
+        { id: 'si-nkbm', name: 'NKBM', country: 'SI', webUrl: 'https://www.nkbm.si/' },
+        { id: 'hr-zaba', name: 'Zagrebačka banka', country: 'HR', webUrl: 'https://www.zaba.hr/' },
+        { id: 'hr-pbz', name: 'Privredna banka Zagreb', country: 'HR', webUrl: 'https://www.pbz.hr/' },
+        { id: 'hr-erste', name: 'Erste Bank Hrvatska', country: 'HR', webUrl: 'https://www.erstebank.hr/' },
+
+        { id: 'ro-bt', name: 'Banca Transilvania', country: 'RO', webUrl: 'https://www.bancatransilvania.ro/' },
+        { id: 'ro-bcr', name: 'BCR', country: 'RO', webUrl: 'https://www.bcr.ro/' },
+        { id: 'ro-brd', name: 'BRD', country: 'RO', webUrl: 'https://www.brd.ro/' },
+        { id: 'bg-dsk', name: 'DSK Bank', country: 'BG', webUrl: 'https://dskbank.bg/' },
+        { id: 'bg-unicredit', name: 'UniCredit Bulbank', country: 'BG', webUrl: 'https://www.unicreditbulbank.bg/' },
+
+        { id: 'gr-nbg', name: 'National Bank of Greece', country: 'GR', webUrl: 'https://www.nbg.gr/' },
+        { id: 'gr-piraeus', name: 'Piraeus Bank', country: 'GR', webUrl: 'https://www.piraeusbank.gr/' },
+        { id: 'gr-alpha', name: 'Alpha Bank', country: 'GR', webUrl: 'https://www.alpha.gr/' },
+        { id: 'cy-boc', name: 'Bank of Cyprus', country: 'CY', webUrl: 'https://www.bankofcyprus.com/' },
+        { id: 'cy-hellenic', name: 'Hellenic Bank', country: 'CY', webUrl: 'https://www.hellenicbank.com/' },
+        { id: 'mt-bov', name: 'Bank of Valletta', country: 'MT', webUrl: 'https://www.bov.com/' },
+        { id: 'mt-hsbc', name: 'HSBC Malta', country: 'MT', webUrl: 'https://www.hsbc.com.mt/' },
+
+        { id: 'ee-swedbank', name: 'Swedbank Eesti', country: 'EE', webUrl: 'https://www.swedbank.ee/' },
+        { id: 'ee-seb', name: 'SEB Eesti', country: 'EE', webUrl: 'https://www.seb.ee/' },
+        { id: 'lv-swedbank', name: 'Swedbank Latvija', country: 'LV', webUrl: 'https://www.swedbank.lv/' },
+        { id: 'lv-seb', name: 'SEB Latvija', country: 'LV', webUrl: 'https://www.seb.lv/' },
+        { id: 'lt-swedbank', name: 'Swedbank Lietuva', country: 'LT', webUrl: 'https://www.swedbank.lt/' },
+        { id: 'lt-seb', name: 'SEB Lietuva', country: 'LT', webUrl: 'https://www.seb.lt/' },
+
+        { id: 'fi-op', name: 'OP Financial Group', country: 'FI', webUrl: 'https://www.op.fi/' },
+        { id: 'fi-nordea', name: 'Nordea Finland', country: 'FI', webUrl: 'https://www.nordea.fi/' },
+        { id: 'dk-danske', name: 'Danske Bank', country: 'DK', webUrl: 'https://danskebank.dk/' },
+        { id: 'dk-nordea', name: 'Nordea Danmark', country: 'DK', webUrl: 'https://www.nordea.dk/' },
+        { id: 'se-swedbank', name: 'Swedbank Sverige', country: 'SE', webUrl: 'https://www.swedbank.se/' },
+        { id: 'se-seb', name: 'SEB Sverige', country: 'SE', webUrl: 'https://seb.se/' },
     ];
+}
+
+function formatGuestBankOptionLabel(bankEntry = {}) {
+    const country = String(bankEntry?.country || '').trim().toUpperCase();
+    const name = String(bankEntry?.name || 'Banking-App').trim();
+    return country ? `${country} · ${name}` : name;
+}
+
+function buildGuestOnlineBankRedirectTarget(payment = {}, bankEntry = {}) {
+    const data = buildSepaPaymentPayload(payment);
+    const query = new URLSearchParams({
+        iban: data.iban,
+        bic: data.bic,
+        name: data.accountHolder,
+        amount: data.amount.toFixed(2),
+        reference: data.reference,
+        purpose: data.purpose,
+    });
+
+    const fallbackUrl = String(bankEntry?.webUrl || '').trim()
+        || `https://www.google.com/search?q=${encodeURIComponent(`${formatGuestBankOptionLabel(bankEntry)} Online Banking`)}`;
+
+    return {
+        appUrl: `sepa://payment?${query.toString()}`,
+        fallbackUrl,
+    };
 }
 
 function renderSepaQrCode(container, payment = {}) {
@@ -10109,7 +10232,7 @@ export async function initializeGuestView(guestId, options = {}) {
             const paidAmount = normalizeMoney(paymentLinkData.paidAmount);
             const remainingAmount = normalizeMoney(paymentLinkData.remainingAmount);
             const overpaymentState = getOnlineOverpaymentDecisionState(paymentLinkData.pendingOverpayment || {});
-            const popularBanks = getPopularEuBankLabels();
+            const popularBanks = getPopularEuBankEntries();
             const paymentTargetsById = new Map(
                 (Array.isArray(paymentLinkData.paymentTargets) ? paymentLinkData.paymentTargets : []).map((entry) => [String(entry?.paymentId || ''), entry || {}])
             );
@@ -10226,20 +10349,28 @@ export async function initializeGuestView(guestId, options = {}) {
                         <div id="guest-online-start-panel" class="hidden rounded-lg bg-white/90 border border-cyan-200 p-3 text-[11px] text-gray-700 space-y-3">
                             <div>
                                 <div class="font-bold text-cyan-900">Online-Zahlung starten</div>
-                                <div class="text-cyan-700">Öffne deine Banking-App, scanne den QR-Code oder übernimm die vorausgefüllten Daten.</div>
+                                <div class="text-cyan-700">Wähle zuerst die Startmethode: direkt via Link zur Bank oder via QR-Code.</div>
                             </div>
-                            <div>
-                                <div class="mb-2 text-[11px] font-bold text-gray-700">Bank auswählen</div>
-                                <div id="guest-online-bank-list" class="flex flex-wrap gap-1.5">
-                                    ${popularBanks.map((bank, index) => `<button type="button" class="guest-online-bank-btn px-2 py-1 rounded border text-[10px] font-bold ${index === 0 ? 'border-cyan-400 bg-cyan-600 text-white' : 'border-cyan-200 bg-white text-cyan-700'}" data-bank-name="${bank}">${bank}</button>`).join('')}
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <button id="guest-online-method-link-btn" type="button" class="py-2 px-3 rounded-lg border border-cyan-400 bg-cyan-600 text-white text-xs font-bold transition">via Link</button>
+                                <button id="guest-online-method-qr-btn" type="button" class="py-2 px-3 rounded-lg border border-cyan-300 bg-white text-cyan-700 text-xs font-bold transition hover:bg-cyan-50">via QR-Code</button>
+                            </div>
+                            <div id="guest-online-link-panel" class="space-y-3">
+                                <div>
+                                    <div class="mb-2 text-[11px] font-bold text-gray-700">Schritt 1: Bank auswählen (EU-Raum, Österreich zuerst)</div>
+                                    <div id="guest-online-bank-list" class="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto pr-1">
+                                        ${popularBanks.map((bank, index) => `<button type="button" class="guest-online-bank-btn px-2 py-1 rounded border text-[10px] font-bold ${index === 0 ? 'border-cyan-400 bg-cyan-600 text-white' : 'border-cyan-200 bg-white text-cyan-700'}" data-bank-id="${escapeHtmlInline(bank.id || '')}">${escapeHtmlInline(formatGuestBankOptionLabel(bank))}</button>`).join('')}
+                                    </div>
                                 </div>
+                                <div class="rounded-lg border border-cyan-100 bg-cyan-50 p-2">
+                                    <div class="text-[10px] uppercase tracking-wide text-cyan-700 font-bold">Aktuelle Auswahl</div>
+                                    <div id="guest-online-selected-bank" class="text-sm font-bold text-cyan-900 mt-1">${escapeHtmlInline(formatGuestBankOptionLabel(popularBanks[0] || { name: 'Banking-App' }))}</div>
+                                    <div id="guest-online-selected-instruction" class="text-[11px] text-gray-600 mt-1">${selectedInstruction ? `${selectedInstruction.title} • ${selectedInstruction.amount.toFixed(2)} €` : 'Keine Gesamtzahlung verfügbar'}</div>
+                                </div>
+                                <button id="guest-online-open-bank-btn" type="button" class="w-full rounded-lg bg-cyan-600 px-3 py-2 text-xs font-bold text-white hover:bg-cyan-700 ${canStartOnlinePayment ? '' : 'opacity-50 cursor-not-allowed'}" ${canStartOnlinePayment ? '' : 'disabled'}>Schritt 2: Zur Bank-App mit vorausgefüllten Daten</button>
+                                <div class="rounded-lg border border-cyan-100 bg-white px-3 py-2 text-[10px] text-gray-600">Die SEPA-Daten werden zusätzlich in die Zwischenablage kopiert. Falls deine Bank den Direktlink nicht unterstützt, öffnet sich die Bank-Website als Fallback.</div>
                             </div>
-                            <div class="rounded-lg border border-cyan-100 bg-cyan-50 p-2">
-                                <div class="text-[10px] uppercase tracking-wide text-cyan-700 font-bold">Aktuelle Auswahl</div>
-                                <div id="guest-online-selected-bank" class="text-sm font-bold text-cyan-900 mt-1">${popularBanks[0] || 'Banking-App'}</div>
-                                <div id="guest-online-selected-instruction" class="text-[11px] text-gray-600 mt-1">${selectedInstruction ? `${selectedInstruction.title} • ${selectedInstruction.amount.toFixed(2)} €` : 'Keine Gesamtzahlung verfügbar'}</div>
-                            </div>
-                            <div class="flex flex-col items-center gap-2 rounded-lg border border-dashed border-cyan-300 bg-white p-3">
+                            <div id="guest-online-qr-panel" class="hidden flex flex-col items-center gap-2 rounded-lg border border-dashed border-cyan-300 bg-white p-3">
                                 <div id="guest-sepa-qr-code" class="min-h-[168px] flex items-center justify-center"></div>
                                 <div class="text-center text-[11px] text-gray-500">SEPA/EPC-QR mit vorausgefüllter IBAN, Gesamtbetrag und Verwendungszweck</div>
                             </div>
@@ -10262,10 +10393,16 @@ export async function initializeGuestView(guestId, options = {}) {
             const manualModeBtn = onlineBox.querySelector('#guest-manual-mode-btn');
             const onlineModeBtn = onlineBox.querySelector('#guest-online-mode-btn');
             const closeOnlineBtn = onlineBox.querySelector('#guest-close-online-payment-btn');
+            const onlineMethodLinkBtn = onlineBox.querySelector('#guest-online-method-link-btn');
+            const onlineMethodQrBtn = onlineBox.querySelector('#guest-online-method-qr-btn');
+            const onlineLinkPanel = onlineBox.querySelector('#guest-online-link-panel');
+            const onlineQrPanel = onlineBox.querySelector('#guest-online-qr-panel');
+            const openBankBtn = onlineBox.querySelector('#guest-online-open-bank-btn');
             const selectedBankLabel = onlineBox.querySelector('#guest-online-selected-bank');
             const selectedInstructionLabel = onlineBox.querySelector('#guest-online-selected-instruction');
             const qrContainer = onlineBox.querySelector('#guest-sepa-qr-code');
             let currentSepaPaymentData = buildSepaPaymentData(selectedInstruction);
+            let selectedBankEntry = popularBanks[0] || { id: 'generic-bank', name: 'Banking-App', country: '' };
 
             const bindManualCopyButtons = () => {
                 onlineBox.querySelectorAll('[data-guest-manual-copy]').forEach((button) => {
@@ -10293,13 +10430,52 @@ export async function initializeGuestView(guestId, options = {}) {
                 onlineModeBtn?.classList.toggle('text-emerald-700', !isOnline);
             };
 
+            const activateOnlineLaunchMode = (mode) => {
+                const targetMode = mode === 'qr' ? 'qr' : 'link';
+                const isQr = targetMode === 'qr';
+                onlineLinkPanel?.classList.toggle('hidden', isQr);
+                onlineQrPanel?.classList.toggle('hidden', !isQr);
+
+                onlineMethodLinkBtn?.classList.toggle('bg-cyan-600', !isQr);
+                onlineMethodLinkBtn?.classList.toggle('text-white', !isQr);
+                onlineMethodLinkBtn?.classList.toggle('border-cyan-400', !isQr);
+                onlineMethodLinkBtn?.classList.toggle('bg-white', isQr);
+                onlineMethodLinkBtn?.classList.toggle('text-cyan-700', isQr);
+                onlineMethodLinkBtn?.classList.toggle('border-cyan-300', isQr);
+
+                onlineMethodQrBtn?.classList.toggle('bg-cyan-600', isQr);
+                onlineMethodQrBtn?.classList.toggle('text-white', isQr);
+                onlineMethodQrBtn?.classList.toggle('border-cyan-400', isQr);
+                onlineMethodQrBtn?.classList.toggle('bg-white', !isQr);
+                onlineMethodQrBtn?.classList.toggle('text-cyan-700', !isQr);
+                onlineMethodQrBtn?.classList.toggle('border-cyan-300', !isQr);
+            };
+
+            const renderSelectedBank = () => {
+                if (selectedBankLabel) {
+                    selectedBankLabel.textContent = formatGuestBankOptionLabel(selectedBankEntry);
+                }
+                onlineBox.querySelectorAll('.guest-online-bank-btn').forEach((entry) => {
+                    const buttonBankId = String(entry.getAttribute('data-bank-id') || '').trim();
+                    const isActive = buttonBankId && selectedBankEntry && buttonBankId === String(selectedBankEntry.id || '');
+                    entry.classList.toggle('border-cyan-400', isActive);
+                    entry.classList.toggle('bg-cyan-600', isActive);
+                    entry.classList.toggle('text-white', isActive);
+                    entry.classList.toggle('border-cyan-200', !isActive);
+                    entry.classList.toggle('bg-white', !isActive);
+                    entry.classList.toggle('text-cyan-700', !isActive);
+                });
+            };
+
             activatePaymentMode('manual');
+            activateOnlineLaunchMode('link');
             bindManualCopyButtons();
             if (selectedInstructionLabel) {
                 selectedInstructionLabel.textContent = selectedInstruction
                     ? `${selectedInstruction.title} • ${selectedInstruction.amount.toFixed(2)} €`
                     : 'Keine Gesamtzahlung verfügbar';
             }
+            renderSelectedBank();
             if (qrContainer) {
                 qrContainer.innerHTML = '';
                 if (canStartOnlinePayment && selectedInstruction) {
@@ -10328,17 +10504,50 @@ export async function initializeGuestView(guestId, options = {}) {
             manualModeBtn?.addEventListener('click', () => activatePaymentMode('manual'));
             onlineModeBtn?.addEventListener('click', () => activatePaymentMode('online'));
 
+            onlineMethodLinkBtn?.addEventListener('click', () => activateOnlineLaunchMode('link'));
+            onlineMethodQrBtn?.addEventListener('click', () => activateOnlineLaunchMode('qr'));
+
             onlineBox.querySelectorAll('.guest-online-bank-btn').forEach((button) => {
                 button.addEventListener('click', () => {
-                    const bankName = button.getAttribute('data-bank-name') || 'Banking-App';
-                    if (selectedBankLabel) selectedBankLabel.textContent = bankName;
-                    onlineBox.querySelectorAll('.guest-online-bank-btn').forEach((entry) => {
-                        entry.classList.remove('border-cyan-400', 'bg-cyan-600', 'text-white');
-                        entry.classList.add('border-cyan-200', 'bg-white', 'text-cyan-700');
-                    });
-                    button.classList.remove('border-cyan-200', 'bg-white', 'text-cyan-700');
-                    button.classList.add('border-cyan-400', 'bg-cyan-600', 'text-white');
+                    const bankId = String(button.getAttribute('data-bank-id') || '').trim();
+                    const nextBank = popularBanks.find((entry) => String(entry?.id || '') === bankId);
+                    if (!nextBank) return;
+                    selectedBankEntry = nextBank;
+                    renderSelectedBank();
                 });
+            });
+
+            openBankBtn?.addEventListener('click', async () => {
+                if (!canStartOnlinePayment || !selectedInstruction) return;
+
+                const redirectTarget = buildGuestOnlineBankRedirectTarget(currentSepaPaymentData, selectedBankEntry);
+                const manualCopyText = buildSepaCopyText({
+                    ...currentSepaPaymentData,
+                    bankName: selectedBankEntry?.name || bankInfo.bankName || '',
+                });
+
+                await copyTextToClipboardSafe(manualCopyText);
+                const launchUrl = String(redirectTarget.appUrl || '').trim();
+                const fallbackUrl = String(redirectTarget.fallbackUrl || '').trim();
+
+                if (!launchUrl && !fallbackUrl) {
+                    alertUser('Keine Weiterleitungs-URL für diese Bank verfügbar.', 'error');
+                    return;
+                }
+
+                if (launchUrl) {
+                    window.location.href = launchUrl;
+                    if (fallbackUrl) {
+                        window.setTimeout(() => {
+                            if (document.visibilityState === 'visible') {
+                                window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
+                            }
+                        }, 1000);
+                    }
+                    return;
+                }
+
+                window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
             });
 
             onlineBox.querySelector('#guest-mark-paid-btn')?.addEventListener('click', async () => {
