@@ -1657,7 +1657,22 @@ async function initializeFirebase() {
                 window.closeOnlinePaymentLink = httpsCallable(functions, 'closeOnlinePaymentLink');
                 window.guestMarkOnlinePaymentInProgress = httpsCallable(functions, 'guestMarkOnlinePaymentInProgress');
                 window.guestAddOnlinePaymentPost = httpsCallable(functions, 'guestAddOnlinePaymentPost');
-                window.guestRemoveOnlinePaymentPost = httpsCallable(functions, 'guestRemoveOnlinePaymentPost');
+                const guestRemoveOnlinePaymentPostPrimary = httpsCallable(functions, 'guestRemoveOnlinePaymentPost');
+                const functionsEuropeWest = getFunctions(app, 'europe-west1');
+                const guestRemoveOnlinePaymentPostEurope = httpsCallable(functionsEuropeWest, 'guestRemoveOnlinePaymentPost');
+                window.guestRemoveOnlinePaymentPost = async (payload) => {
+                    try {
+                        return await guestRemoveOnlinePaymentPostPrimary(payload);
+                    } catch (error) {
+                        const code = String(error?.code || '').toLowerCase();
+                        const message = String(error?.message || '').toLowerCase();
+                        const shouldRetryEurope = code === 'functions/not-found'
+                            || code === 'functions/internal'
+                            || message === 'internal';
+                        if (!shouldRetryEurope) throw error;
+                        return guestRemoveOnlinePaymentPostEurope(payload);
+                    }
+                };
                 window.guestResolveOnlinePaymentOverpayment = httpsCallable(functions, 'guestResolveOnlinePaymentOverpayment');
                 window.resolveOnlinePaymentOverpaymentByOwner = httpsCallable(functions, 'resolveOnlinePaymentOverpaymentByOwner');
 

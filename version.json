@@ -1,14 +1,24 @@
 {
-  "version": "1.22.16",
-  "buildId": "20260509-2",
+  "version": "1.22.17",
+  "buildId": "20260509-3",
   "releaseDate": "2026-05-09",
-  "releaseTime": "11:18",
+  "releaseTime": "12:58",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Gast-Zusatzpositionen im Zahlungslink können jetzt per Antippen entfernt werden (nur offen/unbezahlt), zeigen einen Ablauf-Countdown (7 Tage) und bleiben bei Zahlung dauerhaft sichtbar; abgelaufene unbezahlte Positionen werden ausgegraut, Teilzahlungen werden als Betragskorrektur mit Durchstreichung dargestellt.",
-  "commitId": "a8c35f9",
+  "note": "Gast-Zusatzpositionen öffnen jetzt bei Antippen immer die Detailansicht mit Entfernen-Button im Modal; zusätzlich wurden Backend-Fehler beim Entfernen (internal/CORS) robuster abgefangen und klarer gemeldet.",
+  "commitId": "48a210e",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.17",
+      "buildId": "20260509-3",
+      "releaseDate": "2026-05-09",
+      "releaseTime": "12:58",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Gast-Zusatzpositionen öffnen jetzt bei Antippen immer die Detailansicht mit Entfernen-Button im Modal; zusätzlich wurden Backend-Fehler beim Entfernen (internal/CORS) robuster abgefangen und klarer gemeldet.",
+      "commitId": "48a210e",
+      "obligation": "false"
+    },
     {
       "version": "1.22.16",
       "buildId": "20260509-2",

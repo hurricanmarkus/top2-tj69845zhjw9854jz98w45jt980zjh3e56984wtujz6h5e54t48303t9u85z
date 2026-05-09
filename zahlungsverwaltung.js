@@ -1370,6 +1370,23 @@ function resolveGuestAdditionalPostSourceId(payment) {
     return id;
 }
 
+function getGuestAdditionalPostRemovalErrorMessage(error) {
+    const code = String(error?.code || '').trim().toLowerCase();
+    const message = String(error?.message || '').trim();
+    const normalizedMessage = message.toLowerCase();
+
+    if (code === 'functions/not-found') {
+        return 'Entfernen ist noch nicht verfügbar: Cloud Function guestRemoveOnlinePaymentPost ist nicht deployed.';
+    }
+
+    if (code === 'functions/internal' || normalizedMessage === 'internal') {
+        return 'Entfernen momentan nicht möglich (Backend/CORS-Fehler). Bitte Firebase Functions neu deployen und Seite neu laden.';
+    }
+
+    if (message) return message;
+    return 'Zusatzposition konnte nicht entfernt werden.';
+}
+
 function getOnlineLinkSelectionModeLabel(mode = '') {
     const token = String(mode || '').trim().toLowerCase();
     if (token === 'all') return 'Alle';
@@ -8396,6 +8413,39 @@ export async function initializeGuestView(guestId, options = {}) {
                 listContainer.innerHTML = '<div class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-4 text-center text-sm font-medium text-gray-500">Kein offener Eintrag gefunden</div>';
             }
 
+            const removeGuestAdditionalPost = async (payment) => {
+                if (!window.guestRemoveOnlinePaymentPost) {
+                    alertUser('Entfernen-Funktion ist nicht verfügbar.', 'error');
+                    return false;
+                }
+                if (!paymentLinkData?.id || !urlToken) {
+                    alertUser('Linkdaten fehlen. Bitte neu laden.', 'error');
+                    return false;
+                }
+
+                const additionalPostId = resolveGuestAdditionalPostSourceId(payment);
+                if (!additionalPostId) {
+                    alertUser('Zusatzposition-ID fehlt. Bitte neu laden.', 'error');
+                    return false;
+                }
+
+                try {
+                    await window.guestRemoveOnlinePaymentPost({
+                        linkId: paymentLinkData.id,
+                        token: urlToken,
+                        additionalPostId,
+                    });
+                    alertUser('Zusatzposition entfernt.', 'success');
+                    closeGuestDetailModal();
+                    await initializeGuestView(guestId, { skipTracking: true });
+                    return true;
+                } catch (error) {
+                    console.error(error);
+                    alertUser(getGuestAdditionalPostRemovalErrorMessage(error), 'error');
+                    return false;
+                }
+            };
+
             // 1. RENDER AKTIVE ITEMS
             activeItems.forEach(p => {
                 const isUnknownAmount = p.isTBD === true;
@@ -8460,8 +8510,12 @@ export async function initializeGuestView(guestId, options = {}) {
                 }
 
                 const lifecycleHtml = lifecycleMeta?.text
-                    ? `<p class="text-[10px] ${lifecycleMeta.className}">${lifecycleMeta.text}${isRemovableAdditionalPost ? ' • antippen zum Entfernen' : ''}</p>`
+                    ? `<p class="text-[10px] ${lifecycleMeta.className}">${lifecycleMeta.text}${isRemovableAdditionalPost ? ' • im Detail entfernbar' : ''}</p>`
                     : '';
+
+                const removeAction = isRemovableAdditionalPost
+                    ? async () => removeGuestAdditionalPost(p)
+                    : null;
 
                 div.innerHTML = `
                     <div>
@@ -8471,33 +8525,10 @@ export async function initializeGuestView(guestId, options = {}) {
                     </div>
                     ${amountHtml}
                 `;
-                div.onclick = async () => {
-                    if (isRemovableAdditionalPost) {
-                        if (!window.guestRemoveOnlinePaymentPost) {
-                            alertUser('Entfernen-Funktion ist nicht verfügbar.', 'error');
-                            return;
-                        }
-                        if (!paymentLinkData?.id || !urlToken) {
-                            alertUser('Linkdaten fehlen. Bitte neu laden.', 'error');
-                            return;
-                        }
-                        const confirmDelete = window.confirm('Diese Zusatzposition wirklich entfernen?');
-                        if (!confirmDelete) return;
-                        try {
-                            await window.guestRemoveOnlinePaymentPost({
-                                linkId: paymentLinkData.id,
-                                token: urlToken,
-                                additionalPostId: resolveGuestAdditionalPostSourceId(p),
-                            });
-                            alertUser('Zusatzposition entfernt.', 'success');
-                            await initializeGuestView(guestId, { skipTracking: true });
-                        } catch (error) {
-                            console.error(error);
-                            alertUser(error?.message || 'Zusatzposition konnte nicht entfernt werden.', 'error');
-                        }
-                        return;
-                    }
-                    openGuestDetailModal(p);
+                div.onclick = () => {
+                    openGuestDetailModal(p, {
+                        onRemove: removeAction,
+                    });
                 };
                 listContainer.appendChild(div);
             });
@@ -8964,7 +8995,7 @@ export async function initializeGuestView(guestId, options = {}) {
 
 // --- NEU: HILFSFUNKTIONEN FÜR GAST-DETAILS ---
 
-function openGuestDetailModal(p) {
+function openGuestDetailModal(p, options = {}) {
     const modal = document.getElementById('guestDetailModal');
     const content = document.getElementById('guest-detail-content');
     
@@ -9100,6 +9131,10 @@ function openGuestDetailModal(p) {
     const logIconId = `guest-log-icon-${p.id}`;
 
     const detailsText = String(p.notes || '').trim();
+    const canRemoveAdditionalPost = typeof options?.onRemove === 'function'
+        && isGuestRemovableAdditionalPostInView(p, new Date());
+    const safePaymentIdToken = String(p?.id || 'post').replace(/[^a-zA-Z0-9_-]/g, '');
+    const removeActionButtonId = `guest-remove-additional-post-${safePaymentIdToken}`;
 
     content.innerHTML = `
         <div class="bg-gradient-to-br from-emerald-50 to-white p-4 rounded-xl border border-emerald-100 mb-4 shadow-sm">
@@ -9154,7 +9189,38 @@ function openGuestDetailModal(p) {
             </button>
             <div id="${logContentId}" class="hidden p-3 border-t border-gray-100 max-h-60 overflow-y-auto bg-gray-50">${historyHtml}</div>
         </div>
+
+        ${canRemoveAdditionalPost ? `
+            <div class="mt-4 border-t border-gray-200 pt-4">
+                <button id="${removeActionButtonId}" type="button" class="w-full rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-bold text-red-700 transition hover:bg-red-100">
+                    Zusatzposition entfernen
+                </button>
+                <p class="mt-1 text-center text-[11px] text-gray-500">Nur für offene, unbezahlte Gast-Zusatzpositionen.</p>
+            </div>
+        ` : ''}
     `;
+
+    if (canRemoveAdditionalPost) {
+        const removeButton = document.getElementById(removeActionButtonId);
+        if (removeButton) {
+            removeButton.onclick = async () => {
+                if (removeButton.disabled) return;
+                const originalLabel = removeButton.textContent;
+                removeButton.disabled = true;
+                removeButton.classList.add('opacity-60', 'cursor-not-allowed');
+                removeButton.textContent = 'Entferne…';
+                try {
+                    await options.onRemove(p);
+                } finally {
+                    if (document.body.contains(removeButton)) {
+                        removeButton.disabled = false;
+                        removeButton.classList.remove('opacity-60', 'cursor-not-allowed');
+                        removeButton.textContent = originalLabel;
+                    }
+                }
+            };
+        }
+    }
 
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
