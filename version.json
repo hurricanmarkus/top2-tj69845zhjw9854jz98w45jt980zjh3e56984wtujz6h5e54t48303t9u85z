@@ -1,14 +1,24 @@
 {
-  "version": "1.22.14",
-  "buildId": "20260508-19",
-  "releaseDate": "2026-05-08",
-  "releaseTime": "22:20",
+  "version": "1.22.15",
+  "buildId": "20260509-1",
+  "releaseDate": "2026-05-09",
+  "releaseTime": "10:58",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Gastlink-Aufrufe werden jetzt serverseitig per Session-ID und Zeitfenster dedupliziert, sodass wiederholte Requests nicht mehr mehrfach zählen.",
-  "commitId": "a45b8fa",
+  "note": "Online-Zahlungslink zeigt bei mehreren Positionen jetzt direkte Gesamtzahlung ohne Auswahldialog; Zahlungseingänge werden sequentiell über alle Positionen verteilt und Zusatzpositionen folgen der 7-Tage-Ablauflogik mit automatischer Verbuchung.",
+  "commitId": "e54bf2c",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.15",
+      "buildId": "20260509-1",
+      "releaseDate": "2026-05-09",
+      "releaseTime": "10:58",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Online-Zahlungslink zeigt bei mehreren Positionen jetzt direkte Gesamtzahlung ohne Auswahldialog; Zahlungseingänge werden sequentiell über alle Positionen verteilt und Zusatzpositionen folgen der 7-Tage-Ablauflogik mit automatischer Verbuchung.",
+      "commitId": "e54bf2c",
+      "obligation": "false"
+    },
     {
       "version": "1.22.14",
       "buildId": "20260508-19",

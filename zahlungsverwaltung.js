@@ -1265,7 +1265,11 @@ function isPaymentCollectableViaOnlineLink(payment, guestId = '') {
 
 function isPaymentPayableInGuestView(payment) {
     if (!payment || typeof payment !== 'object') return false;
-    if (payment.isAdditionalPost === true) return true;
+    if (payment.isAdditionalPost === true) {
+        const status = String(payment.status || '').trim().toLowerCase();
+        if (status === 'expired') return false;
+        return true;
+    }
     return String(payment.creditorId || '') === String(payment.createdBy || '');
 }
 
@@ -8261,7 +8265,9 @@ export async function initializeGuestView(guestId, options = {}) {
         if (docsList.length > 0) {
             docsList.forEach(p => {
                 // Filter: Nur Offene (außer Einzel-Link, der zeigt auch erledigte)
-                if (!isSinglePaymentMode && p.status !== 'open' && p.status !== 'pending_approval' && p.status !== 'partially_paid') return;
+                const normalizedStatus = String(p.status || '').toLowerCase();
+                const isExpiredAdditionalPost = p.isAdditionalPost === true && normalizedStatus === 'expired';
+                if (!isSinglePaymentMode && normalizedStatus !== 'open' && normalizedStatus !== 'pending_approval' && normalizedStatus !== 'partially_paid' && !isExpiredAdditionalPost) return;
 
                 // Zeit-Check
                 let isFuture = false;
@@ -8295,16 +8301,25 @@ export async function initializeGuestView(guestId, options = {}) {
             // 1. RENDER AKTIVE ITEMS
             activeItems.forEach(p => {
                 const isUnknownAmount = p.isTBD === true;
-                const amount = isUnknownAmount ? null : parseFloat(p.remainingAmount);
+                const normalizedStatus = String(p.status || '').toLowerCase();
+                const isExpiredAdditionalPost = p.isAdditionalPost === true && normalizedStatus === 'expired';
+                const amount = isUnknownAmount
+                    ? null
+                    : (isExpiredAdditionalPost
+                        ? parseFloat(p.amount ?? p.appliedAmount ?? p.remainingAmount)
+                        : parseFloat(p.remainingAmount));
                 // Logik für Gast-Sicht:
                 // Wenn Ersteller (Admin) = Creditor, dann schulde ICH (Gast) das Geld. -> Rot
                 let isMyDebt = (p.isAdditionalPost === true) || (p.creditorId === p.createdBy);
                 
                 const div = document.createElement('div');
-                div.className = "p-3 bg-white border rounded shadow-sm flex justify-between items-center cursor-pointer hover:bg-indigo-50 transition mb-2";
+                div.className = isExpiredAdditionalPost
+                    ? "p-3 bg-gray-50 border border-gray-300 rounded shadow-sm flex justify-between items-center cursor-pointer transition mb-2 opacity-80"
+                    : "p-3 bg-white border rounded shadow-sm flex justify-between items-center cursor-pointer hover:bg-indigo-50 transition mb-2";
                 
                 let textInfo = isMyDebt ? "Du schuldest" : "Du bekommst";
                 if(isSinglePaymentMode && p.status === 'paid') textInfo = "✅ Erledigt";
+                if (isExpiredAdditionalPost) textInfo = "Abgelaufen";
 
                 let amountHtml = '';
                 if (isUnknownAmount) {
@@ -8316,7 +8331,7 @@ export async function initializeGuestView(guestId, options = {}) {
                 } else {
                     const safeAmount = Number.isFinite(amount) ? amount : 0;
                     amountHtml = `
-                        <span class="font-mono font-bold ${isMyDebt ? 'text-red-600' : 'text-green-600'}">
+                        <span class="font-mono font-bold ${isExpiredAdditionalPost ? 'text-gray-500' : (isMyDebt ? 'text-red-600' : 'text-green-600')}">
                             ${safeAmount.toFixed(2)} €
                         </span>
                     `;
@@ -8452,7 +8467,7 @@ export async function initializeGuestView(guestId, options = {}) {
                 if (targetCode) return targetCode;
 
                 const linkCode = String(paymentLinkData.referenceCode || '').trim().toUpperCase();
-                if (linkCode && (!Array.isArray(paymentLinkData.paymentIds) || paymentLinkData.paymentIds.length <= 1)) return linkCode;
+                if (linkCode) return linkCode;
                 return '';
             };
             const payableItems = activeItems
@@ -8465,10 +8480,17 @@ export async function initializeGuestView(guestId, options = {}) {
                     amount: normalizeMoney(payment.remainingAmount),
                     referenceCode: resolveInstructionReferenceCode(payment),
                     shortId: getOnlinePaymentReferenceShortId(payment),
-                }))
-                .filter((payment) => payment.referenceCode);
-            let selectedInstruction = payableItems[0] || null;
+                }));
             const payableTotal = payableItems.reduce((sum, item) => sum + normalizeMoney(item.amount), 0);
+            const aggregateReferenceCode = normalizeOnlinePaymentReferenceCode(paymentLinkData.referenceCode || payableItems[0]?.referenceCode || '');
+            const aggregateAmount = remainingAmount > 0.001 ? remainingAmount : payableTotal;
+            let selectedInstruction = {
+                id: 'total-payment',
+                title: paymentLinkData.title || 'Gesamtzahlung',
+                amount: aggregateAmount,
+                referenceCode: aggregateReferenceCode,
+                shortId: aggregateReferenceCode ? aggregateReferenceCode.slice(-4) : '',
+            };
             const overpaymentHtml = overpaymentState.isPending
                 ? `<div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900 space-y-2">
                         <div class="font-bold text-sm">Überzahlung erkannt: ${overpaymentState.amount.toFixed(2)} €</div>
@@ -8493,9 +8515,15 @@ export async function initializeGuestView(guestId, options = {}) {
                 reference: instruction?.referenceCode || '',
                 purpose: instruction?.title || paymentLinkData.title || 'Online-Zahlung',
             });
-            const showPaymentLauncher = payableTotal > 0.001 && payableItems.length > 0;
+            const showPaymentLauncher = normalizeMoney(selectedInstruction?.amount) > 0.001;
             const shouldShowPaymentWorkspace = !showPaymentLauncher && Boolean(overpaymentHtml);
-            const canStartOnlinePayment = Boolean(bankInfo.accountHolder && bankInfo.iban && selectedInstruction && selectedInstruction.amount > 0);
+            const canStartOnlinePayment = Boolean(
+                bankInfo.accountHolder
+                && bankInfo.iban
+                && selectedInstruction
+                && selectedInstruction.amount > 0
+                && selectedInstruction.referenceCode
+            );
             const buildCopyRow = (label, value, copyValue = '') => `
                 <div class="flex items-start gap-2 rounded-lg border border-emerald-100 bg-white px-3 py-2 text-[11px] text-gray-700">
                     <span class="w-28 shrink-0 font-bold text-gray-800">${label}:</span>
@@ -8528,14 +8556,6 @@ export async function initializeGuestView(guestId, options = {}) {
                             <div class="rounded bg-white/70 p-2 border border-emerald-100"><span class="text-emerald-800 block">Offen</span><span class="font-bold text-orange-700">${remainingAmount.toFixed(2)} €</span></div>
                         </div>
                         ${overpaymentHtml}
-                        ${payableItems.length > 1 ? `
-                            <div class="rounded-lg border border-emerald-100 bg-white/90 p-2 space-y-2">
-                                <div class="text-[11px] font-bold text-gray-700">Schuldeneintrag auswählen</div>
-                                <div id="guest-payment-choice-list" class="flex flex-wrap gap-1.5">
-                                    ${payableItems.map((item, index) => `<button type="button" data-guest-payment-choice="${item.id}" class="guest-payment-choice-btn px-2 py-1 rounded border text-[10px] font-bold ${index === 0 ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-emerald-200 bg-white text-emerald-700'}">#${item.shortId} • ${item.amount.toFixed(2)} €</button>`).join('')}
-                                </div>
-                            </div>
-                        ` : ''}
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             <button id="guest-manual-mode-btn" type="button" class="py-2 px-3 rounded-lg border border-emerald-400 bg-emerald-600 text-white text-xs font-bold transition">Manuell</button>
                             <button id="guest-online-mode-btn" type="button" class="py-2 px-3 rounded-lg border border-emerald-300 bg-white text-emerald-700 text-xs font-bold transition ${canStartOnlinePayment ? 'hover:bg-emerald-100' : 'opacity-50 cursor-not-allowed'}" ${canStartOnlinePayment ? '' : 'disabled'}>Online-Zahlung starten</button>
@@ -8563,13 +8583,13 @@ export async function initializeGuestView(guestId, options = {}) {
                             <div class="rounded-lg border border-cyan-100 bg-cyan-50 p-2">
                                 <div class="text-[10px] uppercase tracking-wide text-cyan-700 font-bold">Aktuelle Auswahl</div>
                                 <div id="guest-online-selected-bank" class="text-sm font-bold text-cyan-900 mt-1">${popularBanks[0] || 'Banking-App'}</div>
-                                <div id="guest-online-selected-instruction" class="text-[11px] text-gray-600 mt-1">${selectedInstruction ? `${selectedInstruction.title} • ${selectedInstruction.amount.toFixed(2)} €` : 'Kein Schuldeneintrag ausgewählt'}</div>
+                                <div id="guest-online-selected-instruction" class="text-[11px] text-gray-600 mt-1">${selectedInstruction ? `${selectedInstruction.title} • ${selectedInstruction.amount.toFixed(2)} €` : 'Keine Gesamtzahlung verfügbar'}</div>
                             </div>
                             <div class="flex flex-col items-center gap-2 rounded-lg border border-dashed border-cyan-300 bg-white p-3">
                                 <div id="guest-sepa-qr-code" class="min-h-[168px] flex items-center justify-center"></div>
-                                <div class="text-center text-[11px] text-gray-500">SEPA/EPC-QR mit vorausgefüllter IBAN, Betrag und Verwendungszweck des ausgewählten Eintrags</div>
+                                <div class="text-center text-[11px] text-gray-500">SEPA/EPC-QR mit vorausgefüllter IBAN, Gesamtbetrag und Verwendungszweck</div>
                             </div>
-                            ${canStartOnlinePayment ? '' : '<div class="text-xs text-red-600 font-semibold">Für den Online-Start fehlen noch vollständige Zielkontodaten.</div>'}
+                            ${canStartOnlinePayment ? '' : '<div class="text-xs text-red-600 font-semibold">Für den Online-Start fehlen vollständige Zielkontodaten oder ein Verwendungszweck-Code.</div>'}
                         </div>
                         <div class="grid grid-cols-1 gap-2">
                             <button id="guest-mark-paid-btn" type="button" class="py-2 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition">Ich habe bezahlt</button>
@@ -8620,47 +8640,18 @@ export async function initializeGuestView(guestId, options = {}) {
             };
 
             activatePaymentMode('manual');
-
-            const updateSelectedInstruction = (instructionId = '') => {
-                const nextInstruction = payableItems.find((item) => item.id === instructionId) || payableItems[0] || null;
-                selectedInstruction = nextInstruction;
-                currentSepaPaymentData = buildSepaPaymentData(selectedInstruction);
-
-                const manualRows = onlineBox.querySelector('#guest-manual-payment-panel');
-                if (manualRows) {
-                    manualRows.innerHTML = `
-                        ${buildCopyRow('IBAN', bankInfo.iban || '—', bankInfo.iban || '')}
-                        ${buildCopyRow('Betrag', selectedInstruction ? `${selectedInstruction.amount.toFixed(2)} €` : '—', selectedInstruction ? `${selectedInstruction.amount.toFixed(2)} €` : '')}
-                        ${buildCopyRow('Empfänger', bankInfo.accountHolder || '—', bankInfo.accountHolder || '')}
-                        ${buildCopyRow('Verwendungszweck', selectedInstruction?.referenceCode || '—', selectedInstruction?.referenceCode || '')}
-                        <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">EXAKT und NUR dies angeben (für automatische Erkennung)</div>
-                        ${buildCopyRow('Bank', bankInfo.bankName || '—', bankInfo.bankName || '')}
-                        ${buildCopyRow('BIC', bankInfo.bic || '—', bankInfo.bic || '')}
-                    `;
-                    bindManualCopyButtons();
+            bindManualCopyButtons();
+            if (selectedInstructionLabel) {
+                selectedInstructionLabel.textContent = selectedInstruction
+                    ? `${selectedInstruction.title} • ${selectedInstruction.amount.toFixed(2)} €`
+                    : 'Keine Gesamtzahlung verfügbar';
+            }
+            if (qrContainer) {
+                qrContainer.innerHTML = '';
+                if (canStartOnlinePayment && selectedInstruction) {
+                    renderSepaQrCode(qrContainer, currentSepaPaymentData);
                 }
-                if (selectedInstructionLabel) {
-                    selectedInstructionLabel.textContent = selectedInstruction ? `${selectedInstruction.title} • ${selectedInstruction.amount.toFixed(2)} €` : 'Kein Schuldeneintrag ausgewählt';
-                }
-                if (qrContainer) {
-                    qrContainer.innerHTML = '';
-                    if (canStartOnlinePayment && selectedInstruction) {
-                        renderSepaQrCode(qrContainer, currentSepaPaymentData);
-                    }
-                }
-
-                onlineBox.querySelectorAll('[data-guest-payment-choice]').forEach((button) => {
-                    const isActive = (button.getAttribute('data-guest-payment-choice') || '') === selectedInstruction?.id;
-                    button.classList.toggle('border-emerald-500', isActive);
-                    button.classList.toggle('bg-emerald-600', isActive);
-                    button.classList.toggle('text-white', isActive);
-                    button.classList.toggle('border-emerald-200', !isActive);
-                    button.classList.toggle('bg-white', !isActive);
-                    button.classList.toggle('text-emerald-700', !isActive);
-                });
-            };
-
-            updateSelectedInstruction(selectedInstruction?.id || '');
+            }
 
             onlineBox.querySelector('#guest-start-payment-btn')?.addEventListener('click', () => {
                 launcher?.classList.add('hidden');
@@ -8682,12 +8673,6 @@ export async function initializeGuestView(guestId, options = {}) {
 
             manualModeBtn?.addEventListener('click', () => activatePaymentMode('manual'));
             onlineModeBtn?.addEventListener('click', () => activatePaymentMode('online'));
-
-            onlineBox.querySelectorAll('[data-guest-payment-choice]').forEach((button) => {
-                button.addEventListener('click', () => {
-                    updateSelectedInstruction(button.getAttribute('data-guest-payment-choice') || '');
-                });
-            });
 
             onlineBox.querySelectorAll('.guest-online-bank-btn').forEach((button) => {
                 button.addEventListener('click', () => {
