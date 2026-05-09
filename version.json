@@ -1,14 +1,34 @@
 {
-  "version": "1.22.18",
-  "buildId": "20260509-4",
+  "version": "1.22.20",
+  "buildId": "20260509-6",
   "releaseDate": "2026-05-09",
-  "releaseTime": "23:24",
+  "releaseTime": "23:50",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Split-Gruppenmaster erweitert: neue Detail-/Bearbeitungsmodale mit Teilnehmer- und Positionssteuerung, offener Zuteilung in Dashboard/Kategorie/Zukunftssummen, Sperren für Untereintrag-Strukturaktionen sowie Ausgleichslogik bei Überzahlung (Umkehr-Eintrag oder Guthaben).",
+  "note": "Gruppenmaster-Ansicht/ Dashboard verbessert: In der Schuldner-Übersicht wird 'Offen' nur bei Restbetrag farbig markiert (sonst ausgegraut), und im Dashboard können abgeschlossene Split-Untereinträge per ausklappbarem Pfeil separat eingeblendet werden.",
   "commitId": "pending",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.20",
+      "buildId": "20260509-6",
+      "releaseDate": "2026-05-09",
+      "releaseTime": "23:50",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Gruppenmaster-Ansicht/ Dashboard verbessert: In der Schuldner-Übersicht wird 'Offen' nur bei Restbetrag farbig markiert (sonst ausgegraut), und im Dashboard können abgeschlossene Split-Untereinträge per ausklappbarem Pfeil separat eingeblendet werden.",
+      "commitId": "pending",
+      "obligation": "false"
+    },
+    {
+      "version": "1.22.19",
+      "buildId": "20260509-5",
+      "releaseDate": "2026-05-09",
+      "releaseTime": "23:45",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Gruppenmaster-Bearbeitung: Gesamtbetrag ist jetzt automatisch aus Positionen berechnet und gesperrt, sobald Positionsdaten vorhanden sind; ohne Positionen bleibt der Gesamtbetrag manuell bearbeitbar.",
+      "commitId": "pending",
+      "obligation": "false"
+    },
     {
       "version": "1.22.18",
       "buildId": "20260509-4",

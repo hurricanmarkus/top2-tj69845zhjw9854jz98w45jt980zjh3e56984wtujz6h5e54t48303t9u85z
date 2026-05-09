@@ -661,12 +661,63 @@ function getSplitGroupEditModeToken(value) {
     return token === 'equal' ? 'equal' : 'manual';
 }
 
+function getSplitGroupEditPreparedPositions() {
+    if (!splitGroupEditState || !Array.isArray(splitGroupEditState.positions)) return [];
+
+    return splitGroupEditState.positions
+        .map((position) => ({
+            name: String(position?.name || '').trim(),
+            price: normalizeMoney(position?.price)
+        }))
+        .filter((position) => position.name && Number.isFinite(position.price));
+}
+
+function getSplitGroupEditTotalControlState() {
+    const sourcePositions = splitGroupEditState && Array.isArray(splitGroupEditState.positions)
+        ? splitGroupEditState.positions
+            .map((position) => ({
+                name: String(position?.name || '').trim(),
+                price: normalizeMoney(position?.price)
+            }))
+        : [];
+    const totalPositions = sourcePositions.filter((position) => position.name || Math.abs(position.price) > 0.009);
+    const cleanedPositions = getSplitGroupEditPreparedPositions();
+    return {
+        cleanedPositions,
+        usesPositionBasedTotal: totalPositions.length > 0,
+        positionTotal: normalizeMoney(totalPositions.reduce((sum, position) => sum + position.price, 0))
+    };
+}
+
+function syncSplitGroupEditTotalInputState() {
+    const totalInput = document.getElementById('split-group-edit-total');
+    if (!totalInput) return;
+
+    const { usesPositionBasedTotal, positionTotal } = getSplitGroupEditTotalControlState();
+
+    totalInput.disabled = usesPositionBasedTotal;
+    totalInput.classList.toggle('bg-gray-100', usesPositionBasedTotal);
+    totalInput.classList.toggle('cursor-not-allowed', usesPositionBasedTotal);
+    totalInput.title = usesPositionBasedTotal
+        ? 'Gesamtbetrag wird automatisch aus den Positionen berechnet.'
+        : '';
+
+    if (usesPositionBasedTotal) {
+        totalInput.value = positionTotal.toFixed(2);
+    }
+}
+
 function getSplitGroupEditFormValues() {
     const totalInput = document.getElementById('split-group-edit-total');
     const parsedTotal = Number.parseFloat(String(totalInput?.value || '').replace(',', '.'));
+    const { usesPositionBasedTotal, positionTotal } = getSplitGroupEditTotalControlState();
+    const resolvedTotal = usesPositionBasedTotal
+        ? positionTotal
+        : (Number.isFinite(parsedTotal) ? normalizeMoney(parsedTotal) : 0);
+
     return {
         title: String(document.getElementById('split-group-edit-title')?.value || '').trim(),
-        totalAmount: Number.isFinite(parsedTotal) ? normalizeMoney(parsedTotal) : 0,
+        totalAmount: resolvedTotal,
         startDate: String(document.getElementById('split-group-edit-start-date')?.value || '').trim(),
         deadline: String(document.getElementById('split-group-edit-deadline')?.value || '').trim() || null,
         categoryId: document.getElementById('split-group-edit-category')?.value || 'cat_misc',
@@ -757,6 +808,13 @@ function renderSplitGroupDetailModal(groupId) {
 
     const participantRows = master.participants.map((entry) => {
         const shortId = String(entry.paymentId || '').slice(-4).toUpperCase();
+        const remainingAmount = normalizeMoney(Math.max(0, entry.remainingAmount));
+        const hasOpenAmount = remainingAmount > 0.009;
+        const openBoxClass = hasOpenAmount
+            ? 'rounded border border-orange-200 bg-orange-50 px-2 py-1'
+            : 'rounded border border-gray-200 bg-gray-100 px-2 py-1';
+        const openLabelClass = hasOpenAmount ? 'text-orange-600' : 'text-gray-500';
+        const openValueClass = hasOpenAmount ? 'text-orange-700' : 'text-gray-500';
         return `
             <div class="rounded-lg border border-gray-200 bg-white p-3">
                 <div class="flex flex-wrap items-center gap-2">
@@ -766,7 +824,7 @@ function renderSplitGroupDetailModal(groupId) {
                 <div class="mt-2 grid grid-cols-3 gap-2 text-[11px]">
                     <div class="rounded border border-gray-200 bg-gray-50 px-2 py-1"><span class="block text-gray-500">Gesamt</span><span class="font-bold text-gray-800">${entry.assignedAmount.toFixed(2)} €</span></div>
                     <div class="rounded border border-green-200 bg-green-50 px-2 py-1"><span class="block text-green-600">Bezahlt</span><span class="font-bold text-green-700">${entry.paidAmount.toFixed(2)} €</span></div>
-                    <div class="rounded border border-orange-200 bg-orange-50 px-2 py-1"><span class="block text-orange-600">Offen</span><span class="font-bold text-orange-700">${entry.remainingAmount.toFixed(2)} €</span></div>
+                    <div class="${openBoxClass}"><span class="block ${openLabelClass}">Offen</span><span class="font-bold ${openValueClass}">${remainingAmount.toFixed(2)} €</span></div>
                 </div>
             </div>
         `;
@@ -854,6 +912,7 @@ function renderSplitGroupEditPositions() {
     if (!container) return;
 
     if (!Array.isArray(splitGroupEditState.positions)) splitGroupEditState.positions = [];
+    syncSplitGroupEditTotalInputState();
 
     if (splitGroupEditState.positions.length === 0) {
         container.innerHTML = '<p class="text-xs italic text-gray-400">Noch keine Positionen vorhanden.</p>';
@@ -875,6 +934,7 @@ function renderSplitGroupEditPositions() {
             const index = Number(row.getAttribute('data-position-index'));
             if (!Number.isFinite(index) || !splitGroupEditState.positions[index]) return;
             splitGroupEditState.positions[index].name = String(event.target.value || '');
+            refreshSplitGroupEditPreview();
         });
     });
 
@@ -886,6 +946,7 @@ function renderSplitGroupEditPositions() {
             if (!Number.isFinite(index) || !splitGroupEditState.positions[index]) return;
             const parsed = Number.parseFloat(String(event.target.value || '').replace(',', '.'));
             splitGroupEditState.positions[index].price = Number.isFinite(parsed) ? normalizeMoney(parsed) : 0;
+            refreshSplitGroupEditPreview();
         });
     });
 
@@ -897,6 +958,7 @@ function renderSplitGroupEditPositions() {
             if (!Number.isFinite(index)) return;
             splitGroupEditState.positions.splice(index, 1);
             renderSplitGroupEditPositions();
+            refreshSplitGroupEditPreview();
         });
     });
 }
@@ -1032,6 +1094,7 @@ function computeSplitGroupEditDistribution(formValues = null) {
 
 function refreshSplitGroupEditPreview() {
     if (!splitGroupEditState) return;
+    syncSplitGroupEditTotalInputState();
 
     const computed = computeSplitGroupEditDistribution();
     if (!computed) return;
@@ -1147,6 +1210,7 @@ window.openSplitGroupEdit = function (groupId) {
             if (!splitGroupEditState) return;
             splitGroupEditState.positions.push({ name: '', price: 0 });
             renderSplitGroupEditPositions();
+            refreshSplitGroupEditPreview();
         };
     }
 
@@ -1341,12 +1405,7 @@ async function saveSplitGroupEdit() {
             });
         }
 
-        const cleanedPositions = (Array.isArray(splitGroupEditState.positions) ? splitGroupEditState.positions : [])
-            .map((position) => ({
-                name: String(position?.name || '').trim(),
-                price: normalizeMoney(position?.price)
-            }))
-            .filter((position) => position.name && Number.isFinite(position.price));
+        const { cleanedPositions } = getSplitGroupEditTotalControlState();
 
         const baseReference = sourceItems[0];
         const splitMasterPayload = {
@@ -7049,11 +7108,21 @@ function renderPaymentList(payments) {
         document.head.appendChild(styleEl);
     }
 
+    const isFinishedSplitGroupItem = (payment) => {
+        const statusToken = String(payment?.status || '').toLowerCase();
+        if (statusToken === 'paid' || statusToken === 'closed' || statusToken === 'settled' || statusToken === 'cancelled') {
+            return true;
+        }
+        return getPaymentRemainingForDisplay(payment) <= 0.009;
+    };
+
     // RENDER LOOP
     combinedList.forEach(item => {
         if (item.items) { 
             const g = item;
             const splitMaster = g.master || getSplitGroupMasterSnapshot(g.items);
+            const openGroupItems = g.items.filter((entry) => !isFinishedSplitGroupItem(entry));
+            const closedGroupItems = g.items.filter((entry) => isFinishedSplitGroupItem(entry));
             const isAllPaid = g.totalRemaining <= 0.01;
             const timeDiff = (new Date(g.earliestDeadline) - today) / (1000 * 60 * 60 * 24);
             const hasOpenAllocation = normalizeMoney(splitMaster?.openAllocation) > 0.009;
@@ -7087,6 +7156,22 @@ function renderPaymentList(payments) {
             }
 
             if (isListView) {
+                const openItemsHtml = openGroupItems.map((p) => createSingleListRowHtml(p, today, true)).join('');
+                const closedItemsHtml = closedGroupItems
+                    .map((p) => `<div class="opacity-60 grayscale">${createSingleListRowHtml(p, today, true)}</div>`)
+                    .join('');
+                const closedToggleHtml = closedGroupItems.length > 0
+                    ? `
+                        <button type="button"
+                                class="w-full flex items-center justify-center gap-2 px-2 py-1.5 text-[11px] font-bold text-gray-600 bg-gray-50 hover:bg-gray-100 border-t border-gray-200"
+                                onclick="event.stopPropagation(); this.nextElementSibling.classList.toggle('hidden'); this.querySelector('.arrow-icon').classList.toggle('rotate-180');">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 arrow-icon transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                            <span>${closedGroupItems.length} Abgeschlossene Einträge</span>
+                        </button>
+                        <div class="hidden bg-gray-50/50 border-t border-gray-200">${closedItemsHtml}</div>
+                    `
+                    : '';
+
                 const folderHtml = `
                 <div class="border-b border-gray-200 ${groupStatusClass} transition-colors">
                     <div class="flex items-center p-2 cursor-pointer gap-2"
@@ -7100,13 +7185,31 @@ function renderPaymentList(payments) {
                     </div>
                     <div class="hidden pl-0 bg-white border-t border-gray-100">
                         ${hasOpenAllocation ? `<div class="px-2 py-1.5 text-[11px] font-bold text-orange-700 bg-orange-50 border-b border-orange-100">Offene Zuteilung: ${normalizeMoney(splitMaster?.openAllocation).toFixed(2)} €</div>` : ''}
-                        ${g.items.map(p => createSingleListRowHtml(p, today, true)).join('')} 
+                        ${openItemsHtml}
+                        ${closedToggleHtml}
                     </div>
                 </div>`;
                 container.innerHTML += folderHtml;
             } else {
                 const textColor = isAllPaid ? 'text-green-700' : 'text-indigo-700';
                 const colSpan = "col-span-1 sm:col-span-2";
+                const openItemsHtml = openGroupItems.map((p) => createSingleCardHtml(p, today)).join('');
+                const closedItemsHtml = closedGroupItems
+                    .map((p) => `<div class="opacity-60 grayscale">${createSingleCardHtml(p, today)}</div>`)
+                    .join('');
+                const closedToggleHtml = closedGroupItems.length > 0
+                    ? `
+                        <div class="sm:col-span-2 mt-1">
+                            <button type="button"
+                                    class="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold text-gray-600 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100"
+                                    onclick="event.stopPropagation(); this.nextElementSibling.classList.toggle('hidden'); this.querySelector('.arrow-icon').classList.toggle('rotate-180');">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 arrow-icon transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                                <span>${closedGroupItems.length} Abgeschlossene Einträge</span>
+                            </button>
+                            <div class="hidden mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">${closedItemsHtml}</div>
+                        </div>
+                    `
+                    : '';
                 
                 const folderHtml = `
                 <div class="${colSpan}">
@@ -7129,7 +7232,8 @@ function renderPaymentList(payments) {
                     </div>
                     <div class="hidden grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 pl-2 border-l-4 border-indigo-100">
                         ${hasOpenAllocation ? `<div class="sm:col-span-2 px-3 py-2 text-xs font-bold text-orange-700 bg-orange-50 border border-orange-200 rounded-lg">Offene Zuteilung: ${normalizeMoney(splitMaster?.openAllocation).toFixed(2)} €</div>` : ''}
-                        ${g.items.map(p => createSingleCardHtml(p, today)).join('')}
+                        ${openItemsHtml}
+                        ${closedToggleHtml}
                     </div>
                 </div>`;
                 container.innerHTML += folderHtml;
