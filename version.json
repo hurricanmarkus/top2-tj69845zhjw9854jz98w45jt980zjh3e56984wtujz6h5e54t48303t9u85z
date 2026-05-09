@@ -1,14 +1,24 @@
 {
-  "version": "1.22.15",
-  "buildId": "20260509-1",
+  "version": "1.22.16",
+  "buildId": "20260509-2",
   "releaseDate": "2026-05-09",
-  "releaseTime": "10:58",
+  "releaseTime": "11:18",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Online-Zahlungslink zeigt bei mehreren Positionen jetzt direkte Gesamtzahlung ohne Auswahldialog; Zahlungseingänge werden sequentiell über alle Positionen verteilt und Zusatzpositionen folgen der 7-Tage-Ablauflogik mit automatischer Verbuchung.",
-  "commitId": "e54bf2c",
+  "note": "Gast-Zusatzpositionen im Zahlungslink können jetzt per Antippen entfernt werden (nur offen/unbezahlt), zeigen einen Ablauf-Countdown (7 Tage) und bleiben bei Zahlung dauerhaft sichtbar; abgelaufene unbezahlte Positionen werden ausgegraut, Teilzahlungen werden als Betragskorrektur mit Durchstreichung dargestellt.",
+  "commitId": "a8c35f9",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.16",
+      "buildId": "20260509-2",
+      "releaseDate": "2026-05-09",
+      "releaseTime": "11:18",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Gast-Zusatzpositionen im Zahlungslink können jetzt per Antippen entfernt werden (nur offen/unbezahlt), zeigen einen Ablauf-Countdown (7 Tage) und bleiben bei Zahlung dauerhaft sichtbar; abgelaufene unbezahlte Positionen werden ausgegraut, Teilzahlungen werden als Betragskorrektur mit Durchstreichung dargestellt.",
+      "commitId": "a8c35f9",
+      "obligation": "false"
+    },
     {
       "version": "1.22.15",
       "buildId": "20260509-1",

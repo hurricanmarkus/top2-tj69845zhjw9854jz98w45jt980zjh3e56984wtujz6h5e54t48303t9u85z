@@ -1273,6 +1273,103 @@ function isPaymentPayableInGuestView(payment) {
     return String(payment.creditorId || '') === String(payment.createdBy || '');
 }
 
+function parseGuestAdditionalPostDate(value) {
+    if (!value) return null;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatGuestAdditionalPostRemainingDuration(remainingMs = 0) {
+    if (!Number.isFinite(remainingMs) || remainingMs <= 0) return '< 1 Stunde';
+    const totalHours = Math.max(1, Math.ceil(remainingMs / (1000 * 60 * 60)));
+    if (totalHours < 24) {
+        return `${totalHours} ${totalHours === 1 ? 'Stunde' : 'Stunden'}`;
+    }
+    const days = Math.floor(totalHours / 24);
+    const hours = totalHours % 24;
+    if (hours <= 0) {
+        return `${days} ${days === 1 ? 'Tag' : 'Tagen'}`;
+    }
+    return `${days} ${days === 1 ? 'Tag' : 'Tagen'} ${hours} ${hours === 1 ? 'Stunde' : 'Stunden'}`;
+}
+
+function getGuestAdditionalPostLifecycleMeta(payment, nowDate = new Date()) {
+    if (!payment || payment.isAdditionalPost !== true) return null;
+
+    const status = String(payment.status || '').trim().toLowerCase();
+    const requestedAmount = normalizeMoney(payment.requestedAmount ?? payment.amount);
+    const effectiveAmount = normalizeMoney(payment.effectiveAmount ?? payment.amount);
+    const appliedAmount = normalizeMoney(payment.appliedAmount);
+
+    if (status === 'settled' || status === 'paid') {
+        return {
+            text: 'Bezahlt • bleibt dauerhaft sichtbar',
+            className: 'text-emerald-600',
+        };
+    }
+
+    if (status === 'expired') {
+        if (appliedAmount > 0.001 && requestedAmount > effectiveAmount + 0.001) {
+            return {
+                text: 'Abgelaufen • Betrag auf Teilzahlung korrigiert',
+                className: 'text-gray-500',
+            };
+        }
+        if (appliedAmount > 0.001) {
+            return {
+                text: 'Abgelaufen • Teilzahlung verbucht',
+                className: 'text-gray-500',
+            };
+        }
+        return {
+            text: 'Abgelaufen • nicht bezahlt',
+            className: 'text-gray-500',
+        };
+    }
+
+    const expiresAtDate = parseGuestAdditionalPostDate(payment.expiresAt);
+    if (!expiresAtDate) {
+        return {
+            text: 'Läuft ab in 7 Tagen',
+            className: 'text-gray-500',
+        };
+    }
+
+    const remainingMs = expiresAtDate.getTime() - nowDate.getTime();
+    if (remainingMs <= 0) {
+        return {
+            text: 'Abgelaufen • nicht bezahlt',
+            className: 'text-gray-500',
+        };
+    }
+
+    return {
+        text: `Läuft ab in ${formatGuestAdditionalPostRemainingDuration(remainingMs)}`,
+        className: remainingMs <= (24 * 60 * 60 * 1000) ? 'text-amber-600 font-semibold' : 'text-gray-500',
+    };
+}
+
+function isGuestRemovableAdditionalPostInView(payment, nowDate = new Date()) {
+    if (!payment || payment.isAdditionalPost !== true) return false;
+    if (payment.canGuestRemove === false) return false;
+    if (payment.createdViaGuestLink === false) return false;
+    const status = String(payment.status || '').trim().toLowerCase();
+    if (status !== 'open') return false;
+    if (normalizeMoney(payment.appliedAmount) > 0.001) return false;
+    const expiresAtDate = parseGuestAdditionalPostDate(payment.expiresAt);
+    if (expiresAtDate && expiresAtDate.getTime() <= nowDate.getTime()) return false;
+    return true;
+}
+
+function resolveGuestAdditionalPostSourceId(payment) {
+    if (!payment || typeof payment !== 'object') return '';
+    const sourceId = String(payment.sourceId || '').trim();
+    if (sourceId) return sourceId;
+    const id = String(payment.id || '').trim();
+    if (id.startsWith('additional-post-')) return id.slice('additional-post-'.length);
+    return id;
+}
+
 function getOnlineLinkSelectionModeLabel(mode = '') {
     const token = String(mode || '').trim().toLowerCase();
     if (token === 'all') return 'Alle';
@@ -8267,7 +8364,8 @@ export async function initializeGuestView(guestId, options = {}) {
                 // Filter: Nur Offene (außer Einzel-Link, der zeigt auch erledigte)
                 const normalizedStatus = String(p.status || '').toLowerCase();
                 const isExpiredAdditionalPost = p.isAdditionalPost === true && normalizedStatus === 'expired';
-                if (!isSinglePaymentMode && normalizedStatus !== 'open' && normalizedStatus !== 'pending_approval' && normalizedStatus !== 'partially_paid' && !isExpiredAdditionalPost) return;
+                const isSettledAdditionalPost = p.isAdditionalPost === true && (normalizedStatus === 'settled' || normalizedStatus === 'paid');
+                if (!isSinglePaymentMode && normalizedStatus !== 'open' && normalizedStatus !== 'pending_approval' && normalizedStatus !== 'partially_paid' && !isExpiredAdditionalPost && !isSettledAdditionalPost) return;
 
                 // Zeit-Check
                 let isFuture = false;
@@ -8302,24 +8400,36 @@ export async function initializeGuestView(guestId, options = {}) {
             activeItems.forEach(p => {
                 const isUnknownAmount = p.isTBD === true;
                 const normalizedStatus = String(p.status || '').toLowerCase();
-                const isExpiredAdditionalPost = p.isAdditionalPost === true && normalizedStatus === 'expired';
+                const isAdditionalPost = p.isAdditionalPost === true;
+                const isExpiredAdditionalPost = isAdditionalPost && normalizedStatus === 'expired';
+                const isSettledAdditionalPost = isAdditionalPost && (normalizedStatus === 'settled' || normalizedStatus === 'paid');
+                const requestedAmount = normalizeMoney(p.requestedAmount ?? p.amount);
+                const effectiveAmount = normalizeMoney(p.effectiveAmount ?? p.amount);
+                const appliedAmount = normalizeMoney(p.appliedAmount);
                 const amount = isUnknownAmount
                     ? null
-                    : (isExpiredAdditionalPost
-                        ? parseFloat(p.amount ?? p.appliedAmount ?? p.remainingAmount)
+                    : (isAdditionalPost
+                        ? (isExpiredAdditionalPost
+                            ? (appliedAmount > 0.001 ? appliedAmount : requestedAmount)
+                            : (isSettledAdditionalPost
+                                ? Math.max(effectiveAmount, appliedAmount)
+                                : normalizeMoney(p.remainingAmount)))
                         : parseFloat(p.remainingAmount));
                 // Logik für Gast-Sicht:
                 // Wenn Ersteller (Admin) = Creditor, dann schulde ICH (Gast) das Geld. -> Rot
                 let isMyDebt = (p.isAdditionalPost === true) || (p.creditorId === p.createdBy);
+                const lifecycleMeta = isAdditionalPost ? getGuestAdditionalPostLifecycleMeta(p, now) : null;
+                const isRemovableAdditionalPost = isGuestRemovableAdditionalPostInView(p, now);
                 
                 const div = document.createElement('div');
-                div.className = isExpiredAdditionalPost
+                div.className = (isExpiredAdditionalPost || isSettledAdditionalPost)
                     ? "p-3 bg-gray-50 border border-gray-300 rounded shadow-sm flex justify-between items-center cursor-pointer transition mb-2 opacity-80"
                     : "p-3 bg-white border rounded shadow-sm flex justify-between items-center cursor-pointer hover:bg-indigo-50 transition mb-2";
                 
                 let textInfo = isMyDebt ? "Du schuldest" : "Du bekommst";
                 if(isSinglePaymentMode && p.status === 'paid') textInfo = "✅ Erledigt";
-                if (isExpiredAdditionalPost) textInfo = "Abgelaufen";
+                if (isSettledAdditionalPost) textInfo = "✅ Bezahlt";
+                if (isExpiredAdditionalPost) textInfo = appliedAmount > 0.001 ? "Abgelaufen (teilbezahlt)" : "Abgelaufen (nicht bezahlt)";
 
                 let amountHtml = '';
                 if (isUnknownAmount) {
@@ -8330,21 +8440,65 @@ export async function initializeGuestView(guestId, options = {}) {
                     `;
                 } else {
                     const safeAmount = Number.isFinite(amount) ? amount : 0;
-                    amountHtml = `
-                        <span class="font-mono font-bold ${isExpiredAdditionalPost ? 'text-gray-500' : (isMyDebt ? 'text-red-600' : 'text-green-600')}">
-                            ${safeAmount.toFixed(2)} €
-                        </span>
-                    `;
+                    const isAdjustedAmount = isAdditionalPost
+                        && requestedAmount > (safeAmount + 0.001)
+                        && (isExpiredAdditionalPost || isSettledAdditionalPost);
+                    if (isAdjustedAmount) {
+                        amountHtml = `
+                            <div class="text-right">
+                                <span class="block text-[10px] font-mono text-gray-400 line-through">${requestedAmount.toFixed(2)} €</span>
+                                <span class="font-mono font-bold ${isExpiredAdditionalPost || isSettledAdditionalPost ? 'text-gray-600' : (isMyDebt ? 'text-red-600' : 'text-green-600')}">${safeAmount.toFixed(2)} €</span>
+                            </div>
+                        `;
+                    } else {
+                        amountHtml = `
+                            <span class="font-mono font-bold ${isExpiredAdditionalPost || isSettledAdditionalPost ? 'text-gray-500' : (isMyDebt ? 'text-red-600' : 'text-green-600')}">
+                                ${safeAmount.toFixed(2)} €
+                            </span>
+                        `;
+                    }
                 }
+
+                const lifecycleHtml = lifecycleMeta?.text
+                    ? `<p class="text-[10px] ${lifecycleMeta.className}">${lifecycleMeta.text}${isRemovableAdditionalPost ? ' • antippen zum Entfernen' : ''}</p>`
+                    : '';
 
                 div.innerHTML = `
                     <div>
                         <p class="font-bold text-gray-800">${p.title}</p>
                         <p class="text-xs text-gray-500">${textInfo}</p>
+                        ${lifecycleHtml}
                     </div>
                     ${amountHtml}
                 `;
-                div.onclick = () => openGuestDetailModal(p);
+                div.onclick = async () => {
+                    if (isRemovableAdditionalPost) {
+                        if (!window.guestRemoveOnlinePaymentPost) {
+                            alertUser('Entfernen-Funktion ist nicht verfügbar.', 'error');
+                            return;
+                        }
+                        if (!paymentLinkData?.id || !urlToken) {
+                            alertUser('Linkdaten fehlen. Bitte neu laden.', 'error');
+                            return;
+                        }
+                        const confirmDelete = window.confirm('Diese Zusatzposition wirklich entfernen?');
+                        if (!confirmDelete) return;
+                        try {
+                            await window.guestRemoveOnlinePaymentPost({
+                                linkId: paymentLinkData.id,
+                                token: urlToken,
+                                additionalPostId: resolveGuestAdditionalPostSourceId(p),
+                            });
+                            alertUser('Zusatzposition entfernt.', 'success');
+                            await initializeGuestView(guestId, { skipTracking: true });
+                        } catch (error) {
+                            console.error(error);
+                            alertUser(error?.message || 'Zusatzposition konnte nicht entfernt werden.', 'error');
+                        }
+                        return;
+                    }
+                    openGuestDetailModal(p);
+                };
                 listContainer.appendChild(div);
             });
 

@@ -1657,6 +1657,7 @@ async function initializeFirebase() {
                 window.closeOnlinePaymentLink = httpsCallable(functions, 'closeOnlinePaymentLink');
                 window.guestMarkOnlinePaymentInProgress = httpsCallable(functions, 'guestMarkOnlinePaymentInProgress');
                 window.guestAddOnlinePaymentPost = httpsCallable(functions, 'guestAddOnlinePaymentPost');
+                window.guestRemoveOnlinePaymentPost = httpsCallable(functions, 'guestRemoveOnlinePaymentPost');
                 window.guestResolveOnlinePaymentOverpayment = httpsCallable(functions, 'guestResolveOnlinePaymentOverpayment');
                 window.resolveOnlinePaymentOverpaymentByOwner = httpsCallable(functions, 'resolveOnlinePaymentOverpaymentByOwner');
 
