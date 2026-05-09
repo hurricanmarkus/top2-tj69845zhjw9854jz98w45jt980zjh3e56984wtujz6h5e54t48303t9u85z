@@ -1,14 +1,24 @@
 {
-  "version": "1.22.17",
-  "buildId": "20260509-3",
+  "version": "1.22.18",
+  "buildId": "20260509-4",
   "releaseDate": "2026-05-09",
-  "releaseTime": "12:58",
+  "releaseTime": "23:24",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Gast-Zusatzpositionen öffnen jetzt bei Antippen immer die Detailansicht mit Entfernen-Button im Modal; zusätzlich wurden Backend-Fehler beim Entfernen (internal/CORS) robuster abgefangen und klarer gemeldet.",
-  "commitId": "48a210e",
+  "note": "Split-Gruppenmaster erweitert: neue Detail-/Bearbeitungsmodale mit Teilnehmer- und Positionssteuerung, offener Zuteilung in Dashboard/Kategorie/Zukunftssummen, Sperren für Untereintrag-Strukturaktionen sowie Ausgleichslogik bei Überzahlung (Umkehr-Eintrag oder Guthaben).",
+  "commitId": "pending",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.18",
+      "buildId": "20260509-4",
+      "releaseDate": "2026-05-09",
+      "releaseTime": "23:24",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Split-Gruppenmaster erweitert: neue Detail-/Bearbeitungsmodale mit Teilnehmer- und Positionssteuerung, offener Zuteilung in Dashboard/Kategorie/Zukunftssummen, Sperren für Untereintrag-Strukturaktionen sowie Ausgleichslogik bei Überzahlung (Umkehr-Eintrag oder Guthaben).",
+      "commitId": "pending",
+      "obligation": "false"
+    },
     {
       "version": "1.22.17",
       "buildId": "20260509-3",

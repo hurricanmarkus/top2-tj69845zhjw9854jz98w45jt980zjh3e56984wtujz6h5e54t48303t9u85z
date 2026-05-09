@@ -50,6 +50,8 @@ let currentSplitAdjustments = {};
 let activeSearchFilters = [];
 let paymentSearchJoinMode = 'and';
 let isListView = false; // Wird in initializeZahlungsverwaltungView gesetzt
+let currentSplitGroupDetailId = null;
+let splitGroupEditState = null;
 let isTrashAdvancedMode = false;
 let selectedTrashIds = new Set();
 let onlinePaymentLinksCache = [];
@@ -75,6 +77,183 @@ const SYSTEM_CATEGORIES = [
 function normalizeMoney(value) {
     const num = Number(value);
     return Number.isFinite(num) ? Number(num.toFixed(2)) : 0;
+}
+
+function escapeHtmlInline(value) {
+    return String(value || '').replace(/[&<>'"]/g, (ch) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        "'": '&#39;',
+        '"': '&quot;'
+    }[ch]));
+}
+
+function parseDateSafe(rawValue) {
+    if (!rawValue) return null;
+    if (typeof rawValue?.toDate === 'function') {
+        const converted = rawValue.toDate();
+        return Number.isNaN(converted?.getTime?.()) ? null : converted;
+    }
+    const parsed = new Date(rawValue);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatDateSafe(rawValue, includeTime = false) {
+    const parsed = parseDateSafe(rawValue);
+    if (!parsed) return '—';
+    if (includeTime) {
+        return parsed.toLocaleString('de-DE', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+    return parsed.toLocaleDateString('de-DE');
+}
+
+function getCategoryNameById(categoryId) {
+    const found = [...SYSTEM_CATEGORIES, ...allCategories].find((entry) => entry.id === categoryId);
+    return found?.name || 'Diverse';
+}
+
+function getPaymentRemainingForDisplay(payment) {
+    const statusToken = String(payment?.status || '').toLowerCase();
+    if (statusToken === 'closed' || statusToken === 'settled' || statusToken === 'paid') return 0;
+    return normalizeMoney(payment?.remainingAmount);
+}
+
+function getPaymentPaidAmount(payment) {
+    const totalAmount = normalizeMoney(payment?.amount);
+    const remainingAmount = getPaymentRemainingForDisplay(payment);
+    return normalizeMoney(Math.max(0, totalAmount - remainingAmount));
+}
+
+function getPaymentSortTime(payment) {
+    const startDate = parseDateSafe(payment?.startDate);
+    if (startDate) return startDate.getTime();
+    const createdAt = parseDateSafe(payment?.createdAt);
+    if (createdAt) return createdAt.getTime();
+    return Date.now();
+}
+
+function buildInvolvedUserIdsForPayment(debtorId, creditorId) {
+    const ids = [currentUser.mode];
+    if (debtorId && !String(debtorId).startsWith('MANUAL_') && debtorId !== currentUser.mode) ids.push(debtorId);
+    if (creditorId && !String(creditorId).startsWith('MANUAL_') && creditorId !== currentUser.mode) ids.push(creditorId);
+    return [...new Set(ids)];
+}
+
+function getSplitGroupMasterSnapshot(groupItems = []) {
+    if (!Array.isArray(groupItems) || groupItems.length === 0) return null;
+
+    const sortedItems = [...groupItems].sort((a, b) => getPaymentSortTime(a) - getPaymentSortTime(b));
+    const firstItem = sortedItems[0];
+    const rawMaster = (firstItem?.splitMaster && typeof firstItem.splitMaster === 'object') ? firstItem.splitMaster : {};
+
+    const totalAssigned = normalizeMoney(sortedItems.reduce((sum, item) => sum + normalizeMoney(item?.amount), 0));
+    const totalAmountRaw = normalizeMoney(rawMaster?.totalAmount);
+    const totalAmount = totalAmountRaw > 0 ? totalAmountRaw : totalAssigned;
+
+    let openAllocation = normalizeMoney(rawMaster?.openAllocation);
+    if (openAllocation < 0) openAllocation = 0;
+
+    const fallbackOpen = normalizeMoney(totalAmount - totalAssigned);
+    if (openAllocation <= 0 && fallbackOpen > 0) {
+        openAllocation = fallbackOpen;
+    }
+
+    const modeToken = String(rawMaster?.mode || '').toLowerCase();
+    const mode = modeToken === 'equal' ? 'equal' : 'manual';
+
+    const equalAdjustments = {};
+    if (rawMaster?.equalAdjustments && typeof rawMaster.equalAdjustments === 'object') {
+        Object.entries(rawMaster.equalAdjustments).forEach(([paymentId, offset]) => {
+            const parsedOffset = Number(offset);
+            if (paymentId && Number.isFinite(parsedOffset)) {
+                equalAdjustments[String(paymentId)] = normalizeMoney(parsedOffset);
+            }
+        });
+    }
+
+    const participants = sortedItems.map((item) => {
+        const assignedAmount = normalizeMoney(item?.amount);
+        const remainingAmount = getPaymentRemainingForDisplay(item);
+        const paidAmount = normalizeMoney(Math.max(0, assignedAmount - remainingAmount));
+        return {
+            paymentId: item.id,
+            debtorId: item.debtorId || null,
+            debtorName: String(item.debtorName || 'Unbekannt'),
+            assignedAmount,
+            remainingAmount,
+            paidAmount,
+            status: String(item.status || 'open')
+        };
+    });
+
+    const totalPaid = normalizeMoney(participants.reduce((sum, item) => sum + item.paidAmount, 0));
+    const totalRemainingAssigned = normalizeMoney(participants.reduce((sum, item) => sum + item.remainingAmount, 0));
+    const totalRemainingOpen = normalizeMoney(totalRemainingAssigned + openAllocation);
+
+    let earliestDeadline = '9999-12-31';
+    sortedItems.forEach((item) => {
+        if (item?.deadline && String(item.deadline) < earliestDeadline) {
+            earliestDeadline = String(item.deadline);
+        }
+    });
+
+    return {
+        id: String(firstItem?.splitGroupId || rawMaster?.groupId || ''),
+        mode,
+        title: String(rawMaster?.title || firstItem?.title || 'Gruppe'),
+        startDate: rawMaster?.startDate || firstItem?.startDate || null,
+        deadline: rawMaster?.deadline || firstItem?.deadline || null,
+        categoryId: rawMaster?.categoryId || firstItem?.categoryId || 'cat_misc',
+        type: rawMaster?.type || firstItem?.type || 'debt',
+        invoiceNr: String(rawMaster?.invoiceNr || firstItem?.invoiceNr || ''),
+        orderNr: String(rawMaster?.orderNr || firstItem?.orderNr || ''),
+        notes: String(rawMaster?.notes || firstItem?.notes || ''),
+        positions: Array.isArray(rawMaster?.positions)
+            ? rawMaster.positions
+            : (Array.isArray(firstItem?.positions) ? firstItem.positions : []),
+        creditorId: rawMaster?.creditorId || firstItem?.creditorId || null,
+        creditorName: String(rawMaster?.creditorName || firstItem?.creditorName || ''),
+        totalAmount,
+        totalAssigned,
+        totalPaid,
+        totalRemainingAssigned,
+        totalRemainingOpen,
+        openAllocation,
+        equalAdjustments,
+        participants,
+        earliestDeadline,
+        updatedAt: rawMaster?.updatedAt || null
+    };
+}
+
+function getSplitGroupItemsById(splitGroupId) {
+    if (!splitGroupId) return [];
+    return allPayments
+        .filter((payment) => payment?.splitGroupId === splitGroupId)
+        .sort((a, b) => getPaymentSortTime(a) - getPaymentSortTime(b));
+}
+
+function collectSplitMasterMap(payments = []) {
+    const grouped = {};
+    payments.forEach((payment) => {
+        if (!payment?.splitGroupId) return;
+        if (!grouped[payment.splitGroupId]) grouped[payment.splitGroupId] = [];
+        grouped[payment.splitGroupId].push(payment);
+    });
+
+    const result = {};
+    Object.entries(grouped).forEach(([groupId, items]) => {
+        const master = getSplitGroupMasterSnapshot(items);
+        if (master) result[groupId] = master;
+    });
+    return result;
 }
 
 function getOnlineLinkStatusLabel(status) {
@@ -455,6 +634,919 @@ async function enrichIssuedLinksWithHistoryCounts(entries = []) {
             viewCount: Number(historyState.historyCount || 0),
         };
     });
+}
+
+function closeSplitGroupDetailModal() {
+    const modal = document.getElementById('splitGroupDetailModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+    }
+    currentSplitGroupDetailId = null;
+}
+window.closeSplitGroupDetailModal = closeSplitGroupDetailModal;
+
+function closeSplitGroupEditModal() {
+    const modal = document.getElementById('splitGroupEditModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+    }
+    splitGroupEditState = null;
+}
+window.closeSplitGroupEditModal = closeSplitGroupEditModal;
+
+function getSplitGroupEditModeToken(value) {
+    const token = String(value || '').toLowerCase();
+    return token === 'equal' ? 'equal' : 'manual';
+}
+
+function getSplitGroupEditFormValues() {
+    const totalInput = document.getElementById('split-group-edit-total');
+    const parsedTotal = Number.parseFloat(String(totalInput?.value || '').replace(',', '.'));
+    return {
+        title: String(document.getElementById('split-group-edit-title')?.value || '').trim(),
+        totalAmount: Number.isFinite(parsedTotal) ? normalizeMoney(parsedTotal) : 0,
+        startDate: String(document.getElementById('split-group-edit-start-date')?.value || '').trim(),
+        deadline: String(document.getElementById('split-group-edit-deadline')?.value || '').trim() || null,
+        categoryId: document.getElementById('split-group-edit-category')?.value || 'cat_misc',
+        type: document.getElementById('split-group-edit-type')?.value || 'debt',
+        invoiceNr: String(document.getElementById('split-group-edit-invoice')?.value || '').trim(),
+        orderNr: String(document.getElementById('split-group-edit-order')?.value || '').trim(),
+        notes: String(document.getElementById('split-group-edit-notes')?.value || '').trim(),
+        mode: getSplitGroupEditModeToken(document.getElementById('split-group-edit-mode')?.value)
+    };
+}
+
+function createSplitGroupEditState(groupId) {
+    const items = getSplitGroupItemsById(groupId);
+    const master = getSplitGroupMasterSnapshot(items);
+    if (!master) return null;
+
+    const participantCount = master.participants.length;
+    const baseShare = participantCount > 0 ? normalizeMoney(master.totalAmount / participantCount) : 0;
+
+    const participants = master.participants.map((participant) => {
+        const fallbackOffset = normalizeMoney(participant.assignedAmount - baseShare);
+        const offsetFromMaster = master.mode === 'equal'
+            ? normalizeMoney(master.equalAdjustments?.[participant.paymentId] ?? fallbackOffset)
+            : fallbackOffset;
+
+        return {
+            key: participant.paymentId,
+            paymentId: participant.paymentId,
+            debtorId: participant.debtorId || null,
+            debtorName: participant.debtorName,
+            paidAmount: normalizeMoney(participant.paidAmount),
+            currentAssignedAmount: normalizeMoney(participant.assignedAmount),
+            manualShare: normalizeMoney(participant.assignedAmount),
+            offset: offsetFromMaster,
+            isNew: false
+        };
+    });
+
+    const positions = Array.isArray(master.positions)
+        ? master.positions.map((entry) => ({
+            name: String(entry?.name || '').trim(),
+            price: normalizeMoney(entry?.price)
+        }))
+        : [];
+
+    return {
+        groupId,
+        sourceItems: items,
+        master,
+        mode: master.mode,
+        participants,
+        positions,
+        modeSwitchInitialized: false,
+        lastComputed: null
+    };
+}
+
+function renderSplitGroupDetailModal(groupId) {
+    const modal = document.getElementById('splitGroupDetailModal');
+    const content = document.getElementById('split-group-detail-content');
+    const editBtn = document.getElementById('btn-open-split-group-edit');
+    const titleEl = document.getElementById('split-group-detail-title');
+    if (!modal || !content || !editBtn || !titleEl) return;
+
+    const items = getSplitGroupItemsById(groupId);
+    const master = getSplitGroupMasterSnapshot(items);
+    if (!master) {
+        alertUser('Gruppenmaster konnte nicht geladen werden.', 'error');
+        return;
+    }
+
+    currentSplitGroupDetailId = groupId;
+    titleEl.textContent = `Gruppenmaster #${groupId.slice(-6)}`;
+
+    const modeLabel = master.mode === 'equal'
+        ? 'Gleichmäßig teilen (mit Anpassung)'
+        : 'Komplett manuell';
+    const categoryName = getCategoryNameById(master.categoryId);
+
+    const positions = Array.isArray(master.positions) ? master.positions : [];
+    const positionsHtml = positions.length
+        ? positions.map((pos) => {
+            const posName = escapeHtmlInline(pos?.name || 'Posten');
+            const posPrice = normalizeMoney(pos?.price).toFixed(2);
+            return `<div class="flex justify-between border-b border-gray-100 py-1 text-xs"><span class="text-gray-700">${posName}</span><span class="font-mono text-gray-800">${posPrice} €</span></div>`;
+        }).join('')
+        : '<p class="text-xs italic text-gray-400">Keine Positionen erfasst.</p>';
+
+    const participantRows = master.participants.map((entry) => {
+        const shortId = String(entry.paymentId || '').slice(-4).toUpperCase();
+        return `
+            <div class="rounded-lg border border-gray-200 bg-white p-3">
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="font-bold text-gray-800">${escapeHtmlInline(entry.debtorName)}</span>
+                    <button type="button" onclick="openPaymentDetail('${entry.paymentId}'); event.stopPropagation();" class="text-[10px] px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100">#${shortId}</button>
+                </div>
+                <div class="mt-2 grid grid-cols-3 gap-2 text-[11px]">
+                    <div class="rounded border border-gray-200 bg-gray-50 px-2 py-1"><span class="block text-gray-500">Gesamt</span><span class="font-bold text-gray-800">${entry.assignedAmount.toFixed(2)} €</span></div>
+                    <div class="rounded border border-green-200 bg-green-50 px-2 py-1"><span class="block text-green-600">Bezahlt</span><span class="font-bold text-green-700">${entry.paidAmount.toFixed(2)} €</span></div>
+                    <div class="rounded border border-orange-200 bg-orange-50 px-2 py-1"><span class="block text-orange-600">Offen</span><span class="font-bold text-orange-700">${entry.remainingAmount.toFixed(2)} €</span></div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    content.innerHTML = `
+        <div class="rounded-xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-4 mb-4">
+            <h4 class="text-lg font-bold text-gray-800">${escapeHtmlInline(master.title)}</h4>
+            <p class="text-xs text-indigo-700 mt-1">${modeLabel}</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 mb-4 text-xs">
+            <div class="rounded-lg border border-gray-200 bg-white p-3"><span class="text-gray-500 block">Gesamtbetrag</span><span class="text-lg font-black text-gray-800">${master.totalAmount.toFixed(2)} €</span></div>
+            <div class="rounded-lg border border-gray-200 bg-white p-3"><span class="text-gray-500 block">Bereits bezahlt</span><span class="text-lg font-black text-green-700">${master.totalPaid.toFixed(2)} €</span></div>
+            <div class="rounded-lg border border-gray-200 bg-white p-3"><span class="text-gray-500 block">Offen zugewiesen</span><span class="text-lg font-black text-orange-700">${master.totalRemainingAssigned.toFixed(2)} €</span></div>
+            <div class="rounded-lg border ${master.openAllocation > 0.009 ? 'border-red-300 bg-red-50' : 'border-indigo-200 bg-indigo-50'} p-3"><span class="text-gray-500 block">Offene Zuteilung</span><span class="text-lg font-black ${master.openAllocation > 0.009 ? 'text-red-700' : 'text-indigo-700'}">${master.openAllocation.toFixed(2)} €</span></div>
+        </div>
+
+        <div class="rounded-xl border border-gray-200 bg-white p-3 mb-4 text-xs text-gray-700 space-y-1">
+            <div><span class="font-bold text-gray-500">Kategorie:</span> ${escapeHtmlInline(categoryName)}</div>
+            <div><span class="font-bold text-gray-500">Start:</span> ${formatDateSafe(master.startDate, false)}</div>
+            <div><span class="font-bold text-gray-500">Frist:</span> ${master.deadline ? formatDateSafe(master.deadline, false) : '—'}</div>
+            ${master.invoiceNr ? `<div><span class="font-bold text-gray-500">Rechnungs-Nr.:</span> ${escapeHtmlInline(master.invoiceNr)}</div>` : ''}
+            ${master.orderNr ? `<div><span class="font-bold text-gray-500">Bestell-Nr.:</span> ${escapeHtmlInline(master.orderNr)}</div>` : ''}
+            ${master.notes ? `<div class="pt-2 border-t border-gray-100"><span class="font-bold text-gray-500">Detail:</span><br>${escapeHtmlInline(master.notes)}</div>` : ''}
+        </div>
+
+        <div class="rounded-xl border border-gray-200 bg-white p-3 mb-4">
+            <h5 class="text-xs font-bold uppercase text-gray-500 mb-2">Positionen</h5>
+            ${positionsHtml}
+        </div>
+
+        <div class="space-y-2">
+            <h5 class="text-xs font-bold uppercase text-gray-500">Schuldner-Übersicht</h5>
+            ${participantRows}
+        </div>
+    `;
+
+    editBtn.onclick = () => window.openSplitGroupEdit(groupId);
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+}
+
+window.openSplitGroupView = function (groupId) {
+    if (!groupId) return;
+    renderSplitGroupDetailModal(groupId);
+};
+
+function renderSplitGroupEditAddOptions() {
+    if (!splitGroupEditState) return;
+    const select = document.getElementById('split-group-edit-add-person-select');
+    if (!select) return;
+
+    const existingIds = new Set(splitGroupEditState.participants.map((entry) => entry.debtorId).filter(Boolean));
+    select.innerHTML = '<option value="">- Person aus Liste wählen -</option>';
+
+    const userGroup = document.createElement('optgroup');
+    userGroup.label = 'Personen';
+    Object.values(USERS).forEach((user) => {
+        if (!user?.isActive || existingIds.has(user.id)) return;
+        const option = document.createElement('option');
+        option.value = `USR:${user.id}`;
+        option.textContent = user.id === currentUser.mode
+            ? `${user.realName || user.name} (Ich)`
+            : (user.realName || user.name);
+        userGroup.appendChild(option);
+    });
+    if (userGroup.children.length > 0) select.appendChild(userGroup);
+
+    const contactGroup = document.createElement('optgroup');
+    contactGroup.label = 'Eigene Kontakte';
+    allContacts.forEach((contact) => {
+        if (existingIds.has(contact.id)) return;
+        const option = document.createElement('option');
+        option.value = `CON:${contact.id}`;
+        option.textContent = contact.name;
+        contactGroup.appendChild(option);
+    });
+    if (contactGroup.children.length > 0) select.appendChild(contactGroup);
+}
+
+function renderSplitGroupEditPositions() {
+    if (!splitGroupEditState) return;
+    const container = document.getElementById('split-group-edit-positions-container');
+    if (!container) return;
+
+    if (!Array.isArray(splitGroupEditState.positions)) splitGroupEditState.positions = [];
+
+    if (splitGroupEditState.positions.length === 0) {
+        container.innerHTML = '<p class="text-xs italic text-gray-400">Noch keine Positionen vorhanden.</p>';
+        return;
+    }
+
+    container.innerHTML = splitGroupEditState.positions.map((position, index) => `
+        <div class="grid grid-cols-[1fr_110px_auto] gap-2 items-center" data-position-index="${index}">
+            <input type="text" class="split-group-pos-name w-full p-2 border border-gray-300 rounded text-sm" value="${escapeHtmlInline(position.name || '')}" placeholder="Bezeichnung">
+            <input type="number" class="split-group-pos-price w-full p-2 border border-gray-300 rounded text-sm text-right font-mono" value="${normalizeMoney(position.price).toFixed(2)}" step="0.01" placeholder="0.00">
+            <button type="button" class="split-group-pos-remove px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-bold hover:bg-red-200">✕</button>
+        </div>
+    `).join('');
+
+    container.querySelectorAll('.split-group-pos-name').forEach((input) => {
+        input.addEventListener('input', (event) => {
+            const row = event.target.closest('[data-position-index]');
+            if (!row) return;
+            const index = Number(row.getAttribute('data-position-index'));
+            if (!Number.isFinite(index) || !splitGroupEditState.positions[index]) return;
+            splitGroupEditState.positions[index].name = String(event.target.value || '');
+        });
+    });
+
+    container.querySelectorAll('.split-group-pos-price').forEach((input) => {
+        input.addEventListener('input', (event) => {
+            const row = event.target.closest('[data-position-index]');
+            if (!row) return;
+            const index = Number(row.getAttribute('data-position-index'));
+            if (!Number.isFinite(index) || !splitGroupEditState.positions[index]) return;
+            const parsed = Number.parseFloat(String(event.target.value || '').replace(',', '.'));
+            splitGroupEditState.positions[index].price = Number.isFinite(parsed) ? normalizeMoney(parsed) : 0;
+        });
+    });
+
+    container.querySelectorAll('.split-group-pos-remove').forEach((button) => {
+        button.addEventListener('click', (event) => {
+            const row = event.target.closest('[data-position-index]');
+            if (!row) return;
+            const index = Number(row.getAttribute('data-position-index'));
+            if (!Number.isFinite(index)) return;
+            splitGroupEditState.positions.splice(index, 1);
+            renderSplitGroupEditPositions();
+        });
+    });
+}
+
+function renderSplitGroupEditParticipants() {
+    if (!splitGroupEditState) return;
+    const container = document.getElementById('split-group-edit-participants');
+    if (!container) return;
+
+    if (splitGroupEditState.participants.length === 0) {
+        container.innerHTML = '<p class="text-xs italic text-red-600">Mindestens eine Person ist erforderlich.</p>';
+        return;
+    }
+
+    container.innerHTML = splitGroupEditState.participants.map((participant) => `
+        <div class="rounded-lg border border-gray-200 bg-white p-3" data-participant-key="${participant.key}">
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="font-bold text-gray-800 text-sm">${escapeHtmlInline(participant.debtorName)}</span>
+                ${participant.isNew ? '<span class="text-[10px] px-2 py-0.5 rounded bg-green-100 text-green-700 border border-green-200">Neu</span>' : `<span class="text-[10px] px-2 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200">#${String(participant.paymentId || '').slice(-4).toUpperCase()}</span>`}
+                <button type="button" class="ml-auto split-group-remove-participant px-2 py-1 rounded bg-red-100 text-red-700 text-[11px] font-bold hover:bg-red-200">Entfernen</button>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 text-[11px]">
+                <label class="flex flex-col gap-1">
+                    <span class="text-gray-500">Manuell (€)</span>
+                    <input type="number" class="split-group-manual-share p-1.5 border border-gray-300 rounded text-right font-mono" value="${normalizeMoney(participant.manualShare).toFixed(2)}" step="0.01">
+                </label>
+                <label class="flex flex-col gap-1">
+                    <span class="text-gray-500">Anpassung (€)</span>
+                    <input type="number" class="split-group-offset p-1.5 border border-gray-300 rounded text-right font-mono" value="${normalizeMoney(participant.offset).toFixed(2)}" step="0.01">
+                </label>
+                <div class="rounded border border-gray-200 bg-gray-50 px-2 py-1.5">
+                    <span class="block text-gray-500">Bereits bezahlt</span>
+                    <span class="font-bold text-green-700 split-group-paid">${normalizeMoney(participant.paidAmount).toFixed(2)} €</span>
+                </div>
+                <div class="rounded border border-indigo-200 bg-indigo-50 px-2 py-1.5">
+                    <span class="block text-indigo-600">Neu zugeteilt</span>
+                    <span class="font-bold text-indigo-700 split-group-share-output">0.00 €</span>
+                </div>
+            </div>
+            <div class="split-group-overpaid-warning mt-2 hidden rounded border border-red-200 bg-red-50 p-2 text-[11px] text-red-700"></div>
+        </div>
+    `).join('');
+
+    container.querySelectorAll('[data-participant-key]').forEach((row) => {
+        const key = String(row.getAttribute('data-participant-key') || '');
+        const participant = splitGroupEditState.participants.find((entry) => entry.key === key);
+        if (!participant) return;
+
+        const manualInput = row.querySelector('.split-group-manual-share');
+        const offsetInput = row.querySelector('.split-group-offset');
+        const removeButton = row.querySelector('.split-group-remove-participant');
+
+        if (manualInput) {
+            manualInput.addEventListener('input', (event) => {
+                const parsed = Number.parseFloat(String(event.target.value || '').replace(',', '.'));
+                participant.manualShare = Number.isFinite(parsed) ? normalizeMoney(parsed) : 0;
+                refreshSplitGroupEditPreview();
+            });
+        }
+
+        if (offsetInput) {
+            offsetInput.addEventListener('input', (event) => {
+                const parsed = Number.parseFloat(String(event.target.value || '').replace(',', '.'));
+                participant.offset = Number.isFinite(parsed) ? normalizeMoney(parsed) : 0;
+                refreshSplitGroupEditPreview();
+            });
+        }
+
+        if (removeButton) {
+            removeButton.addEventListener('click', () => {
+                splitGroupEditState.participants = splitGroupEditState.participants.filter((entry) => entry.key !== key);
+                renderSplitGroupEditParticipants();
+                renderSplitGroupEditAddOptions();
+                refreshSplitGroupEditPreview();
+            });
+        }
+    });
+}
+
+function computeSplitGroupEditDistribution(formValues = null) {
+    if (!splitGroupEditState) return null;
+
+    const values = formValues || getSplitGroupEditFormValues();
+    const participants = Array.isArray(splitGroupEditState.participants) ? splitGroupEditState.participants : [];
+    const mode = getSplitGroupEditModeToken(values.mode);
+    const totalAmount = normalizeMoney(values.totalAmount);
+    const baseShare = participants.length > 0 ? normalizeMoney(totalAmount / participants.length) : 0;
+
+    let assignedSum = 0;
+    let hasNegative = false;
+
+    const resolvedParticipants = participants.map((participant) => {
+        const manualShare = normalizeMoney(participant.manualShare);
+        const offset = normalizeMoney(participant.offset);
+        const assignedAmount = mode === 'manual'
+            ? manualShare
+            : normalizeMoney(baseShare + offset);
+
+        if (assignedAmount < -0.01) hasNegative = true;
+        assignedSum += assignedAmount;
+
+        const paidAmount = normalizeMoney(participant.paidAmount);
+        const remainingAmount = normalizeMoney(Math.max(0, assignedAmount - paidAmount));
+        const overpaidAmount = normalizeMoney(Math.max(0, paidAmount - assignedAmount));
+
+        return {
+            ...participant,
+            assignedAmount,
+            paidAmount,
+            remainingAmount,
+            overpaidAmount
+        };
+    });
+
+    const openAllocation = normalizeMoney(totalAmount - assignedSum);
+    const overAssigned = openAllocation < -0.01;
+
+    return {
+        values: {
+            ...values,
+            mode,
+            totalAmount
+        },
+        baseShare,
+        participants: resolvedParticipants,
+        assignedSum: normalizeMoney(assignedSum),
+        openAllocation,
+        hasNegative,
+        overAssigned,
+        canSave: !hasNegative && !overAssigned && resolvedParticipants.length > 0
+    };
+}
+
+function refreshSplitGroupEditPreview() {
+    if (!splitGroupEditState) return;
+
+    const computed = computeSplitGroupEditDistribution();
+    if (!computed) return;
+
+    splitGroupEditState.mode = computed.values.mode;
+    splitGroupEditState.lastComputed = computed;
+
+    const mode = computed.values.mode;
+    const summary = document.getElementById('split-group-edit-summary');
+    const saveBtn = document.getElementById('btn-save-split-group-edit');
+
+    if (saveBtn) {
+        saveBtn.disabled = !computed.canSave;
+        saveBtn.classList.toggle('opacity-50', !computed.canSave);
+        saveBtn.classList.toggle('cursor-not-allowed', !computed.canSave);
+    }
+
+    if (summary) {
+        if (computed.hasNegative) {
+            summary.className = 'rounded-lg border border-red-300 bg-red-50 p-2 text-xs text-red-700';
+            summary.innerHTML = 'Negative Zuteilungen sind nicht erlaubt.';
+        } else if (computed.overAssigned) {
+            summary.className = 'rounded-lg border border-red-300 bg-red-50 p-2 text-xs text-red-700';
+            summary.innerHTML = `Zu viel verteilt: <strong>${Math.abs(computed.openAllocation).toFixed(2)} €</strong>`;
+        } else if (Math.abs(computed.openAllocation) < 0.01) {
+            summary.className = 'rounded-lg border border-green-300 bg-green-50 p-2 text-xs text-green-700';
+            summary.innerHTML = `✔ Vollständig verteilt: ${computed.assignedSum.toFixed(2)} €`;
+        } else {
+            summary.className = 'rounded-lg border border-orange-300 bg-orange-50 p-2 text-xs text-orange-700';
+            summary.innerHTML = `Offene Zuteilung: <strong>${computed.openAllocation.toFixed(2)} €</strong> (Speichern erlaubt)`;
+        }
+    }
+
+    document.querySelectorAll('[data-participant-key]').forEach((row) => {
+        const key = String(row.getAttribute('data-participant-key') || '');
+        const participant = computed.participants.find((entry) => entry.key === key);
+        if (!participant) return;
+
+        const manualInput = row.querySelector('.split-group-manual-share');
+        const offsetInput = row.querySelector('.split-group-offset');
+        const shareOutput = row.querySelector('.split-group-share-output');
+        const warning = row.querySelector('.split-group-overpaid-warning');
+
+        if (manualInput) manualInput.disabled = mode !== 'manual';
+        if (offsetInput) offsetInput.disabled = mode !== 'equal';
+        if (shareOutput) shareOutput.textContent = `${participant.assignedAmount.toFixed(2)} €`;
+
+        if (warning) {
+            if (participant.overpaidAmount > 0.01) {
+                warning.classList.remove('hidden');
+                warning.textContent = `Mehr bezahlt als neu zugeteilt: ${participant.overpaidAmount.toFixed(2)} €.`;
+            } else {
+                warning.classList.add('hidden');
+                warning.textContent = '';
+            }
+        }
+    });
+}
+
+window.openSplitGroupEdit = function (groupId) {
+    if (!groupId) return;
+
+    const nextState = createSplitGroupEditState(groupId);
+    if (!nextState) {
+        alertUser('Gruppenmaster konnte nicht zum Bearbeiten geladen werden.', 'error');
+        return;
+    }
+    splitGroupEditState = nextState;
+
+    const modal = document.getElementById('splitGroupEditModal');
+    const titleEl = document.getElementById('split-group-edit-title-display');
+    const categorySelect = document.getElementById('split-group-edit-category');
+    if (!modal || !titleEl || !categorySelect) return;
+
+    titleEl.textContent = `Gruppenmaster bearbeiten (#${groupId.slice(-6)})`;
+
+    document.getElementById('split-group-edit-title').value = splitGroupEditState.master.title;
+    document.getElementById('split-group-edit-total').value = splitGroupEditState.master.totalAmount.toFixed(2);
+    document.getElementById('split-group-edit-start-date').value = splitGroupEditState.master.startDate || '';
+    document.getElementById('split-group-edit-deadline').value = splitGroupEditState.master.deadline || '';
+    document.getElementById('split-group-edit-invoice').value = splitGroupEditState.master.invoiceNr || '';
+    document.getElementById('split-group-edit-order').value = splitGroupEditState.master.orderNr || '';
+    document.getElementById('split-group-edit-notes').value = splitGroupEditState.master.notes || '';
+
+    const modeSelect = document.getElementById('split-group-edit-mode');
+    const typeSelect = document.getElementById('split-group-edit-type');
+    modeSelect.value = splitGroupEditState.mode;
+    typeSelect.value = splitGroupEditState.master.type || 'debt';
+
+    fillCategoryDropdown(categorySelect);
+    categorySelect.value = splitGroupEditState.master.categoryId || 'cat_misc';
+
+    renderSplitGroupEditPositions();
+    renderSplitGroupEditParticipants();
+    renderSplitGroupEditAddOptions();
+
+    modeSelect.onchange = () => {
+        if (!splitGroupEditState) return;
+        splitGroupEditState.mode = getSplitGroupEditModeToken(modeSelect.value);
+        refreshSplitGroupEditPreview();
+    };
+
+    document.getElementById('split-group-edit-title').oninput = () => refreshSplitGroupEditPreview();
+    document.getElementById('split-group-edit-total').oninput = () => refreshSplitGroupEditPreview();
+    document.getElementById('split-group-edit-start-date').onchange = () => refreshSplitGroupEditPreview();
+    document.getElementById('split-group-edit-deadline').onchange = () => refreshSplitGroupEditPreview();
+    categorySelect.onchange = () => refreshSplitGroupEditPreview();
+    typeSelect.onchange = () => refreshSplitGroupEditPreview();
+
+    const addPositionBtn = document.getElementById('btn-split-group-edit-add-position');
+    if (addPositionBtn) {
+        addPositionBtn.onclick = () => {
+            if (!splitGroupEditState) return;
+            splitGroupEditState.positions.push({ name: '', price: 0 });
+            renderSplitGroupEditPositions();
+        };
+    }
+
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+    refreshSplitGroupEditPreview();
+};
+
+function addSplitGroupEditParticipantFromControls() {
+    if (!splitGroupEditState) return;
+
+    const manualInput = document.getElementById('split-group-edit-add-manual-name');
+    const select = document.getElementById('split-group-edit-add-person-select');
+    const manualName = String(manualInput?.value || '').trim();
+
+    if (manualName) {
+        const duplicateName = splitGroupEditState.participants.some((entry) => entry.debtorName.toLowerCase() === manualName.toLowerCase());
+        if (duplicateName) {
+            alertUser('Diese Person ist bereits in der Gruppe.', 'info');
+            return;
+        }
+
+        splitGroupEditState.participants.push({
+            key: `NEW_MANUAL_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+            paymentId: null,
+            debtorId: null,
+            debtorName: manualName,
+            paidAmount: 0,
+            currentAssignedAmount: 0,
+            manualShare: 0,
+            offset: 0,
+            isNew: true
+        });
+
+        manualInput.value = '';
+        renderSplitGroupEditParticipants();
+        renderSplitGroupEditAddOptions();
+        refreshSplitGroupEditPreview();
+        return;
+    }
+
+    const selectedValue = String(select?.value || '').trim();
+    if (!selectedValue) {
+        alertUser('Bitte Person aus Liste wählen oder manuell eingeben.', 'info');
+        return;
+    }
+
+    const [typeToken, targetId] = selectedValue.split(':');
+    if (!targetId) return;
+    if (splitGroupEditState.participants.some((entry) => entry.debtorId === targetId)) {
+        alertUser('Diese Person ist bereits enthalten.', 'info');
+        return;
+    }
+
+    const selectedOption = select.options[select.selectedIndex];
+    const debtorName = selectedOption ? String(selectedOption.textContent || '').trim() : targetId;
+
+    splitGroupEditState.participants.push({
+        key: `NEW_${typeToken}_${targetId}`,
+        paymentId: null,
+        debtorId: targetId,
+        debtorName,
+        paidAmount: 0,
+        currentAssignedAmount: 0,
+        manualShare: 0,
+        offset: 0,
+        isNew: true
+    });
+
+    select.value = '';
+    if (manualInput) manualInput.value = '';
+
+    renderSplitGroupEditParticipants();
+    renderSplitGroupEditAddOptions();
+    refreshSplitGroupEditPreview();
+}
+window.addSplitGroupEditParticipantFromControls = addSplitGroupEditParticipantFromControls;
+
+function resolveSplitGroupOverpaidDecision(overpaidCases = []) {
+    if (!Array.isArray(overpaidCases) || overpaidCases.length === 0) return null;
+
+    const summary = overpaidCases
+        .map((entry) => `${entry.debtorName}: ${entry.excessAmount.toFixed(2)} €`)
+        .join('\n');
+
+    const rawDecision = prompt(
+        `Mehr bezahlt als neu zugeteilt:\n${summary}\n\nBitte wählen:\nA = Umkehr-Eintrag anlegen\nB = Als Guthaben speichern\n\nEingabe: A oder B`,
+        'A'
+    );
+
+    if (!rawDecision) return null;
+    const token = String(rawDecision || '').trim().toUpperCase();
+    if (token === 'A') return 'reverse_debt';
+    if (token === 'B') return 'credit';
+
+    alertUser('Ungültige Auswahl. Bitte A oder B eingeben.', 'error');
+    return null;
+}
+
+async function saveSplitGroupEdit() {
+    if (!splitGroupEditState) return;
+
+    const values = getSplitGroupEditFormValues();
+    if (!values.title || !values.startDate) {
+        alertUser('Titel und Startdatum sind Pflicht.', 'error');
+        return;
+    }
+    if (values.deadline && values.deadline < values.startDate) {
+        alertUser('Die Frist darf nicht vor dem Startdatum liegen.', 'error');
+        return;
+    }
+
+    const computed = computeSplitGroupEditDistribution(values);
+    if (!computed) return;
+    if (computed.participants.length === 0) {
+        alertUser('Mindestens eine Person ist erforderlich.', 'error');
+        return;
+    }
+    if (computed.hasNegative) {
+        alertUser('Negative Zuteilungen sind nicht erlaubt.', 'error');
+        return;
+    }
+    if (computed.overAssigned) {
+        alertUser('Zu viel verteilt. Bitte Beträge prüfen.', 'error');
+        return;
+    }
+
+    const sourceItems = getSplitGroupItemsById(splitGroupEditState.groupId);
+    if (sourceItems.length === 0) {
+        alertUser('Gruppenmaster konnte nicht gespeichert werden (keine Einträge).', 'error');
+        return;
+    }
+
+    const sourceById = {};
+    sourceItems.forEach((entry) => {
+        sourceById[entry.id] = entry;
+    });
+
+    const targetByPaymentId = {};
+    computed.participants.forEach((entry) => {
+        if (entry.paymentId) {
+            targetByPaymentId[entry.paymentId] = entry;
+        }
+    });
+
+    const overpaidCases = [];
+    sourceItems.forEach((entry) => {
+        const paidAmount = getPaymentPaidAmount(entry);
+        const target = targetByPaymentId[entry.id]?.assignedAmount ?? 0;
+        const excessAmount = normalizeMoney(paidAmount - target);
+        if (excessAmount > 0.01) {
+            overpaidCases.push({
+                paymentId: entry.id,
+                debtorId: entry.debtorId || null,
+                debtorName: entry.debtorName,
+                paidAmount,
+                targetAmount: normalizeMoney(target),
+                excessAmount
+            });
+        }
+    });
+
+    let overpaidDecision = null;
+    if (overpaidCases.length > 0) {
+        overpaidDecision = resolveSplitGroupOverpaidDecision(overpaidCases);
+        if (!overpaidDecision) return;
+    }
+
+    const btn = document.getElementById('btn-save-split-group-edit');
+    setButtonLoading(btn, true);
+
+    try {
+        const batch = writeBatch(db);
+        const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
+        const nowIso = new Date().toISOString();
+
+        // Neue IDs früh erzeugen, damit equalAdjustments stabil gespeichert werden.
+        computed.participants.forEach((entry) => {
+            if (!entry.paymentId) {
+                const newRef = doc(paymentsRef);
+                entry.paymentId = newRef.id;
+                entry.docRef = newRef;
+            } else {
+                entry.docRef = doc(paymentsRef, entry.paymentId);
+            }
+        });
+
+        const equalAdjustments = {};
+        if (computed.values.mode === 'equal') {
+            computed.participants.forEach((entry) => {
+                equalAdjustments[entry.paymentId] = normalizeMoney(entry.offset);
+            });
+        }
+
+        const cleanedPositions = (Array.isArray(splitGroupEditState.positions) ? splitGroupEditState.positions : [])
+            .map((position) => ({
+                name: String(position?.name || '').trim(),
+                price: normalizeMoney(position?.price)
+            }))
+            .filter((position) => position.name && Number.isFinite(position.price));
+
+        const baseReference = sourceItems[0];
+        const splitMasterPayload = {
+            version: 1,
+            groupId: splitGroupEditState.groupId,
+            mode: computed.values.mode,
+            totalAmount: normalizeMoney(computed.values.totalAmount),
+            openAllocation: Math.max(0, normalizeMoney(computed.openAllocation)),
+            equalAdjustments,
+            title: computed.values.title,
+            startDate: computed.values.startDate,
+            deadline: computed.values.deadline,
+            categoryId: computed.values.categoryId,
+            type: computed.values.type,
+            invoiceNr: computed.values.invoiceNr,
+            orderNr: computed.values.orderNr,
+            notes: computed.values.notes,
+            positions: cleanedPositions,
+            creditorId: baseReference.creditorId || null,
+            creditorName: baseReference.creditorName || '',
+            updatedAt: nowIso,
+            updatedBy: currentUser.mode,
+            updatedByName: currentUser.displayName
+        };
+
+        const reopenGroupId = splitGroupEditState.groupId;
+
+        // 1) Aktive Teilnehmer updaten oder neu anlegen.
+        computed.participants.forEach((participant) => {
+            const existing = sourceById[participant.paymentId] || null;
+            const paidAmount = existing ? getPaymentPaidAmount(existing) : 0;
+            const assignedAmount = normalizeMoney(participant.assignedAmount);
+            const remainingAmount = normalizeMoney(Math.max(0, assignedAmount - paidAmount));
+
+            const sharedPayload = {
+                title: computed.values.title,
+                startDate: computed.values.startDate,
+                deadline: computed.values.deadline,
+                categoryId: computed.values.categoryId,
+                type: computed.values.type,
+                invoiceNr: computed.values.invoiceNr,
+                orderNr: computed.values.orderNr,
+                notes: computed.values.notes,
+                positions: cleanedPositions,
+                amount: assignedAmount,
+                remainingAmount,
+                status: remainingAmount <= 0.001 ? 'paid' : 'open',
+                debtorId: participant.debtorId || null,
+                debtorName: participant.debtorName,
+                involvedUserIds: buildInvolvedUserIdsForPayment(participant.debtorId || null, baseReference.creditorId || null),
+                splitGroupId: splitGroupEditState.groupId,
+                splitMaster: splitMasterPayload,
+                splitAssignedAmount: assignedAmount
+            };
+
+            if (existing) {
+                batch.update(participant.docRef, {
+                    ...sharedPayload,
+                    history: [...(existing.history || []), {
+                        date: new Date(),
+                        action: 'split_group_master_edited',
+                        user: currentUser.displayName,
+                        info: `Gruppenmaster aktualisiert (Neu: ${assignedAmount.toFixed(2)} €, Offene Zuteilung: ${splitMasterPayload.openAllocation.toFixed(2)} €).`
+                    }]
+                });
+            } else {
+                batch.set(participant.docRef, {
+                    createdAt: serverTimestamp(),
+                    createdBy: currentUser.mode,
+                    accessRights: { [currentUser.mode]: { status: 'accepted', rights: 'owner' } },
+                    creditorId: baseReference.creditorId || null,
+                    creditorName: baseReference.creditorName || '',
+                    isTBD: false,
+                    ...sharedPayload,
+                    history: [{
+                        date: new Date(),
+                        action: 'created_split_member',
+                        user: currentUser.displayName,
+                        info: `Neu zur Gruppe hinzugefügt (${assignedAmount.toFixed(2)} €).`
+                    }]
+                });
+            }
+        });
+
+        // 2) Entfernte Teilnehmer sauber aus der Gruppe lösen.
+        const activePaymentIds = new Set(computed.participants.map((entry) => entry.paymentId));
+        sourceItems
+            .filter((entry) => !activePaymentIds.has(entry.id))
+            .forEach((entry) => {
+                const paidAmount = getPaymentPaidAmount(entry);
+                batch.update(doc(paymentsRef, entry.id), {
+                    amount: normalizeMoney(paidAmount),
+                    remainingAmount: 0,
+                    status: 'closed',
+                    splitGroupId: deleteField(),
+                    splitMaster: deleteField(),
+                    splitAssignedAmount: deleteField(),
+                    history: [...(entry.history || []), {
+                        date: new Date(),
+                        action: 'removed_from_split_group',
+                        user: currentUser.displayName,
+                        info: `Aus Gruppenmaster entfernt. Bereits bezahlt: ${normalizeMoney(paidAmount).toFixed(2)} €.`
+                    }]
+                });
+            });
+
+        // 3) Bei Überzahlung neue Ausgleichseinträge erzeugen (A/B Entscheidung).
+        if (overpaidDecision && overpaidCases.length > 0) {
+            overpaidCases.forEach((entry) => {
+                const overpaidAmount = normalizeMoney(entry.excessAmount);
+                if (overpaidAmount <= 0.01) return;
+
+                const newDocRef = doc(paymentsRef);
+                const linkOrigin = `[LINK:${entry.paymentId}:#${String(entry.paymentId).slice(-4).toUpperCase()}]`;
+
+                if (overpaidDecision === 'reverse_debt') {
+                    const reverseDebtorId = baseReference.creditorId || null;
+                    const reverseDebtorName = baseReference.creditorName || '';
+                    const reverseCreditorId = entry.debtorId || null;
+                    const reverseCreditorName = entry.debtorName || 'Unbekannt';
+
+                    batch.set(newDocRef, {
+                        title: `Ausgleich Split-Gruppe: ${computed.values.title}`,
+                        amount: overpaidAmount,
+                        remainingAmount: overpaidAmount,
+                        isTBD: false,
+                        startDate: computed.values.startDate,
+                        deadline: computed.values.deadline,
+                        status: 'open',
+                        type: 'debt',
+                        categoryId: computed.values.categoryId,
+                        creditorId: reverseCreditorId,
+                        creditorName: reverseCreditorName,
+                        debtorId: reverseDebtorId,
+                        debtorName: reverseDebtorName,
+                        invoiceNr: '',
+                        orderNr: '',
+                        notes: `Automatischer Ausgleich aus Gruppenanpassung (${linkOrigin}).`,
+                        positions: [],
+                        createdAt: serverTimestamp(),
+                        createdBy: currentUser.mode,
+                        involvedUserIds: buildInvolvedUserIdsForPayment(reverseDebtorId, reverseCreditorId),
+                        accessRights: { [currentUser.mode]: { status: 'accepted', rights: 'owner' } },
+                        history: [{
+                            date: new Date(),
+                            action: 'created_split_overpaid_reverse',
+                            user: currentUser.displayName,
+                            info: `Aus Überzahlung (${overpaidAmount.toFixed(2)} €) von ${linkOrigin} erstellt.`
+                        }]
+                    });
+                } else {
+                    const creditOwnerId = entry.debtorId || null;
+                    const creditOwnerName = entry.debtorName || 'Unbekannt';
+                    const creditHolderId = baseReference.creditorId || null;
+                    const creditHolderName = baseReference.creditorName || '';
+
+                    batch.set(newDocRef, {
+                        title: `Guthaben aus Gruppenanpassung`,
+                        amount: overpaidAmount,
+                        remainingAmount: overpaidAmount,
+                        isTBD: false,
+                        startDate: computed.values.startDate,
+                        deadline: computed.values.deadline,
+                        status: 'open',
+                        type: 'credit',
+                        categoryId: computed.values.categoryId,
+                        creditorId: creditOwnerId,
+                        creditorName: creditOwnerName,
+                        debtorId: creditHolderId,
+                        debtorName: creditHolderName,
+                        invoiceNr: '',
+                        orderNr: '',
+                        notes: `Automatisch als Guthaben aus Gruppenanpassung (${linkOrigin}) angelegt.`,
+                        positions: [],
+                        createdAt: serverTimestamp(),
+                        createdBy: currentUser.mode,
+                        involvedUserIds: buildInvolvedUserIdsForPayment(creditHolderId, creditOwnerId),
+                        accessRights: { [currentUser.mode]: { status: 'accepted', rights: 'owner' } },
+                        history: [{
+                            date: new Date(),
+                            action: 'created_split_overpaid_credit',
+                            user: currentUser.displayName,
+                            info: `Überzahlung (${overpaidAmount.toFixed(2)} €) aus ${linkOrigin} als Guthaben gespeichert.`
+                        }]
+                    });
+                }
+            });
+        }
+
+        await batch.commit();
+        alertUser('Gruppenmaster erfolgreich gespeichert.', 'success');
+
+        closeSplitGroupEditModal();
+        if (reopenGroupId) window.openSplitGroupView(reopenGroupId);
+    } catch (error) {
+        console.error(error);
+        alertUser(`Fehler beim Speichern des Gruppenmasters: ${error.message}`, 'error');
+    } finally {
+        setButtonLoading(btn, false);
+    }
 }
 
 async function closeOverviewGuestLink(collectionName, docId) {
@@ -1948,6 +3040,26 @@ function setupEventListeners() {
         if (currentDetailPaymentId) printPaymentDetail(currentDetailPaymentId);
     });
 
+    document.getElementById('btn-close-split-group-detail')?.addEventListener('click', closeSplitGroupDetailModal);
+    document.getElementById('btn-close-split-group-edit')?.addEventListener('click', closeSplitGroupEditModal);
+    document.getElementById('btn-cancel-split-group-edit')?.addEventListener('click', closeSplitGroupEditModal);
+    document.getElementById('btn-save-split-group-edit')?.addEventListener('click', saveSplitGroupEdit);
+    document.getElementById('btn-split-group-edit-add-participant')?.addEventListener('click', addSplitGroupEditParticipantFromControls);
+
+    const splitGroupDetailModal = document.getElementById('splitGroupDetailModal');
+    if (splitGroupDetailModal) {
+        splitGroupDetailModal.addEventListener('click', (event) => {
+            if (event.target === splitGroupDetailModal) closeSplitGroupDetailModal();
+        });
+    }
+
+    const splitGroupEditModal = document.getElementById('splitGroupEditModal');
+    if (splitGroupEditModal) {
+        splitGroupEditModal.addEventListener('click', (event) => {
+            if (event.target === splitGroupEditModal) closeSplitGroupEditModal();
+        });
+    }
+
     const listContainer = document.getElementById('payments-list-container');
     if (listContainer) {
         listContainer.addEventListener('click', (e) => {
@@ -2428,6 +3540,10 @@ async function executeMerge() {
             alertUser("Fehler: Einträge mit unbekanntem Betrag (TBD) können nicht zusammengefasst werden.", "error");
             return;
         }
+        if (p.splitGroupId) {
+            alertUser("Fehler: Split-Untereinträge können nicht zusammengefasst werden. Bitte Gruppenmaster verwenden.", "error");
+            return;
+        }
 
         totalAmount += parseFloat(p.remainingAmount);
         titleList.push(p.title);
@@ -2552,6 +3668,12 @@ async function executeMerge() {
 window.openSplitModal = function (id) {
     const p = allPayments.find(x => x.id === id);
     if (!p) return;
+
+    if (p.splitGroupId) {
+        alertUser("Split-Untereinträge können nicht direkt aufgeteilt werden. Bitte Gruppenmaster bearbeiten.", "info");
+        window.openSplitGroupView(p.splitGroupId);
+        return;
+    }
 
     if (p.isTBD) {
         alertUser("TBD-Einträge können nicht gesplittet werden.", "error");
@@ -2757,6 +3879,12 @@ let currentAdjustId = null;
 window.openAdjustAmountModal = function (id) {
     const p = allPayments.find(x => x.id === id);
     if (!p) return;
+
+    if (p.splitGroupId) {
+        alertUser("Split-Untereinträge können nicht direkt korrigiert werden. Bitte Gruppenmaster bearbeiten.", "info");
+        window.openSplitGroupView(p.splitGroupId);
+        return;
+    }
 
     currentAdjustId = id;
     const modal = document.getElementById('adjustAmountModal');
@@ -3159,6 +4287,12 @@ async function executeAdjustAmount() {
 function openCreateModal(paymentToEdit = null) {
     const modal = document.getElementById('createPaymentModal');
     if (!modal) return;
+
+    if (paymentToEdit && paymentToEdit.splitGroupId) {
+        alertUser('Dieser Untereintrag ist Teil einer Gruppe. Bitte über den Gruppenmaster bearbeiten.', 'info');
+        window.openSplitGroupView(paymentToEdit.splitGroupId);
+        return;
+    }
 
     if (paymentToEdit && isPaymentLockedByOnlineLink(paymentToEdit)) {
         alertUser('Bearbeitung blockiert: Dieser Eintrag ist mit einem aktiven Online-Zahlungslink verknüpft.', 'error_long');
@@ -3722,35 +4856,42 @@ function updateSplitPreview() {
         });
 
         // Sicherheitsprüfung Summe
-        const diffEqual = total - checkSumEqual;
-        const isValidSum = Math.abs(diffEqual) < 0.05;
+        const diffEqual = normalizeMoney(total - checkSumEqual);
+        const isOverAssigned = diffEqual < -0.05;
 
         // === NEU: Button Logik inkl. Minus-Check ===
         if (saveBtn) {
-            // Button ist nur aktiv, wenn Summe stimmt UND niemand im Minus ist
-            if (isValidSum && total > 0 && !negativeDetected) {
+            // Offene Zuteilung ist erlaubt, Überverteilung nicht
+            if (!isOverAssigned && total > 0 && !negativeDetected) {
                 saveBtn.disabled = false;
                 saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
                 saveBtn.title = "";
-                if (feedbackBox) feedbackBox.classList.add('hidden');
             } else {
                 saveBtn.disabled = true;
                 saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            }
+        }
 
-                // Feedback anzeigen
-                if (feedbackBox) {
-                    feedbackBox.classList.remove('hidden');
-                    feedbackBox.className = "mt-2 text-xs font-bold text-right text-red-600";
+        if (feedbackBox) {
+            feedbackBox.classList.remove('hidden');
 
-                    if (negativeDetected) {
-                        saveBtn.title = "Negative Beträge nicht erlaubt";
-                        const nameStr = negativeNames.slice(0, 2).join(', ') + (negativeNames.length > 2 ? '...' : '');
-                        feedbackBox.innerHTML = `Nicht möglich: <span class="underline">${nameStr}</span> im Minus!`;
-                    } else {
-                        saveBtn.title = "Summe stimmt nicht überein";
-                        feedbackBox.innerHTML = `Abweichung: <span>${diffEqual.toFixed(2)}</span> €`;
-                    }
-                }
+            if (negativeDetected) {
+                const nameStr = negativeNames.slice(0, 2).join(', ') + (negativeNames.length > 2 ? '...' : '');
+                feedbackBox.className = "mt-2 text-xs font-bold text-right text-red-600";
+                feedbackBox.innerHTML = `Nicht möglich: <span class="underline">${escapeHtmlInline(nameStr)}</span> im Minus!`;
+                if (saveBtn) saveBtn.title = "Negative Beträge nicht erlaubt";
+            } else if (isOverAssigned) {
+                feedbackBox.className = "mt-2 text-xs font-bold text-right text-red-600";
+                feedbackBox.innerHTML = `Zu viel zugeteilt: <span>${Math.abs(diffEqual).toFixed(2)}</span> €`;
+                if (saveBtn) saveBtn.title = "Zu viel verteilt";
+            } else if (Math.abs(diffEqual) < 0.05) {
+                feedbackBox.className = "mt-2 text-xs font-bold text-right text-green-600";
+                feedbackBox.innerHTML = `✔ Vollständig verteilt: ${checkSumEqual.toFixed(2)} €`;
+                if (saveBtn) saveBtn.title = "";
+            } else {
+                feedbackBox.className = "mt-2 text-xs font-bold text-right text-orange-600";
+                feedbackBox.innerHTML = `Offene Zuteilung: <span>${diffEqual.toFixed(2)}</span> €`;
+                if (saveBtn) saveBtn.title = "Speichern möglich mit offener Zuteilung";
             }
         }
 
@@ -3766,6 +4907,8 @@ function updateSplitPreview() {
 
     } else {
         // MANUELL
+        let hasNegativeManual = false;
+
         rows.forEach(row => {
             const cb = row.querySelector('.split-cb');
             const inp = row.querySelector('.split-amount-input');
@@ -3774,6 +4917,7 @@ function updateSplitPreview() {
                     let vStr = inp.value.replace(',', '.');
                     let val = parseFloat(vStr);
                     if (isNaN(val)) val = 0;
+                    if (val < -0.01) hasNegativeManual = true;
                     currentSum += val;
                 } else {
                     inp.value = "";
@@ -3781,15 +4925,36 @@ function updateSplitPreview() {
             }
         });
 
-        const diff = total - currentSum;
+        const diff = normalizeMoney(total - currentSum);
         if (previewEl) previewEl.textContent = "";
 
         const isBalanced = Math.abs(diff) < 0.02;
+        const isOverAssigned = diff < -0.02;
 
         if (feedbackBox) {
             feedbackBox.classList.remove('hidden');
 
-            if (isBalanced) {
+            if (hasNegativeManual) {
+                feedbackBox.className = "mt-2 text-xs font-bold text-right text-red-600";
+                feedbackBox.innerHTML = `Negative Beträge sind nicht erlaubt.`;
+
+                if (saveBtn) {
+                    saveBtn.disabled = true;
+                    saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                    saveBtn.title = "Negative Beträge nicht erlaubt";
+                }
+
+            } else if (isOverAssigned) {
+                if (saveBtn) {
+                    saveBtn.disabled = true;
+                    saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                    saveBtn.title = "Zu viel verteilt";
+                }
+
+                feedbackBox.className = "mt-2 text-xs font-bold text-right text-red-600";
+                feedbackBox.innerHTML = `Zu viel verteilt: <span>${Math.abs(diff).toFixed(2)}</span> €`;
+
+            } else if (isBalanced) {
                 feedbackBox.className = "mt-2 text-xs font-bold text-right text-green-600";
                 feedbackBox.innerHTML = `✔ Perfekt aufgeteilt: ${currentSum.toFixed(2)} €`;
 
@@ -3801,17 +4966,17 @@ function updateSplitPreview() {
 
             } else {
                 if (saveBtn) {
-                    saveBtn.disabled = true;
-                    saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
-                    saveBtn.title = "Beträge müssen aufgehen";
+                    saveBtn.disabled = false;
+                    saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    saveBtn.title = "Speichern möglich mit offener Zuteilung";
                 }
 
                 if (diff > 0) {
                     feedbackBox.className = "mt-2 text-xs font-bold text-right text-orange-600";
-                    feedbackBox.innerHTML = `Noch zu verteilen: <span>${diff.toFixed(2)}</span> €`;
+                    feedbackBox.innerHTML = `Offene Zuteilung: <span>${diff.toFixed(2)}</span> €`;
                 } else {
-                    feedbackBox.className = "mt-2 text-xs font-bold text-right text-red-600";
-                    feedbackBox.innerHTML = `Zu viel verteilt: <span>${Math.abs(diff).toFixed(2)}</span> €`;
+                    feedbackBox.className = "mt-2 text-xs font-bold text-right text-green-600";
+                    feedbackBox.innerHTML = `✔ Verteilung übernommen.`;
                 }
             }
         }
@@ -3993,10 +5158,7 @@ async function savePayment() {
 
         // Helper: Beteiligte User IDs sammeln
         const getInvolvedArray = (dId, cId) => {
-            const arr = [currentUser.mode];
-            if (dId && !dId.startsWith('MANUAL_') && dId !== currentUser.mode) arr.push(dId);
-            if (cId && !cId.startsWith('MANUAL_') && cId !== currentUser.mode) arr.push(cId);
-            return [...new Set(arr)];
+            return buildInvolvedUserIdsForPayment(dId, cId);
         };
 
         if (!splitMode) {
@@ -4082,28 +5244,81 @@ async function savePayment() {
                 }
             }
 
-            if (Math.abs(totalAmount - sumCheck) > 0.05) throw new Error(`Summenfehler.`);
+            const distributionDiff = normalizeMoney(totalAmount - sumCheck);
+            if (distributionDiff < -0.05) throw new Error(`Zu viel verteilt. Bitte Summen prüfen.`);
 
             const splitGroupId = "GRP_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+
+            const splitDocRefs = splitItems.map(() => doc(paymentsRef));
+            splitItems.forEach((item, index) => {
+                item.docRef = splitDocRefs[index];
+                item.paymentId = splitDocRefs[index].id;
+            });
+
+            const splitIdMap = {};
+            splitItems.forEach((item) => {
+                splitIdMap[String(item.id)] = item.paymentId;
+            });
+
+            const splitEqualAdjustments = {};
+            if (!isManual && currentSplitOffsets && typeof currentSplitOffsets === 'object') {
+                Object.entries(currentSplitOffsets).forEach(([sourceId, offset]) => {
+                    const paymentId = splitIdMap[String(sourceId)];
+                    const parsedOffset = Number(offset);
+                    if (!paymentId || !Number.isFinite(parsedOffset)) return;
+                    splitEqualAdjustments[paymentId] = normalizeMoney(parsedOffset);
+                });
+            }
+
+            const splitMaster = {
+                version: 1,
+                groupId: splitGroupId,
+                mode: isManual ? 'manual' : 'equal',
+                totalAmount: normalizeMoney(totalAmount),
+                openAllocation: Math.max(0, normalizeMoney(distributionDiff)),
+                equalAdjustments: splitEqualAdjustments,
+                title,
+                startDate,
+                deadline: deadlineDate,
+                categoryId,
+                type: document.getElementById('payment-type').value,
+                invoiceNr: document.getElementById('payment-invoice-nr').value,
+                orderNr: document.getElementById('payment-order-nr').value,
+                notes: document.getElementById('payment-notes').value,
+                positions,
+                creditorId,
+                creditorName,
+                updatedAt: new Date().toISOString(),
+                updatedBy: currentUser.mode,
+                updatedByName: currentUser.displayName
+            };
 
             splitItems.forEach(item => {
                 const dId = item.id.startsWith('MANUAL_') ? null : item.id;
                 const involved = getInvolvedArray(dId, creditorId);
+                const assignedShare = normalizeMoney(item.share);
 
                 const entry = {
                     ...baseData,
-                    amount: item.share,
-                    remainingAmount: item.share,
+                    amount: assignedShare,
+                    remainingAmount: assignedShare,
                     debtorId: dId,
                     debtorName: item.name,
                     involvedUserIds: involved,
                     accessRights: { [currentUser.mode]: { status: 'accepted', rights: 'owner' } },
                     splitGroupId: splitGroupId,
+                    splitMaster,
+                    splitAssignedAmount: assignedShare,
                     title: `${title}`,
-                    status: (item.share <= 0.001) ? 'paid' : 'open',
-                    history: [{ date: new Date(), action: 'created_split', user: currentUser.displayName, info: `Erstellt (Split-Anteil: ${item.share.toFixed(2)} €)` }]
+                    status: (assignedShare <= 0.001) ? 'paid' : 'open',
+                    history: [{
+                        date: new Date(),
+                        action: 'created_split',
+                        user: currentUser.displayName,
+                        info: `Erstellt (Split-Anteil: ${assignedShare.toFixed(2)} €, Offene Zuteilung: ${splitMaster.openAllocation.toFixed(2)} €)`
+                    }]
                 };
-                batch.set(doc(paymentsRef), entry);
+                batch.set(item.docRef, entry);
             });
         }
 
@@ -4593,6 +5808,7 @@ function renderDetailContent(p, isRefresh) {
     const iAmDebtor = p.debtorId === currentUser.mode;
     const iAmCreditor = p.creditorId === currentUser.mode;
     const shortId = p.id.slice(-4).toUpperCase();
+    const isSplitSubEntry = !!p.splitGroupId;
 
     const isArchivedOrTrash = p.status === 'archived' || p.status === 'trash';
 
@@ -4687,10 +5903,15 @@ function renderDetailContent(p, isRefresh) {
     let topButtonsHTML = '';
     const btnHistory = `<button onclick="openHistoryModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-bold shadow-sm transition transform hover:scale-105 mr-auto">🌳 Verlauf</button>`;
     const btnShare = `<button onclick="openShareModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-700 border border-gray-300 rounded hover:bg-gray-200 text-sm font-bold shadow-sm ml-2">🔒 Rechte</button>`;
+    const splitMasterButton = isSplitSubEntry
+        ? `<button onclick="window.openSplitGroupView('${p.splitGroupId}')" class="flex items-center gap-1 px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm font-bold">Gruppenmaster</button>`
+        : '';
 
     if (iAmCreator) {
         let standardActions = '';
-        if (!p.isTBD && !isArchivedOrTrash) {
+        if (isSplitSubEntry) {
+            standardActions += splitMasterButton;
+        } else if (!p.isTBD && !isArchivedOrTrash) {
             standardActions += `
             <button onclick="openAdjustAmountModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-bold">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 mr-1"><path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" /></svg>
@@ -4705,7 +5926,7 @@ function renderDetailContent(p, isRefresh) {
 
         let archiveButton = '';
         const isFinishStatus = p.status === 'paid' || p.status === 'settled' || p.status === 'cancelled' || p.status === 'closed';
-        if (isFinishStatus && !isArchivedOrTrash) {
+        if (isFinishStatus && !isArchivedOrTrash && !isSplitSubEntry) {
             archiveButton = `
             <button onclick="archivePayment('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-gray-200 text-gray-600 rounded hover:bg-gray-300 text-sm font-bold">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
@@ -4724,8 +5945,13 @@ function renderDetailContent(p, isRefresh) {
         topButtonsHTML = `
         <div class="flex justify-start gap-2 mb-4 no-print border-b pb-2">
             ${btnHistory}
+            ${splitMasterButton}
         </div>`;
     }
+
+    const splitEntryInfoHtml = isSplitSubEntry
+        ? `<div class="mb-3 p-3 rounded-lg border border-indigo-200 bg-indigo-50 text-xs text-indigo-800 flex flex-wrap items-center gap-2"><span class="font-bold">Split-Untereintrag:</span><span>Stammdaten und Verteilung werden über den Gruppenmaster gepflegt.</span><button onclick="window.openSplitGroupView('${p.splitGroupId}')" class="ml-auto px-2 py-1 rounded bg-indigo-600 text-white font-bold hover:bg-indigo-700">Ansicht</button></div>`
+        : '';
 
     // Positionen HTML aufbauen
     let positionsHtml = '';
@@ -4848,6 +6074,7 @@ function renderDetailContent(p, isRefresh) {
         ${blinkStyle}
         
         ${rightsLabel ? `<div class="mb-2 inline-block px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide ${rightsColor}">${rightsLabel}</div>` : ''}
+        ${splitEntryInfoHtml}
 
         ${topButtonsHTML}
         <h2 class="text-2xl font-bold text-gray-800 mb-1 leading-tight">${p.title}</h2>
@@ -5742,7 +6969,12 @@ function renderPaymentList(payments) {
                 groups[p.splitGroupId] = {
                     id: p.splitGroupId, title: p.title, items: [], 
                     totalRemaining: 0, 
-                    totalAmount: 0, categoryId: p.categoryId, date: p.createdAt, earliestDeadline: '9999-12-31' 
+                    totalAmount: 0,
+                    openAllocation: 0,
+                    categoryId: p.categoryId,
+                    date: p.createdAt,
+                    earliestDeadline: '9999-12-31',
+                    master: null
                 };
             }
             groups[p.splitGroupId].items.push(p);
@@ -5754,6 +6986,22 @@ function renderPaymentList(payments) {
             }
         } else {
             singles.push(p);
+        }
+    });
+
+    Object.values(groups).forEach((groupEntry) => {
+        const master = getSplitGroupMasterSnapshot(groupEntry.items);
+        if (!master) return;
+
+        groupEntry.master = master;
+        groupEntry.title = master.title;
+        groupEntry.categoryId = master.categoryId || groupEntry.categoryId;
+        groupEntry.openAllocation = normalizeMoney(master.openAllocation);
+        groupEntry.totalAmount = normalizeMoney(master.totalAmount);
+        groupEntry.totalRemaining = normalizeMoney(groupEntry.totalRemaining + groupEntry.openAllocation);
+
+        if (master.deadline && master.deadline < groupEntry.earliestDeadline) {
+            groupEntry.earliestDeadline = master.deadline;
         }
     });
 
@@ -5786,12 +7034,29 @@ function renderPaymentList(payments) {
         container.className = "grid grid-cols-1 sm:grid-cols-2 gap-3 pb-20";
     }
 
+    if (!document.getElementById('split-open-allocation-style')) {
+        const styleEl = document.createElement('style');
+        styleEl.id = 'split-open-allocation-style';
+        styleEl.textContent = `
+            @keyframes split-open-allocation-pulse {
+                0%, 100% { border-color: #2563eb; box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.45); }
+                50% { border-color: #dc2626; box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.25); }
+            }
+            .split-open-allocation-pulse {
+                animation: split-open-allocation-pulse 1.2s infinite;
+            }
+        `;
+        document.head.appendChild(styleEl);
+    }
+
     // RENDER LOOP
     combinedList.forEach(item => {
         if (item.items) { 
             const g = item;
+            const splitMaster = g.master || getSplitGroupMasterSnapshot(g.items);
             const isAllPaid = g.totalRemaining <= 0.01;
             const timeDiff = (new Date(g.earliestDeadline) - today) / (1000 * 60 * 60 * 24);
+            const hasOpenAllocation = normalizeMoney(splitMaster?.openAllocation) > 0.009;
             
             let groupStatusClass = "";
             
@@ -5800,7 +7065,9 @@ function renderPaymentList(payments) {
                     groupStatusClass = "bg-green-50/50 hover:bg-green-100 border-l-4 border-green-500";
                 } else {
                     groupStatusClass = "bg-indigo-50/50 hover:bg-indigo-100";
-                    if (g.earliestDeadline !== '9999-12-31') {
+                    if (hasOpenAllocation) {
+                        groupStatusClass = "bg-indigo-50/70 hover:bg-indigo-100 border-l-4 border-indigo-500 split-open-allocation-pulse";
+                    } else if (g.earliestDeadline !== '9999-12-31') {
                         if (timeDiff < 3) groupStatusClass = "bg-red-50/50 hover:bg-red-100 border-l-4 border-red-500 animate-pulse"; 
                         else if (timeDiff < 7) groupStatusClass = "bg-yellow-50/50 hover:bg-yellow-100 border-l-4 border-yellow-400";
                     }
@@ -5810,7 +7077,9 @@ function renderPaymentList(payments) {
                     groupStatusClass = "border-2 border-dashed border-green-200 bg-green-50";
                 } else {
                     groupStatusClass = "border-2 border-dashed border-indigo-200 bg-indigo-50";
-                    if (g.earliestDeadline !== '9999-12-31') {
+                    if (hasOpenAllocation) {
+                        groupStatusClass = "border-2 border-indigo-300 bg-indigo-50 split-open-allocation-pulse";
+                    } else if (g.earliestDeadline !== '9999-12-31') {
                         if (timeDiff < 3) groupStatusClass = "border-2 border-red-500 bg-red-50 animate-pulse"; 
                         else if (timeDiff < 7) groupStatusClass = "border-2 border-yellow-400 bg-yellow-50";
                     }
@@ -5824,10 +7093,13 @@ function renderPaymentList(payments) {
                          onclick="this.nextElementSibling.classList.toggle('hidden'); this.querySelector('.arrow-icon').classList.toggle('rotate-180');">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-gray-500 arrow-icon transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
                         <span class="text-lg">📂</span>
-                        <span class="text-xs font-bold text-gray-800 flex-grow truncate">${g.title} (Split: ${g.items.length})</span>
+                        <span class="text-xs font-bold text-gray-800 flex-grow truncate">${escapeHtmlInline(g.title)} (Split: ${g.items.length})</span>
+                        ${hasOpenAllocation ? `<span class="text-[10px] font-black text-red-600 mr-1 whitespace-nowrap">Offen: ${normalizeMoney(splitMaster?.openAllocation).toFixed(2)} €</span>` : ''}
                         <span class="font-mono font-bold text-xs ${isAllPaid ? 'text-green-600' : 'text-indigo-600'} mr-2">${g.totalRemaining.toFixed(2)} €</span>
+                        <button type="button" onclick="event.stopPropagation(); window.openSplitGroupView('${g.id}');" class="px-2 py-1 rounded bg-indigo-600 text-white text-[10px] font-bold hover:bg-indigo-700">Ansicht</button>
                     </div>
                     <div class="hidden pl-0 bg-white border-t border-gray-100">
+                        ${hasOpenAllocation ? `<div class="px-2 py-1.5 text-[11px] font-bold text-orange-700 bg-orange-50 border-b border-orange-100">Offene Zuteilung: ${normalizeMoney(splitMaster?.openAllocation).toFixed(2)} €</div>` : ''}
                         ${g.items.map(p => createSingleListRowHtml(p, today, true)).join('')} 
                     </div>
                 </div>`;
@@ -5845,16 +7117,18 @@ function renderPaymentList(payments) {
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6 text-indigo-500"><path d="M19.5 21a3 3 0 0 0 3-3v-4.5a3 3 0 0 0-3-3h-15a3 3 0 0 0-3 3V18a3 3 0 0 0 3 3h15ZM1.5 10.146V6a3 3 0 0 1 3-3h5.379a2.25 2.25 0 0 1 1.59.659l2.122 2.121c.14.141.331.22.53.22H19.5a3 3 0 0 1 3 3v1.146A4.483 4.483 0 0 0 19.5 9h-15a4.483 4.483 0 0 0-3 1.146Z" /></svg>
                             </div>
                             <div class="min-w-0">
-                                <p class="font-bold text-gray-800 text-sm truncate">${g.title}</p>
-                                <p class="text-xs text-gray-600 font-medium">${g.items.length} Personen</p>
+                                <p class="font-bold text-gray-800 text-sm truncate">${escapeHtmlInline(g.title)}</p>
+                                <p class="text-xs text-gray-600 font-medium">${g.items.length} Personen${hasOpenAllocation ? ` • Offene Zuteilung ${normalizeMoney(splitMaster?.openAllocation).toFixed(2)} €` : ''}</p>
                             </div>
                         </div>
                         <div class="text-right flex items-center gap-2 flex-shrink-0">
                             <span class="font-black text-base sm:text-lg ${textColor}">${g.totalRemaining.toFixed(2)} €</span>
+                            <button type="button" onclick="event.stopPropagation(); window.openSplitGroupView('${g.id}');" class="px-2 py-1 rounded bg-indigo-600 text-white text-[10px] font-bold hover:bg-indigo-700">Ansicht</button>
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 text-gray-500 transition-transform arrow-icon"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
                         </div>
                     </div>
                     <div class="hidden grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 pl-2 border-l-4 border-indigo-100">
+                        ${hasOpenAllocation ? `<div class="sm:col-span-2 px-3 py-2 text-xs font-bold text-orange-700 bg-orange-50 border border-orange-200 rounded-lg">Offene Zuteilung: ${normalizeMoney(splitMaster?.openAllocation).toFixed(2)} €</div>` : ''}
                         ${g.items.map(p => createSingleCardHtml(p, today)).join('')}
                     </div>
                 </div>`;
@@ -6028,6 +7302,7 @@ function updateCategoryDashboard() {
     // 1. Daten sammeln (Nur Kategorien mit offenen Beträgen > 0)
     const sums = [];
     const allCats = [...SYSTEM_CATEGORIES, ...allCategories];
+    const splitMasters = collectSplitMasterMap(allPayments);
 
     allCats.forEach(cat => {
         let count = 0;
@@ -6055,6 +7330,31 @@ function updateCategoryDashboard() {
                     count++;
                     amount += parseFloat(p.remainingAmount || 0);
                 }
+            }
+        });
+
+        Object.values(splitMasters).forEach((master) => {
+            const openAllocation = normalizeMoney(master.openAllocation);
+            if (openAllocation <= 0.009) return;
+            const hasOpenEntry = (master.items || []).some((entry) => entry.status === 'open' || entry.status === 'pending_approval');
+            if (!hasOpenEntry) return;
+
+            if (master.startDate) {
+                const start = new Date(master.startDate);
+                start.setHours(0, 0, 0, 0);
+                if (start > today) return;
+            }
+
+            const groupCategoryId = master.categoryId || 'cat_misc';
+            if (groupCategoryId === cat.id) {
+                count++;
+                amount += openAllocation;
+                return;
+            }
+
+            if (cat.id === 'cat_misc' && groupCategoryId && !allCats.find((entry) => entry.id === groupCategoryId)) {
+                count++;
+                amount += openAllocation;
             }
         });
 
@@ -6169,6 +7469,7 @@ function updateDashboard(payments) {
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const splitMasters = collectSplitMasterMap(payments);
 
     payments.forEach(p => {
         // Nur offene Einträge zählen
@@ -6208,6 +7509,24 @@ function updateDashboard(payments) {
                 owedToMe += amount;
                 owedToMeCount++;
             }
+        }
+    });
+
+    Object.values(splitMasters).forEach((master) => {
+        const openAllocation = normalizeMoney(master.openAllocation);
+        if (openAllocation <= 0.009) return;
+        const hasOpenEntry = (master.items || []).some((entry) => entry.status === 'open' || entry.status === 'pending_approval');
+        if (!hasOpenEntry) return;
+
+        if (master.startDate) {
+            const start = new Date(master.startDate);
+            start.setHours(0, 0, 0, 0);
+            if (start > today) return;
+        }
+
+        if (master.creditorId === currentUser.mode) {
+            owedToMe += openAllocation;
+            owedToMeCount++;
         }
     });
 
@@ -6251,6 +7570,7 @@ function renderFuturePaymentsList() {
     const futurePayments = [];
     let totalDebt = 0;
     let totalCredit = 0;
+    const splitMasters = collectSplitMasterMap(allPayments);
 
     allPayments.forEach(p => {
         if (!p.startDate) return;
@@ -6271,6 +7591,30 @@ function renderFuturePaymentsList() {
         const amount = parseFloat(p.remainingAmount);
         if (p.debtorId === currentUser.mode) totalDebt += amount;
         else if (p.creditorId === currentUser.mode) totalCredit += amount;
+    });
+
+    Object.values(splitMasters).forEach((master) => {
+        const openAllocation = normalizeMoney(master.openAllocation);
+        if (openAllocation <= 0.009) return;
+        const hasOpenEntry = (master.items || []).some((entry) => entry.status === 'open' || entry.status === 'pending_approval');
+        if (!hasOpenEntry) return;
+        if (!master.startDate) return;
+
+        const start = new Date(master.startDate);
+        start.setHours(0, 0, 0, 0);
+        if (start <= today) return;
+
+        const groupItems = getSplitGroupItemsById(master.id);
+        const hasAccess = groupItems.some((entry) => {
+            if (entry.createdBy === currentUser.mode) return true;
+            const access = entry.accessRights ? entry.accessRights[currentUser.mode] : null;
+            return !!(access && access.status === 'accepted');
+        });
+        if (!hasAccess) return;
+
+        if (master.creditorId === currentUser.mode) {
+            totalCredit += openAllocation;
+        }
     });
 
     sumDebt.textContent = totalDebt.toFixed(2) + " €";
