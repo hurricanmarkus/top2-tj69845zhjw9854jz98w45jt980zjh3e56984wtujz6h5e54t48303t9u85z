@@ -7009,6 +7009,14 @@ function renderPaymentList(payments) {
         
         return true;
     });
+
+    const isFinishedSplitGroupItem = (payment) => {
+        const statusToken = String(payment?.status || '').toLowerCase();
+        if (statusToken === 'paid' || statusToken === 'closed' || statusToken === 'settled' || statusToken === 'cancelled') {
+            return true;
+        }
+        return getPaymentRemainingForDisplay(payment) <= 0.009;
+    };
     
     if (visiblePayments.length === 0) { 
         container.innerHTML = `<div class="col-span-1 sm:col-span-2 text-center p-8 bg-gray-50 rounded-xl text-gray-500">Keine Einträge gefunden.</div>`; 
@@ -7045,6 +7053,24 @@ function renderPaymentList(payments) {
             }
         } else {
             singles.push(p);
+        }
+    });
+
+    Object.values(groups).forEach((groupEntry) => {
+        const existingIds = new Set(groupEntry.items.map((entry) => entry.id));
+        const additionalClosedMembers = allPayments.filter((entry) => {
+            if (String(entry?.splitGroupId || '') !== String(groupEntry.id || '')) return false;
+            if (existingIds.has(entry.id)) return false;
+            if (entry?.type === 'credit') return false;
+
+            const statusToken = String(entry?.status || '').toLowerCase();
+            if (statusToken === 'archived' || statusToken === 'trash') return false;
+
+            return isFinishedSplitGroupItem(entry);
+        });
+
+        if (additionalClosedMembers.length > 0) {
+            groupEntry.items.push(...additionalClosedMembers);
         }
     });
 
@@ -7108,14 +7134,6 @@ function renderPaymentList(payments) {
         document.head.appendChild(styleEl);
     }
 
-    const isFinishedSplitGroupItem = (payment) => {
-        const statusToken = String(payment?.status || '').toLowerCase();
-        if (statusToken === 'paid' || statusToken === 'closed' || statusToken === 'settled' || statusToken === 'cancelled') {
-            return true;
-        }
-        return getPaymentRemainingForDisplay(payment) <= 0.009;
-    };
-
     // RENDER LOOP
     combinedList.forEach(item => {
         if (item.items) { 
@@ -7123,6 +7141,9 @@ function renderPaymentList(payments) {
             const splitMaster = g.master || getSplitGroupMasterSnapshot(g.items);
             const openGroupItems = g.items.filter((entry) => !isFinishedSplitGroupItem(entry));
             const closedGroupItems = g.items.filter((entry) => isFinishedSplitGroupItem(entry));
+            const closedEntriesLabel = closedGroupItems.length === 1
+                ? '1 Abgeschlossener Eintrag'
+                : `${closedGroupItems.length} Abgeschlossene Einträge`;
             const isAllPaid = g.totalRemaining <= 0.01;
             const timeDiff = (new Date(g.earliestDeadline) - today) / (1000 * 60 * 60 * 24);
             const hasOpenAllocation = normalizeMoney(splitMaster?.openAllocation) > 0.009;
@@ -7166,7 +7187,7 @@ function renderPaymentList(payments) {
                                 class="w-full flex items-center justify-center gap-2 px-2 py-1.5 text-[11px] font-bold text-gray-600 bg-gray-50 hover:bg-gray-100 border-t border-gray-200"
                                 onclick="event.stopPropagation(); this.nextElementSibling.classList.toggle('hidden'); this.querySelector('.arrow-icon').classList.toggle('rotate-180');">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 arrow-icon transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
-                            <span>${closedGroupItems.length} Abgeschlossene Einträge</span>
+                            <span>${closedEntriesLabel}</span>
                         </button>
                         <div class="hidden bg-gray-50/50 border-t border-gray-200">${closedItemsHtml}</div>
                     `
@@ -7204,7 +7225,7 @@ function renderPaymentList(payments) {
                                     class="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold text-gray-600 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100"
                                     onclick="event.stopPropagation(); this.nextElementSibling.classList.toggle('hidden'); this.querySelector('.arrow-icon').classList.toggle('rotate-180');">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 arrow-icon transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
-                                <span>${closedGroupItems.length} Abgeschlossene Einträge</span>
+                                <span>${closedEntriesLabel}</span>
                             </button>
                             <div class="hidden mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">${closedItemsHtml}</div>
                         </div>

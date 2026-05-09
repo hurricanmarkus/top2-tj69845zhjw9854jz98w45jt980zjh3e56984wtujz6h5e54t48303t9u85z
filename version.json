@@ -1,14 +1,34 @@
 {
-  "version": "1.22.20",
-  "buildId": "20260509-6",
-  "releaseDate": "2026-05-09",
-  "releaseTime": "23:50",
+  "version": "1.22.22",
+  "buildId": "20260510-1",
+  "releaseDate": "2026-05-10",
+  "releaseTime": "00:02",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Gruppenmaster-Ansicht/ Dashboard verbessert: In der Schuldner-Übersicht wird 'Offen' nur bei Restbetrag farbig markiert (sonst ausgegraut), und im Dashboard können abgeschlossene Split-Untereinträge per ausklappbarem Pfeil separat eingeblendet werden.",
+  "note": "Dashboard-Splitgruppen: Abgeschlossene Untereinträge werden innerhalb der Gruppenansicht jetzt statusfilter-unabhängig als ausklappbarer Block bereitgestellt (Ausnahme nur innerhalb des Gruppenmasters, sonst keine abgeschlossenen Einzelanzeigen).",
   "commitId": "pending",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.22",
+      "buildId": "20260510-1",
+      "releaseDate": "2026-05-10",
+      "releaseTime": "00:02",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Dashboard-Splitgruppen: Abgeschlossene Untereinträge werden innerhalb der Gruppenansicht jetzt statusfilter-unabhängig als ausklappbarer Block bereitgestellt (Ausnahme nur innerhalb des Gruppenmasters, sonst keine abgeschlossenen Einzelanzeigen).",
+      "commitId": "pending",
+      "obligation": "false"
+    },
+    {
+      "version": "1.22.21",
+      "buildId": "20260509-7",
+      "releaseDate": "2026-05-09",
+      "releaseTime": "23:57",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Dashboard-Splitgruppen: Toggle-Label für abgeschlossene Untereinträge nutzt jetzt korrekte Singular-/Pluralform ('1 Abgeschlossener Eintrag' vs. 'x Abgeschlossene Einträge').",
+      "commitId": "pending",
+      "obligation": "false"
+    },
     {
       "version": "1.22.20",
       "buildId": "20260509-6",
