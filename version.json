@@ -1,14 +1,24 @@
 {
-  "version": "1.22.24",
-  "buildId": "20260510-3",
+  "version": "1.22.25",
+  "buildId": "20260510-4",
   "releaseDate": "2026-05-10",
-  "releaseTime": "00:50",
+  "releaseTime": "00:59",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Wise-Webhook-Hotfix: Eingänge werden auch bei unvollständiger Profile/Konto-Konfiguration nicht mehr per 503 verworfen, liefern Delivery-Logs im Fallback-Modus und nutzen zusätzlich Statement-Fallback für automatische Link-Zuordnung.",
+  "note": "Wise-Zuordnungsfix: Referenzcode/Verwendungszweck wird robust normalisiert und eindeutig pro offenem Zahlungslink gematcht (inkl. Fallback über paymentTargets); doppelte Zustellungen werden als duplicate markiert, mehrdeutige Referenzen explizit geblockt.",
   "commitId": "pending",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.25",
+      "buildId": "20260510-4",
+      "releaseDate": "2026-05-10",
+      "releaseTime": "00:59",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Wise-Zuordnungsfix: Referenzcode/Verwendungszweck wird robust normalisiert und eindeutig pro offenem Zahlungslink gematcht (inkl. Fallback über paymentTargets); doppelte Zustellungen werden als duplicate markiert, mehrdeutige Referenzen explizit geblockt.",
+      "commitId": "pending",
+      "obligation": "false"
+    },
     {
       "version": "1.22.24",
       "buildId": "20260510-3",
