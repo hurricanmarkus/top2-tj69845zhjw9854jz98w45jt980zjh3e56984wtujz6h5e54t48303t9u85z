@@ -1,14 +1,34 @@
 {
-  "version": "1.22.27",
-  "buildId": "20260510-6",
+  "version": "1.22.29",
+  "buildId": "20260510-8",
   "releaseDate": "2026-05-10",
-  "releaseTime": "19:32",
+  "releaseTime": "19:55",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Split-Gruppen-Feinschliff: Positionssummen verwenden nur wirklich speicherbare Positionen, Zukunftsmodal zeigt Unterverteilungs-Reste konsistent in Summe und Liste, und Gruppenmaster-Historie protokolliert Unter-/Überverteilung explizit.",
+  "note": "Split-Gruppen erweitert: Personen-Historie protokolliert Reduktionen und A/B-Ausgleich inkl. klickbarer Links, Transaktionsstorno wird bei bereits erfolgtem A/B-Ausgleich sicher blockiert (mit Sondereintrag), Schuldner-Übersicht zeigt Summenzeile und Gruppenmaster-ID nutzt #ABCD-Format.",
   "commitId": "pending",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.29",
+      "buildId": "20260510-8",
+      "releaseDate": "2026-05-10",
+      "releaseTime": "19:55",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Split-Gruppen erweitert: Personen-Historie protokolliert Reduktionen und A/B-Ausgleich inkl. klickbarer Links, Transaktionsstorno wird bei bereits erfolgtem A/B-Ausgleich sicher blockiert (mit Sondereintrag), Schuldner-Übersicht zeigt Summenzeile und Gruppenmaster-ID nutzt #ABCD-Format.",
+      "commitId": "pending",
+      "obligation": "false"
+    },
+    {
+      "version": "1.22.28",
+      "buildId": "20260510-7",
+      "releaseDate": "2026-05-10",
+      "releaseTime": "19:44",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Split-Gruppen UX/Anzeige verbessert: A/B-Überzahlungsentscheidung im Gruppenmaster-Edit läuft jetzt im eigenen Modal mit Radio-Auswahl und Erklärung; LINK-Codes in Notizen werden als klickbare Verweise gerendert.",
+      "commitId": "pending",
+      "obligation": "false"
+    },
     {
       "version": "1.22.27",
       "buildId": "20260510-6",

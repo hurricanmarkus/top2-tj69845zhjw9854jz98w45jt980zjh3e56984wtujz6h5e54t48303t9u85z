@@ -52,6 +52,7 @@ let paymentSearchJoinMode = 'and';
 let isListView = false; // Wird in initializeZahlungsverwaltungView gesetzt
 let currentSplitGroupDetailId = null;
 let splitGroupEditState = null;
+let pendingSplitGroupOverpaidDecisionResolver = null;
 let isTrashAdvancedMode = false;
 let selectedTrashIds = new Set();
 let onlinePaymentLinksCache = [];
@@ -173,6 +174,41 @@ function formatDateSafe(rawValue, includeTime = false) {
         });
     }
     return parsed.toLocaleDateString('de-DE');
+}
+
+function toShortEntryId(value) {
+    const cleaned = String(value || '').replace(/[^a-zA-Z0-9]/g, '');
+    if (!cleaned) return '----';
+    return cleaned.slice(-4).toUpperCase();
+}
+
+function createPaymentLinkToken(paymentId) {
+    const id = String(paymentId || '').trim();
+    if (!id) return '#----';
+    return `[LINK:${id}:#${toShortEntryId(id)}]`;
+}
+
+function findSplitOverpaidSettlementEntriesForSourcePayment(sourcePaymentId) {
+    const id = String(sourcePaymentId || '').trim();
+    if (!id) return [];
+    const marker = `[LINK:${id}:`;
+
+    return allPayments.filter((entry) => {
+        if (!entry || entry.id === id) return false;
+
+        const directOriginRef = String(entry.splitOverpaidOriginPaymentId || '') === id;
+        const hasSplitOverpaidAction = Array.isArray(entry.history)
+            && entry.history.some((item) => ['created_split_overpaid_reverse', 'created_split_overpaid_credit'].includes(String(item?.action || '')));
+
+        if (!directOriginRef && !hasSplitOverpaidAction) return false;
+
+        const notes = String(entry.notes || '');
+        const historyText = Array.isArray(entry.history)
+            ? entry.history.map((item) => String(item?.info || '')).join(' ')
+            : '';
+
+        return directOriginRef || notes.includes(marker) || historyText.includes(marker);
+    });
 }
 
 function getCategoryNameById(categoryId) {
@@ -758,6 +794,66 @@ function closeSplitGroupEditModal() {
 }
 window.closeSplitGroupEditModal = closeSplitGroupEditModal;
 
+function closeSplitGroupOverpaidDecisionModal(result = null) {
+    const modal = document.getElementById('splitGroupOverpaidDecisionModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+    }
+
+    const resolver = pendingSplitGroupOverpaidDecisionResolver;
+    pendingSplitGroupOverpaidDecisionResolver = null;
+    if (typeof resolver === 'function') {
+        resolver(result);
+    }
+}
+window.closeSplitGroupOverpaidDecisionModal = closeSplitGroupOverpaidDecisionModal;
+
+function confirmSplitGroupOverpaidDecisionModal() {
+    const selected = document.querySelector('input[name="split-group-overpaid-option"]:checked');
+    const token = String(selected?.value || '');
+    if (token !== 'reverse_debt' && token !== 'credit') {
+        alertUser('Bitte Variante A oder B auswählen.', 'error');
+        return;
+    }
+    closeSplitGroupOverpaidDecisionModal(token);
+}
+
+function openSplitGroupOverpaidDecisionModal(overpaidCase = null) {
+    const modal = document.getElementById('splitGroupOverpaidDecisionModal');
+    const debtorNameEl = document.getElementById('split-group-overpaid-debtor-name');
+    const excessEl = document.getElementById('split-group-overpaid-excess-amount');
+    const paidEl = document.getElementById('split-group-overpaid-paid-amount');
+    const targetEl = document.getElementById('split-group-overpaid-target-amount');
+    const radioA = document.getElementById('split-group-overpaid-option-a');
+    const radioB = document.getElementById('split-group-overpaid-option-b');
+
+    if (!modal || !debtorNameEl || !excessEl || !paidEl || !targetEl || !radioA || !radioB) {
+        alertUser('A/B-Auswahlmodal konnte nicht geöffnet werden.', 'error');
+        return Promise.resolve(null);
+    }
+
+    const debtorName = String(overpaidCase?.debtorName || 'Unbekannt');
+    const excessAmount = normalizeMoney(overpaidCase?.excessAmount);
+    const paidAmount = normalizeMoney(overpaidCase?.paidAmount);
+    const targetAmount = normalizeMoney(overpaidCase?.targetAmount);
+
+    debtorNameEl.textContent = debtorName;
+    excessEl.textContent = `${excessAmount.toFixed(2)} €`;
+    paidEl.textContent = `${paidAmount.toFixed(2)} €`;
+    targetEl.textContent = `${targetAmount.toFixed(2)} €`;
+
+    radioA.checked = true;
+    radioB.checked = false;
+
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+
+    return new Promise((resolve) => {
+        pendingSplitGroupOverpaidDecisionResolver = resolve;
+    });
+}
+
 function getSplitGroupEditModeToken(value) {
     const token = String(value || '').toLowerCase();
     return token === 'equal' ? 'equal' : 'manual';
@@ -919,7 +1015,7 @@ function renderSplitGroupDetailModal(groupId) {
     }
 
     currentSplitGroupDetailId = groupId;
-    titleEl.textContent = `Gruppenmaster #${groupId.slice(-6)}`;
+    titleEl.textContent = `Gruppenmaster #${toShortEntryId(groupId)}`;
 
     const modeLabel = master.mode === 'equal'
         ? 'Gleichmäßig teilen (mit Anpassung)'
@@ -959,6 +1055,23 @@ function renderSplitGroupDetailModal(groupId) {
             </div>
         `;
     }).join('');
+
+    const participantTotalAssigned = normalizeMoney(master.participants.reduce((sum, entry) => sum + normalizeMoney(entry.assignedAmount), 0));
+    const participantTotalPaid = normalizeMoney(master.participants.reduce((sum, entry) => sum + normalizeMoney(entry.paidAmount), 0));
+    const participantTotalOpen = normalizeMoney(master.participants.reduce((sum, entry) => sum + normalizeMoney(Math.max(0, entry.remainingAmount)), 0));
+    const participantSummaryRowHtml = `
+        <div class="rounded-lg border-2 border-indigo-200 bg-indigo-50 p-3">
+            <div class="flex flex-wrap items-center gap-2 mb-2">
+                <span class="font-black text-indigo-800 text-sm">Summe (alle Personen)</span>
+                <span class="text-[10px] px-2 py-0.5 rounded bg-white border border-indigo-200 text-indigo-700">${master.participants.length} Einträge</span>
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-[11px]">
+                <div class="rounded border border-indigo-200 bg-white px-2 py-1"><span class="block text-gray-500">Gesamt</span><span class="font-black text-gray-800">${participantTotalAssigned.toFixed(2)} €</span></div>
+                <div class="rounded border border-green-200 bg-green-50 px-2 py-1"><span class="block text-green-600">Bezahlt</span><span class="font-black text-green-700">${participantTotalPaid.toFixed(2)} €</span></div>
+                <div class="rounded border border-orange-200 bg-orange-50 px-2 py-1"><span class="block text-orange-600">Offen</span><span class="font-black text-orange-700">${participantTotalOpen.toFixed(2)} €</span></div>
+            </div>
+        </div>
+    `;
 
     const mismatchCardClass = mismatchMeta.hasMismatch
         ? 'border-red-300 bg-red-50'
@@ -1007,6 +1120,7 @@ function renderSplitGroupDetailModal(groupId) {
 
         <div class="space-y-2">
             <h5 class="text-xs font-bold uppercase text-gray-500">Schuldner-Übersicht</h5>
+            ${participantSummaryRowHtml}
             ${participantRows}
         </div>
     `;
@@ -1177,6 +1291,12 @@ function renderSplitGroupEditParticipants() {
 
         if (removeButton) {
             removeButton.addEventListener('click', () => {
+                const paidAmount = normalizeMoney(participant.paidAmount);
+                const confirmationText = paidAmount > SPLIT_MONEY_TOLERANCE
+                    ? `Person wirklich entfernen?\n\n${participant.debtorName} hat bereits ${paidAmount.toFixed(2)} € bezahlt.\nBeim Speichern wird der Eintrag aus der Gruppe gelöst und separat behandelt.`
+                    : `Person wirklich entfernen?\n\n${participant.debtorName} wird aus der aktuellen Gruppenbearbeitung entfernt.`;
+                if (!confirm(confirmationText)) return;
+
                 splitGroupEditState.participants = splitGroupEditState.participants.filter((entry) => entry.key !== key);
                 renderSplitGroupEditParticipants();
                 renderSplitGroupEditAddOptions();
@@ -1336,7 +1456,7 @@ window.openSplitGroupEdit = function (groupId) {
     const categorySelect = document.getElementById('split-group-edit-category');
     if (!modal || !titleEl || !categorySelect) return;
 
-    titleEl.textContent = `Gruppenmaster bearbeiten (#${groupId.slice(-6)})`;
+    titleEl.textContent = `Gruppenmaster bearbeiten (#${toShortEntryId(groupId)})`;
 
     document.getElementById('split-group-edit-title').value = splitGroupEditState.master.title;
     document.getElementById('split-group-edit-total').value = splitGroupEditState.master.totalAmount.toFixed(2);
@@ -1459,25 +1579,9 @@ function addSplitGroupEditParticipantFromControls() {
 }
 window.addSplitGroupEditParticipantFromControls = addSplitGroupEditParticipantFromControls;
 
-function resolveSplitGroupOverpaidDecision(overpaidCase = null) {
+async function resolveSplitGroupOverpaidDecision(overpaidCase = null) {
     if (!overpaidCase || typeof overpaidCase !== 'object') return null;
-
-    const debtorName = String(overpaidCase.debtorName || 'Unbekannt');
-    const excessAmount = normalizeMoney(overpaidCase.excessAmount);
-    const targetAmount = normalizeMoney(overpaidCase.targetAmount);
-    const paidAmount = normalizeMoney(overpaidCase.paidAmount);
-    const rawDecision = prompt(
-        `Mehr bezahlt als neu zugeteilt:\n${debtorName}: Überzahlung ${excessAmount.toFixed(2)} €\nBezahlt ${paidAmount.toFixed(2)} € • Neu zugeteilt ${targetAmount.toFixed(2)} €\n\nBitte wählen:\nA = Umkehr-Eintrag anlegen\nB = Als Guthaben speichern\n\nEingabe: A oder B`,
-        'A'
-    );
-
-    if (!rawDecision) return null;
-    const token = String(rawDecision || '').trim().toUpperCase();
-    if (token === 'A') return 'reverse_debt';
-    if (token === 'B') return 'credit';
-
-    alertUser('Ungültige Auswahl. Bitte A oder B eingeben.', 'error');
-    return null;
+    return await openSplitGroupOverpaidDecisionModal(overpaidCase);
 }
 
 async function saveSplitGroupEdit() {
@@ -1542,7 +1646,7 @@ async function saveSplitGroupEdit() {
     const overpaidDecisionsByPaymentId = {};
     if (overpaidCases.length > 0) {
         for (const overpaidCase of overpaidCases) {
-            const decision = resolveSplitGroupOverpaidDecision(overpaidCase);
+            const decision = await resolveSplitGroupOverpaidDecision(overpaidCase);
             if (!decision) return;
             overpaidDecisionsByPaymentId[overpaidCase.paymentId] = decision;
         }
@@ -1615,6 +1719,30 @@ async function saveSplitGroupEdit() {
                 : 'Ausgeglichen (0.00 €)');
 
         const reopenGroupId = splitGroupEditState.groupId;
+        const baseReferenceLink = createPaymentLinkToken(baseReference.id);
+        const overpaidSettlementPlansByPaymentId = {};
+
+        overpaidCases.forEach((entry) => {
+            const overpaidAmount = normalizeMoney(entry.excessAmount);
+            if (overpaidAmount <= SPLIT_MONEY_TOLERANCE) return;
+
+            const overpaidDecision = overpaidDecisionsByPaymentId[entry.paymentId];
+            if (!overpaidDecision) return;
+
+            const settlementRef = doc(paymentsRef);
+            overpaidSettlementPlansByPaymentId[entry.paymentId] = {
+                ...entry,
+                overpaidAmount,
+                decision: overpaidDecision,
+                decisionLabel: overpaidDecision === 'reverse_debt'
+                    ? 'Variante A (Umkehr-Eintrag)'
+                    : 'Variante B (Guthaben)',
+                docRef: settlementRef,
+                settlementPaymentId: settlementRef.id,
+                settlementLink: createPaymentLinkToken(settlementRef.id),
+                originLink: createPaymentLinkToken(entry.paymentId)
+            };
+        });
 
         // 1) Aktive Teilnehmer updaten oder neu anlegen.
         computed.participants.forEach((participant) => {
@@ -1645,14 +1773,37 @@ async function saveSplitGroupEdit() {
             };
 
             if (existing) {
+                const previousAssignedAmount = normalizeMoney(existing.amount);
+                const assignedDiff = normalizeMoney(assignedAmount - previousAssignedAmount);
+                const settlementPlan = overpaidSettlementPlansByPaymentId[participant.paymentId] || null;
+                const historyEntries = [{
+                    date: new Date(),
+                    action: 'split_group_master_edited',
+                    user: currentUser.displayName,
+                    info: `Gruppenmaster aktualisiert (Alt: ${previousAssignedAmount.toFixed(2)} €, Neu: ${assignedAmount.toFixed(2)} €, Delta Gruppe: ${splitMasterDeltaSigned.toFixed(2)} €, Zustand: ${splitMasterDeltaState}). Referenz: ${baseReferenceLink}.`
+                }];
+
+                if (assignedDiff < -SPLIT_MONEY_TOLERANCE) {
+                    historyEntries.push({
+                        date: new Date(),
+                        action: 'split_group_amount_reduced',
+                        user: currentUser.displayName,
+                        info: `Betragsminderung: ${Math.abs(assignedDiff).toFixed(2)} € reduziert. Bezahlt: ${paidAmount.toFixed(2)} € • Neuer Offenbetrag: ${remainingAmount.toFixed(2)} €.`
+                    });
+                }
+
+                if (settlementPlan) {
+                    historyEntries.push({
+                        date: new Date(),
+                        action: 'split_overpaid_settlement_created',
+                        user: currentUser.displayName,
+                        info: `Sondereintrag: ${settlementPlan.decisionLabel} für Überzahlung ${settlementPlan.overpaidAmount.toFixed(2)} € erstellt → ${settlementPlan.settlementLink} (Quelle: ${settlementPlan.originLink}).`
+                    });
+                }
+
                 batch.update(participant.docRef, {
                     ...sharedPayload,
-                    history: [...(existing.history || []), {
-                        date: new Date(),
-                        action: 'split_group_master_edited',
-                        user: currentUser.displayName,
-                        info: `Gruppenmaster aktualisiert (Neu: ${assignedAmount.toFixed(2)} €, Delta: ${splitMasterDeltaSigned.toFixed(2)} €, Zustand: ${splitMasterDeltaState}).`
-                    }]
+                    history: [...(existing.history || []), ...historyEntries]
                 });
             } else {
                 batch.set(participant.docRef, {
@@ -1679,6 +1830,23 @@ async function saveSplitGroupEdit() {
             .filter((entry) => !activePaymentIds.has(entry.id))
             .forEach((entry) => {
                 const paidAmount = getPaymentPaidAmount(entry);
+                const settlementPlan = overpaidSettlementPlansByPaymentId[entry.id] || null;
+                const removalHistory = [{
+                    date: new Date(),
+                    action: 'removed_from_split_group',
+                    user: currentUser.displayName,
+                    info: `Aus Gruppenmaster entfernt. Bereits bezahlt: ${normalizeMoney(paidAmount).toFixed(2)} €. Referenz: ${baseReferenceLink}.`
+                }];
+
+                if (settlementPlan) {
+                    removalHistory.push({
+                        date: new Date(),
+                        action: 'split_overpaid_settlement_created',
+                        user: currentUser.displayName,
+                        info: `Sondereintrag: ${settlementPlan.decisionLabel} für Überzahlung ${settlementPlan.overpaidAmount.toFixed(2)} € erstellt → ${settlementPlan.settlementLink} (Quelle: ${settlementPlan.originLink}).`
+                    });
+                }
+
                 batch.update(doc(paymentsRef, entry.id), {
                     amount: normalizeMoney(paidAmount),
                     remainingAmount: 0,
@@ -1686,25 +1854,18 @@ async function saveSplitGroupEdit() {
                     splitGroupId: deleteField(),
                     splitMaster: deleteField(),
                     splitAssignedAmount: deleteField(),
-                    history: [...(entry.history || []), {
-                        date: new Date(),
-                        action: 'removed_from_split_group',
-                        user: currentUser.displayName,
-                        info: `Aus Gruppenmaster entfernt. Bereits bezahlt: ${normalizeMoney(paidAmount).toFixed(2)} €.`
-                    }]
+                    history: [...(entry.history || []), ...removalHistory]
                 });
             });
 
         // 3) Bei Überzahlung neue Ausgleichseinträge erzeugen (A/B Entscheidung).
-        if (overpaidCases.length > 0) {
-            overpaidCases.forEach((entry) => {
-                const overpaidAmount = normalizeMoney(entry.excessAmount);
-                if (overpaidAmount <= SPLIT_MONEY_TOLERANCE) return;
-                const overpaidDecision = overpaidDecisionsByPaymentId[entry.paymentId];
-                if (!overpaidDecision) return;
-
-                const newDocRef = doc(paymentsRef);
-                const linkOrigin = `[LINK:${entry.paymentId}:#${String(entry.paymentId).slice(-4).toUpperCase()}]`;
+        const overpaidSettlementPlans = Object.values(overpaidSettlementPlansByPaymentId);
+        if (overpaidSettlementPlans.length > 0) {
+            overpaidSettlementPlans.forEach((entry) => {
+                const overpaidAmount = normalizeMoney(entry.overpaidAmount);
+                const overpaidDecision = entry.decision;
+                const newDocRef = entry.docRef;
+                const linkOrigin = entry.originLink;
 
                 if (overpaidDecision === 'reverse_debt') {
                     const reverseDebtorId = baseReference.creditorId || null;
@@ -1726,6 +1887,9 @@ async function saveSplitGroupEdit() {
                         creditorName: reverseCreditorName,
                         debtorId: reverseDebtorId,
                         debtorName: reverseDebtorName,
+                        splitOverpaidOriginPaymentId: entry.paymentId,
+                        splitOverpaidDecision: overpaidDecision,
+                        splitOverpaidGroupId: splitGroupEditState.groupId,
                         invoiceNr: '',
                         orderNr: '',
                         notes: `Automatischer Ausgleich aus Gruppenanpassung (${linkOrigin}).`,
@@ -1761,6 +1925,9 @@ async function saveSplitGroupEdit() {
                         creditorName: creditOwnerName,
                         debtorId: creditHolderId,
                         debtorName: creditHolderName,
+                        splitOverpaidOriginPaymentId: entry.paymentId,
+                        splitOverpaidDecision: overpaidDecision,
+                        splitOverpaidGroupId: splitGroupEditState.groupId,
                         invoiceNr: '',
                         orderNr: '',
                         notes: `Automatisch als Guthaben aus Gruppenanpassung (${linkOrigin}) angelegt.`,
@@ -3412,6 +3579,9 @@ function setupEventListeners() {
     document.getElementById('btn-cancel-split-group-edit')?.addEventListener('click', closeSplitGroupEditModal);
     document.getElementById('btn-save-split-group-edit')?.addEventListener('click', saveSplitGroupEdit);
     document.getElementById('btn-split-group-edit-add-participant')?.addEventListener('click', addSplitGroupEditParticipantFromControls);
+    document.getElementById('btn-split-group-overpaid-close')?.addEventListener('click', () => closeSplitGroupOverpaidDecisionModal(null));
+    document.getElementById('btn-split-group-overpaid-cancel')?.addEventListener('click', () => closeSplitGroupOverpaidDecisionModal(null));
+    document.getElementById('btn-split-group-overpaid-confirm')?.addEventListener('click', confirmSplitGroupOverpaidDecisionModal);
 
     const splitGroupDetailModal = document.getElementById('splitGroupDetailModal');
     if (splitGroupDetailModal) {
@@ -3424,6 +3594,13 @@ function setupEventListeners() {
     if (splitGroupEditModal) {
         splitGroupEditModal.addEventListener('click', (event) => {
             if (event.target === splitGroupEditModal) closeSplitGroupEditModal();
+        });
+    }
+
+    const splitGroupOverpaidModal = document.getElementById('splitGroupOverpaidDecisionModal');
+    if (splitGroupOverpaidModal) {
+        splitGroupOverpaidModal.addEventListener('click', (event) => {
+            if (event.target === splitGroupOverpaidModal) closeSplitGroupOverpaidDecisionModal(null);
         });
     }
 
@@ -6169,10 +6346,22 @@ function renderDetailContent(p, isRefresh) {
 
     // Helper für Links
     const parseLinks = (text) => {
-        if (!text) return "";
-        return text.replace(/\[LINK:([^:]+):([^\]]+)\]/g, (match, id, label) => {
-            return `<span class="text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer font-bold" onclick="openPaymentDetail('${id}'); event.stopPropagation();">${label}</span>`;
-        });
+        const raw = String(text || '');
+        if (!raw) return '';
+        const pattern = /\[LINK:([^:\]]+):([^\]]+)\]/g;
+        let result = '';
+        let lastIndex = 0;
+        let match;
+        while ((match = pattern.exec(raw)) !== null) {
+            result += escapeHtmlInline(raw.slice(lastIndex, match.index));
+            const paymentId = String(match[1] || '');
+            const safePaymentId = paymentId.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+            const label = escapeHtmlInline(match[2] || 'Link');
+            result += `<span class="text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer font-bold" onclick="openPaymentDetail('${safePaymentId}'); event.stopPropagation();">${label}</span>`;
+            lastIndex = pattern.lastIndex;
+        }
+        result += escapeHtmlInline(raw.slice(lastIndex));
+        return result;
     };
 
     // --- 1. SPEZIAL-ANSICHT FÜR GUTHABEN (NUR LESEN) ---
@@ -6550,7 +6739,7 @@ function renderDetailContent(p, isRefresh) {
 
         ${positionsHtml}
 
-        ${p.notes ? `<div class="mb-6 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-gray-700"><strong>Notiz:</strong><br>${p.notes}</div>` : ''}
+        ${p.notes ? `<div class="mb-6 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-gray-700"><strong>Notiz:</strong><br>${parseLinks(p.notes)}</div>` : ''}
         
         <div id="internal-transactions-wrapper" class="bg-white border border-gray-200 rounded-lg mb-4 overflow-hidden ${(!p.transactions || p.transactions.length === 0) ? 'hidden' : ''}">
             <div class="flex justify-between items-center p-3 bg-gray-50 cursor-pointer hover:bg-gray-100 transition" onclick="document.getElementById('${txContentId}').classList.toggle('hidden'); document.getElementById('${txIconId}').classList.toggle('rotate-180');">
@@ -8903,6 +9092,34 @@ async function resolveOverpayment(decision) {
 window.deleteTransaction = async function (paymentId, txIndex) {
     const p = allPayments.find(x => x.id === paymentId);
     if (!p || !p.transactions) return;
+
+    const relatedSettlementEntries = findSplitOverpaidSettlementEntriesForSourcePayment(paymentId);
+    const hasSettlementHistoryFlag = Array.isArray(p.history)
+        && p.history.some((item) => String(item?.action || '') === 'split_overpaid_settlement_created');
+
+    if (relatedSettlementEntries.length > 0 || hasSettlementHistoryFlag) {
+        const relatedLinks = relatedSettlementEntries.length > 0
+            ? relatedSettlementEntries.map((entry) => createPaymentLinkToken(entry.id)).join(', ')
+            : 'nicht mehr direkt verknüpfbar';
+        const blockInfo = `Sondereintrag: Storno blockiert, weil bereits A/B-Ausgleich aus Betragsminderung existiert (${relatedLinks}). Bitte erst die Ausgleichseinträge prüfen.`;
+
+        try {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payments', paymentId), {
+                history: [...(p.history || []), {
+                    date: new Date(),
+                    action: 'tx_delete_blocked_split_overpaid',
+                    user: currentUser.displayName,
+                    info: blockInfo
+                }]
+            });
+        } catch (error) {
+            console.error('Fehler beim Protokollieren der Löschsperre:', error);
+        }
+
+        alertUser('Storno gesperrt: Für diesen Eintrag existiert bereits ein A/B-Ausgleich aus Gruppenanpassung.', 'error');
+        return;
+    }
+
     if (!confirm("Diese Zahlung stornieren? Der Betrag wird wieder offen.")) return;
 
     const tx = p.transactions[txIndex];
