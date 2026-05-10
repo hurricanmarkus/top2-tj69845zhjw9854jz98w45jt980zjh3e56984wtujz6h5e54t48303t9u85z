@@ -79,6 +79,67 @@ function normalizeMoney(value) {
     return Number.isFinite(num) ? Number(num.toFixed(2)) : 0;
 }
 
+const SPLIT_MONEY_TOLERANCE = 0.01;
+
+function clampPositiveMoney(value) {
+    return Math.max(0, normalizeMoney(value));
+}
+
+function hasMoneyDelta(value) {
+    return Math.abs(normalizeMoney(value)) > SPLIT_MONEY_TOLERANCE;
+}
+
+function isPositiveMoneyDelta(value) {
+    return normalizeMoney(value) > SPLIT_MONEY_TOLERANCE;
+}
+
+function isNegativeMoneyDelta(value) {
+    return normalizeMoney(value) < -SPLIT_MONEY_TOLERANCE;
+}
+
+function getSplitAllocationMismatchMeta(master = {}) {
+    const signedDelta = normalizeMoney(master?.allocationDeltaSigned);
+    const absoluteDelta = normalizeMoney(Math.abs(signedDelta));
+    const hasPositionBasedTarget = normalizeMoney(master?.positionTotal) > SPLIT_MONEY_TOLERANCE
+        || clampPositiveMoney(master?.reserveAmount) > SPLIT_MONEY_TOLERANCE;
+    const targetDescriptor = hasPositionBasedTarget
+        ? 'Positionen + Reserve'
+        : 'der Zielbetrag';
+    if (!hasMoneyDelta(signedDelta)) {
+        return {
+            hasMismatch: false,
+            isUnder: false,
+            isOver: false,
+            signedDelta: 0,
+            absoluteDelta: 0,
+            shortLabel: 'Differenz 0,00 €',
+            detailText: 'Verteilung vollständig ausgeglichen.',
+        };
+    }
+
+    if (signedDelta > 0) {
+        return {
+            hasMismatch: true,
+            isUnder: true,
+            isOver: false,
+            signedDelta,
+            absoluteDelta,
+            shortLabel: `Unter: ${absoluteDelta.toFixed(2)} €`,
+            detailText: `Unterverteilung: Es fehlen ${absoluteDelta.toFixed(2)} €, damit ${targetDescriptor} vollständig auf Personen verteilt sind.`,
+        };
+    }
+
+    return {
+        hasMismatch: true,
+        isUnder: false,
+        isOver: true,
+        signedDelta,
+        absoluteDelta,
+        shortLabel: `Über: ${absoluteDelta.toFixed(2)} €`,
+        detailText: `Überverteilung: ${absoluteDelta.toFixed(2)} € sind mehr auf Personen verteilt als ${hasPositionBasedTarget ? 'Positionen + Reserve' : 'der manuell festgelegte Zielbetrag'} aktuell ausmachen.`,
+    };
+}
+
 function escapeHtmlInline(value) {
     return String(value || '').replace(/[&<>'"]/g, (ch) => ({
         '&': '&amp;',
@@ -153,17 +214,52 @@ function getSplitGroupMasterSnapshot(groupItems = []) {
     const firstItem = sortedItems[0];
     const rawMaster = (firstItem?.splitMaster && typeof firstItem.splitMaster === 'object') ? firstItem.splitMaster : {};
 
+    const positions = Array.isArray(rawMaster?.positions)
+        ? rawMaster.positions
+            .map((entry) => ({
+                name: String(entry?.name || '').trim(),
+                price: normalizeMoney(entry?.price)
+            }))
+        : (Array.isArray(firstItem?.positions)
+            ? firstItem.positions.map((entry) => ({
+                name: String(entry?.name || '').trim(),
+                price: normalizeMoney(entry?.price)
+            }))
+            : []);
+
+    const hasPositionBasedTotal = positions.some((position) => position.name || Math.abs(position.price) > SPLIT_MONEY_TOLERANCE);
+    const positionTotal = normalizeMoney(positions.reduce((sum, position) => sum + normalizeMoney(position?.price), 0));
+    const reserveAmount = clampPositiveMoney(rawMaster?.reserveAmount);
+
     const totalAssigned = normalizeMoney(sortedItems.reduce((sum, item) => sum + normalizeMoney(item?.amount), 0));
     const totalAmountRaw = normalizeMoney(rawMaster?.totalAmount);
-    const totalAmount = totalAmountRaw > 0 ? totalAmountRaw : totalAssigned;
+    const fallbackTotalAmount = totalAmountRaw > 0 ? totalAmountRaw : totalAssigned;
 
-    let openAllocation = normalizeMoney(rawMaster?.openAllocation);
-    if (openAllocation < 0) openAllocation = 0;
+    let targetTotal = hasPositionBasedTotal
+        ? normalizeMoney(positionTotal + reserveAmount)
+        : fallbackTotalAmount;
 
-    const fallbackOpen = normalizeMoney(totalAmount - totalAssigned);
-    if (openAllocation <= 0 && fallbackOpen > 0) {
-        openAllocation = fallbackOpen;
+    let allocationDeltaSigned = normalizeMoney(targetTotal - totalAssigned);
+    const storedDeltaSigned = normalizeMoney(rawMaster?.allocationDeltaSigned);
+    const legacyOpenAllocation = clampPositiveMoney(rawMaster?.openAllocation);
+
+    if (!hasMoneyDelta(allocationDeltaSigned)) {
+        if (hasMoneyDelta(storedDeltaSigned)) {
+            allocationDeltaSigned = storedDeltaSigned;
+        } else if (isPositiveMoneyDelta(legacyOpenAllocation)) {
+            allocationDeltaSigned = legacyOpenAllocation;
+        }
+        targetTotal = normalizeMoney(totalAssigned + allocationDeltaSigned);
     }
+
+    const openAllocation = isPositiveMoneyDelta(allocationDeltaSigned)
+        ? normalizeMoney(allocationDeltaSigned)
+        : 0;
+    const overAllocation = isNegativeMoneyDelta(allocationDeltaSigned)
+        ? normalizeMoney(Math.abs(allocationDeltaSigned))
+        : 0;
+    const hasAllocationMismatch = hasMoneyDelta(allocationDeltaSigned);
+    const totalAmount = normalizeMoney(targetTotal);
 
     const modeToken = String(rawMaster?.mode || '').toLowerCase();
     const mode = modeToken === 'equal' ? 'equal' : 'manual';
@@ -215,21 +311,27 @@ function getSplitGroupMasterSnapshot(groupItems = []) {
         invoiceNr: String(rawMaster?.invoiceNr || firstItem?.invoiceNr || ''),
         orderNr: String(rawMaster?.orderNr || firstItem?.orderNr || ''),
         notes: String(rawMaster?.notes || firstItem?.notes || ''),
-        positions: Array.isArray(rawMaster?.positions)
-            ? rawMaster.positions
-            : (Array.isArray(firstItem?.positions) ? firstItem.positions : []),
+        positions,
         creditorId: rawMaster?.creditorId || firstItem?.creditorId || null,
         creditorName: String(rawMaster?.creditorName || firstItem?.creditorName || ''),
+        positionTotal,
+        reserveAmount,
+        targetTotal,
+        assignedTotal: totalAssigned,
+        allocationDeltaSigned,
+        hasAllocationMismatch,
         totalAmount,
         totalAssigned,
         totalPaid,
         totalRemainingAssigned,
         totalRemainingOpen,
         openAllocation,
+        overAllocation,
         equalAdjustments,
         participants,
         earliestDeadline,
-        updatedAt: rawMaster?.updatedAt || null
+        updatedAt: rawMaster?.updatedAt || null,
+        items: sortedItems
     };
 }
 
@@ -673,27 +775,38 @@ function getSplitGroupEditPreparedPositions() {
 }
 
 function getSplitGroupEditTotalControlState() {
-    const sourcePositions = splitGroupEditState && Array.isArray(splitGroupEditState.positions)
-        ? splitGroupEditState.positions
-            .map((position) => ({
-                name: String(position?.name || '').trim(),
-                price: normalizeMoney(position?.price)
-            }))
-        : [];
-    const totalPositions = sourcePositions.filter((position) => position.name || Math.abs(position.price) > 0.009);
     const cleanedPositions = getSplitGroupEditPreparedPositions();
+    const reserveInput = document.getElementById('split-group-edit-reserve');
+    const reserveParsed = Number.parseFloat(String(reserveInput?.value || '').replace(',', '.'));
+    const fallbackReserve = splitGroupEditState ? clampPositiveMoney(splitGroupEditState.reserveAmount) : 0;
+    let reserveAmount = clampPositiveMoney(Number.isFinite(reserveParsed) ? reserveParsed : fallbackReserve);
+    const positionTotal = normalizeMoney(cleanedPositions.reduce((sum, position) => sum + position.price, 0));
+    const usesPositionBasedTotal = cleanedPositions.length > 0;
+    if (!usesPositionBasedTotal) {
+        reserveAmount = 0;
+    }
+    if (splitGroupEditState) {
+        splitGroupEditState.reserveAmount = reserveAmount;
+    }
+    const targetTotal = usesPositionBasedTotal
+        ? normalizeMoney(positionTotal + reserveAmount)
+        : 0;
+
     return {
         cleanedPositions,
-        usesPositionBasedTotal: totalPositions.length > 0,
-        positionTotal: normalizeMoney(totalPositions.reduce((sum, position) => sum + position.price, 0))
+        usesPositionBasedTotal,
+        positionTotal,
+        reserveAmount,
+        targetTotal,
     };
 }
 
 function syncSplitGroupEditTotalInputState() {
     const totalInput = document.getElementById('split-group-edit-total');
+    const reserveInput = document.getElementById('split-group-edit-reserve');
     if (!totalInput) return;
 
-    const { usesPositionBasedTotal, positionTotal } = getSplitGroupEditTotalControlState();
+    const { usesPositionBasedTotal, reserveAmount, targetTotal } = getSplitGroupEditTotalControlState();
 
     totalInput.disabled = usesPositionBasedTotal;
     totalInput.classList.toggle('bg-gray-100', usesPositionBasedTotal);
@@ -702,22 +815,37 @@ function syncSplitGroupEditTotalInputState() {
         ? 'Gesamtbetrag wird automatisch aus den Positionen berechnet.'
         : '';
 
+    if (reserveInput) {
+        reserveInput.disabled = !usesPositionBasedTotal;
+        reserveInput.classList.toggle('bg-gray-100', !usesPositionBasedTotal);
+        reserveInput.classList.toggle('cursor-not-allowed', !usesPositionBasedTotal);
+        if (!usesPositionBasedTotal) {
+            reserveInput.value = '0.00';
+            if (splitGroupEditState) splitGroupEditState.reserveAmount = 0;
+        } else {
+            reserveInput.value = clampPositiveMoney(reserveAmount).toFixed(2);
+        }
+    }
+
     if (usesPositionBasedTotal) {
-        totalInput.value = positionTotal.toFixed(2);
+        totalInput.value = targetTotal.toFixed(2);
     }
 }
 
 function getSplitGroupEditFormValues() {
     const totalInput = document.getElementById('split-group-edit-total');
     const parsedTotal = Number.parseFloat(String(totalInput?.value || '').replace(',', '.'));
-    const { usesPositionBasedTotal, positionTotal } = getSplitGroupEditTotalControlState();
+    const { usesPositionBasedTotal, positionTotal, reserveAmount, targetTotal } = getSplitGroupEditTotalControlState();
     const resolvedTotal = usesPositionBasedTotal
-        ? positionTotal
+        ? targetTotal
         : (Number.isFinite(parsedTotal) ? normalizeMoney(parsedTotal) : 0);
 
     return {
         title: String(document.getElementById('split-group-edit-title')?.value || '').trim(),
         totalAmount: resolvedTotal,
+        reserveAmount: usesPositionBasedTotal ? reserveAmount : 0,
+        positionTotal,
+        usesPositionBasedTotal,
         startDate: String(document.getElementById('split-group-edit-start-date')?.value || '').trim(),
         deadline: String(document.getElementById('split-group-edit-deadline')?.value || '').trim() || null,
         categoryId: document.getElementById('split-group-edit-category')?.value || 'cat_misc',
@@ -770,6 +898,7 @@ function createSplitGroupEditState(groupId) {
         mode: master.mode,
         participants,
         positions,
+        reserveAmount: clampPositiveMoney(master.reserveAmount),
         modeSwitchInitialized: false,
         lastComputed: null
     };
@@ -796,6 +925,7 @@ function renderSplitGroupDetailModal(groupId) {
         ? 'Gleichmäßig teilen (mit Anpassung)'
         : 'Komplett manuell';
     const categoryName = getCategoryNameById(master.categoryId);
+    const mismatchMeta = getSplitAllocationMismatchMeta(master);
 
     const positions = Array.isArray(master.positions) ? master.positions : [];
     const positionsHtml = positions.length
@@ -809,7 +939,7 @@ function renderSplitGroupDetailModal(groupId) {
     const participantRows = master.participants.map((entry) => {
         const shortId = String(entry.paymentId || '').slice(-4).toUpperCase();
         const remainingAmount = normalizeMoney(Math.max(0, entry.remainingAmount));
-        const hasOpenAmount = remainingAmount > 0.009;
+        const hasOpenAmount = remainingAmount > SPLIT_MONEY_TOLERANCE;
         const openBoxClass = hasOpenAmount
             ? 'rounded border border-orange-200 bg-orange-50 px-2 py-1'
             : 'rounded border border-gray-200 bg-gray-100 px-2 py-1';
@@ -830,6 +960,20 @@ function renderSplitGroupDetailModal(groupId) {
         `;
     }).join('');
 
+    const mismatchCardClass = mismatchMeta.hasMismatch
+        ? 'border-red-300 bg-red-50'
+        : 'border-green-200 bg-green-50';
+    const mismatchCardValueClass = mismatchMeta.hasMismatch ? 'text-red-700' : 'text-green-700';
+    const mismatchDisplayValue = mismatchMeta.hasMismatch
+        ? `${mismatchMeta.isOver ? '-' : '+'}${mismatchMeta.absoluteDelta.toFixed(2)} €`
+        : '0.00 €';
+    const mismatchBannerHtml = mismatchMeta.hasMismatch
+        ? `<div class="rounded-xl border ${mismatchMeta.isUnder ? 'border-orange-200 bg-orange-50 text-orange-800' : 'border-red-200 bg-red-50 text-red-800'} p-3 mb-4 text-xs font-bold">${escapeHtmlInline(mismatchMeta.detailText)}</div>`
+        : '';
+    const reserveRowHtml = master.reserveAmount > SPLIT_MONEY_TOLERANCE
+        ? `<div class="flex justify-between border-t border-dashed border-indigo-200 pt-2 mt-2 text-xs"><span class="font-bold text-indigo-700">Reserve / Zusatzkosten</span><span class="font-mono font-bold text-indigo-700">${master.reserveAmount.toFixed(2)} €</span></div>`
+        : '';
+
     content.innerHTML = `
         <div class="rounded-xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-4 mb-4">
             <h4 class="text-lg font-bold text-gray-800">${escapeHtmlInline(master.title)}</h4>
@@ -837,11 +981,14 @@ function renderSplitGroupDetailModal(groupId) {
         </div>
 
         <div class="grid grid-cols-2 gap-3 mb-4 text-xs">
-            <div class="rounded-lg border border-gray-200 bg-white p-3"><span class="text-gray-500 block">Gesamtbetrag</span><span class="text-lg font-black text-gray-800">${master.totalAmount.toFixed(2)} €</span></div>
+            <div class="rounded-lg border border-gray-200 bg-white p-3"><span class="text-gray-500 block">Zielbetrag</span><span class="text-lg font-black text-gray-800">${master.totalAmount.toFixed(2)} €</span></div>
             <div class="rounded-lg border border-gray-200 bg-white p-3"><span class="text-gray-500 block">Bereits bezahlt</span><span class="text-lg font-black text-green-700">${master.totalPaid.toFixed(2)} €</span></div>
+            <div class="rounded-lg border border-gray-200 bg-white p-3"><span class="text-gray-500 block">Positionen + Reserve</span><span class="text-lg font-black text-indigo-700">${master.positionTotal.toFixed(2)} € + ${master.reserveAmount.toFixed(2)} €</span></div>
             <div class="rounded-lg border border-gray-200 bg-white p-3"><span class="text-gray-500 block">Offen zugewiesen</span><span class="text-lg font-black text-orange-700">${master.totalRemainingAssigned.toFixed(2)} €</span></div>
-            <div class="rounded-lg border ${master.openAllocation > 0.009 ? 'border-red-300 bg-red-50' : 'border-indigo-200 bg-indigo-50'} p-3"><span class="text-gray-500 block">Offene Zuteilung</span><span class="text-lg font-black ${master.openAllocation > 0.009 ? 'text-red-700' : 'text-indigo-700'}">${master.openAllocation.toFixed(2)} €</span></div>
+            <div class="rounded-lg border ${mismatchCardClass} p-3"><span class="text-gray-500 block">Verteilungsdifferenz</span><span class="text-lg font-black ${mismatchCardValueClass}">${mismatchDisplayValue}</span></div>
         </div>
+
+        ${mismatchBannerHtml}
 
         <div class="rounded-xl border border-gray-200 bg-white p-3 mb-4 text-xs text-gray-700 space-y-1">
             <div><span class="font-bold text-gray-500">Kategorie:</span> ${escapeHtmlInline(categoryName)}</div>
@@ -855,6 +1002,7 @@ function renderSplitGroupDetailModal(groupId) {
         <div class="rounded-xl border border-gray-200 bg-white p-3 mb-4">
             <h5 class="text-xs font-bold uppercase text-gray-500 mb-2">Positionen</h5>
             ${positionsHtml}
+            ${reserveRowHtml}
         </div>
 
         <div class="space-y-2">
@@ -1044,8 +1192,8 @@ function computeSplitGroupEditDistribution(formValues = null) {
     const values = formValues || getSplitGroupEditFormValues();
     const participants = Array.isArray(splitGroupEditState.participants) ? splitGroupEditState.participants : [];
     const mode = getSplitGroupEditModeToken(values.mode);
-    const totalAmount = normalizeMoney(values.totalAmount);
-    const baseShare = participants.length > 0 ? normalizeMoney(totalAmount / participants.length) : 0;
+    const targetTotal = normalizeMoney(values.totalAmount);
+    const baseShare = participants.length > 0 ? normalizeMoney(targetTotal / participants.length) : 0;
 
     let assignedSum = 0;
     let hasNegative = false;
@@ -1057,7 +1205,7 @@ function computeSplitGroupEditDistribution(formValues = null) {
             ? manualShare
             : normalizeMoney(baseShare + offset);
 
-        if (assignedAmount < -0.01) hasNegative = true;
+        if (assignedAmount < -SPLIT_MONEY_TOLERANCE) hasNegative = true;
         assignedSum += assignedAmount;
 
         const paidAmount = normalizeMoney(participant.paidAmount);
@@ -1073,22 +1221,34 @@ function computeSplitGroupEditDistribution(formValues = null) {
         };
     });
 
-    const openAllocation = normalizeMoney(totalAmount - assignedSum);
-    const overAssigned = openAllocation < -0.01;
+    const allocationDeltaSigned = normalizeMoney(targetTotal - assignedSum);
+    const openAllocation = isPositiveMoneyDelta(allocationDeltaSigned)
+        ? normalizeMoney(allocationDeltaSigned)
+        : 0;
+    const overAllocation = isNegativeMoneyDelta(allocationDeltaSigned)
+        ? normalizeMoney(Math.abs(allocationDeltaSigned))
+        : 0;
+    const underAssigned = isPositiveMoneyDelta(allocationDeltaSigned);
+    const overAssigned = isNegativeMoneyDelta(allocationDeltaSigned);
+    const hasAllocationMismatch = hasMoneyDelta(allocationDeltaSigned);
 
     return {
         values: {
             ...values,
             mode,
-            totalAmount
+            totalAmount: targetTotal,
         },
         baseShare,
         participants: resolvedParticipants,
         assignedSum: normalizeMoney(assignedSum),
         openAllocation,
+        overAllocation,
+        allocationDeltaSigned,
+        underAssigned,
         hasNegative,
         overAssigned,
-        canSave: !hasNegative && !overAssigned && resolvedParticipants.length > 0
+        hasAllocationMismatch,
+        canSave: !hasNegative && resolvedParticipants.length > 0
     };
 }
 
@@ -1118,13 +1278,20 @@ function refreshSplitGroupEditPreview() {
             summary.innerHTML = 'Negative Zuteilungen sind nicht erlaubt.';
         } else if (computed.overAssigned) {
             summary.className = 'rounded-lg border border-red-300 bg-red-50 p-2 text-xs text-red-700';
-            summary.innerHTML = `Zu viel verteilt: <strong>${Math.abs(computed.openAllocation).toFixed(2)} €</strong>`;
-        } else if (Math.abs(computed.openAllocation) < 0.01) {
+            summary.innerHTML = `Überverteilung: <strong>${computed.overAllocation.toFixed(2)} €</strong> mehr zugeteilt als Positionen + Reserve. (Speichern erlaubt)`;
+        } else if (computed.underAssigned) {
+            summary.className = 'rounded-lg border border-orange-300 bg-orange-50 p-2 text-xs text-orange-700';
+            summary.innerHTML = `Unterverteilung: <strong>${computed.openAllocation.toFixed(2)} €</strong> noch nicht auf Personen verteilt. (Speichern erlaubt)`;
+        } else if (!computed.hasAllocationMismatch) {
             summary.className = 'rounded-lg border border-green-300 bg-green-50 p-2 text-xs text-green-700';
             summary.innerHTML = `✔ Vollständig verteilt: ${computed.assignedSum.toFixed(2)} €`;
         } else {
-            summary.className = 'rounded-lg border border-orange-300 bg-orange-50 p-2 text-xs text-orange-700';
-            summary.innerHTML = `Offene Zuteilung: <strong>${computed.openAllocation.toFixed(2)} €</strong> (Speichern erlaubt)`;
+            summary.className = 'rounded-lg border border-indigo-200 bg-indigo-50 p-2 text-xs text-indigo-700';
+            summary.innerHTML = `Differenz: <strong>${Math.abs(computed.allocationDeltaSigned).toFixed(2)} €</strong> (Speichern erlaubt)`;
+        }
+
+        if (computed.values.usesPositionBasedTotal) {
+            summary.innerHTML += `<div class="mt-1 text-[11px] text-gray-600">Positionen: ${computed.values.positionTotal.toFixed(2)} € • Reserve: ${computed.values.reserveAmount.toFixed(2)} € • Ziel: ${computed.values.totalAmount.toFixed(2)} €</div>`;
         }
     }
 
@@ -1143,7 +1310,7 @@ function refreshSplitGroupEditPreview() {
         if (shareOutput) shareOutput.textContent = `${participant.assignedAmount.toFixed(2)} €`;
 
         if (warning) {
-            if (participant.overpaidAmount > 0.01) {
+            if (participant.overpaidAmount > SPLIT_MONEY_TOLERANCE) {
                 warning.classList.remove('hidden');
                 warning.textContent = `Mehr bezahlt als neu zugeteilt: ${participant.overpaidAmount.toFixed(2)} €.`;
             } else {
@@ -1173,6 +1340,8 @@ window.openSplitGroupEdit = function (groupId) {
 
     document.getElementById('split-group-edit-title').value = splitGroupEditState.master.title;
     document.getElementById('split-group-edit-total').value = splitGroupEditState.master.totalAmount.toFixed(2);
+    const reserveInput = document.getElementById('split-group-edit-reserve');
+    if (reserveInput) reserveInput.value = clampPositiveMoney(splitGroupEditState.reserveAmount).toFixed(2);
     document.getElementById('split-group-edit-start-date').value = splitGroupEditState.master.startDate || '';
     document.getElementById('split-group-edit-deadline').value = splitGroupEditState.master.deadline || '';
     document.getElementById('split-group-edit-invoice').value = splitGroupEditState.master.invoiceNr || '';
@@ -1199,6 +1368,7 @@ window.openSplitGroupEdit = function (groupId) {
 
     document.getElementById('split-group-edit-title').oninput = () => refreshSplitGroupEditPreview();
     document.getElementById('split-group-edit-total').oninput = () => refreshSplitGroupEditPreview();
+    if (reserveInput) reserveInput.oninput = () => refreshSplitGroupEditPreview();
     document.getElementById('split-group-edit-start-date').onchange = () => refreshSplitGroupEditPreview();
     document.getElementById('split-group-edit-deadline').onchange = () => refreshSplitGroupEditPreview();
     categorySelect.onchange = () => refreshSplitGroupEditPreview();
@@ -1289,15 +1459,15 @@ function addSplitGroupEditParticipantFromControls() {
 }
 window.addSplitGroupEditParticipantFromControls = addSplitGroupEditParticipantFromControls;
 
-function resolveSplitGroupOverpaidDecision(overpaidCases = []) {
-    if (!Array.isArray(overpaidCases) || overpaidCases.length === 0) return null;
+function resolveSplitGroupOverpaidDecision(overpaidCase = null) {
+    if (!overpaidCase || typeof overpaidCase !== 'object') return null;
 
-    const summary = overpaidCases
-        .map((entry) => `${entry.debtorName}: ${entry.excessAmount.toFixed(2)} €`)
-        .join('\n');
-
+    const debtorName = String(overpaidCase.debtorName || 'Unbekannt');
+    const excessAmount = normalizeMoney(overpaidCase.excessAmount);
+    const targetAmount = normalizeMoney(overpaidCase.targetAmount);
+    const paidAmount = normalizeMoney(overpaidCase.paidAmount);
     const rawDecision = prompt(
-        `Mehr bezahlt als neu zugeteilt:\n${summary}\n\nBitte wählen:\nA = Umkehr-Eintrag anlegen\nB = Als Guthaben speichern\n\nEingabe: A oder B`,
+        `Mehr bezahlt als neu zugeteilt:\n${debtorName}: Überzahlung ${excessAmount.toFixed(2)} €\nBezahlt ${paidAmount.toFixed(2)} € • Neu zugeteilt ${targetAmount.toFixed(2)} €\n\nBitte wählen:\nA = Umkehr-Eintrag anlegen\nB = Als Guthaben speichern\n\nEingabe: A oder B`,
         'A'
     );
 
@@ -1333,10 +1503,6 @@ async function saveSplitGroupEdit() {
         alertUser('Negative Zuteilungen sind nicht erlaubt.', 'error');
         return;
     }
-    if (computed.overAssigned) {
-        alertUser('Zu viel verteilt. Bitte Beträge prüfen.', 'error');
-        return;
-    }
 
     const sourceItems = getSplitGroupItemsById(splitGroupEditState.groupId);
     if (sourceItems.length === 0) {
@@ -1361,7 +1527,7 @@ async function saveSplitGroupEdit() {
         const paidAmount = getPaymentPaidAmount(entry);
         const target = targetByPaymentId[entry.id]?.assignedAmount ?? 0;
         const excessAmount = normalizeMoney(paidAmount - target);
-        if (excessAmount > 0.01) {
+        if (excessAmount > SPLIT_MONEY_TOLERANCE) {
             overpaidCases.push({
                 paymentId: entry.id,
                 debtorId: entry.debtorId || null,
@@ -1373,10 +1539,13 @@ async function saveSplitGroupEdit() {
         }
     });
 
-    let overpaidDecision = null;
+    const overpaidDecisionsByPaymentId = {};
     if (overpaidCases.length > 0) {
-        overpaidDecision = resolveSplitGroupOverpaidDecision(overpaidCases);
-        if (!overpaidDecision) return;
+        for (const overpaidCase of overpaidCases) {
+            const decision = resolveSplitGroupOverpaidDecision(overpaidCase);
+            if (!decision) return;
+            overpaidDecisionsByPaymentId[overpaidCase.paymentId] = decision;
+        }
     }
 
     const btn = document.getElementById('btn-save-split-group-edit');
@@ -1413,7 +1582,15 @@ async function saveSplitGroupEdit() {
             groupId: splitGroupEditState.groupId,
             mode: computed.values.mode,
             totalAmount: normalizeMoney(computed.values.totalAmount),
-            openAllocation: Math.max(0, normalizeMoney(computed.openAllocation)),
+            positionTotal: normalizeMoney(computed.values.positionTotal),
+            reserveAmount: clampPositiveMoney(computed.values.reserveAmount),
+            targetTotal: normalizeMoney(computed.values.totalAmount),
+            assignedTotal: normalizeMoney(computed.assignedSum),
+            allocationDeltaSigned: normalizeMoney(computed.allocationDeltaSigned),
+            hasAllocationMismatch: computed.hasAllocationMismatch === true,
+            openAllocation: isPositiveMoneyDelta(computed.allocationDeltaSigned)
+                ? normalizeMoney(computed.allocationDeltaSigned)
+                : 0,
             equalAdjustments,
             title: computed.values.title,
             startDate: computed.values.startDate,
@@ -1430,6 +1607,12 @@ async function saveSplitGroupEdit() {
             updatedBy: currentUser.mode,
             updatedByName: currentUser.displayName
         };
+        const splitMasterDeltaSigned = normalizeMoney(splitMasterPayload.allocationDeltaSigned);
+        const splitMasterDeltaState = isPositiveMoneyDelta(splitMasterDeltaSigned)
+            ? `Unterverteilung (${Math.abs(splitMasterDeltaSigned).toFixed(2)} € offen)`
+            : (isNegativeMoneyDelta(splitMasterDeltaSigned)
+                ? `Überverteilung (${Math.abs(splitMasterDeltaSigned).toFixed(2)} € über)`
+                : 'Ausgeglichen (0.00 €)');
 
         const reopenGroupId = splitGroupEditState.groupId;
 
@@ -1452,7 +1635,7 @@ async function saveSplitGroupEdit() {
                 positions: cleanedPositions,
                 amount: assignedAmount,
                 remainingAmount,
-                status: remainingAmount <= 0.001 ? 'paid' : 'open',
+                status: remainingAmount <= SPLIT_MONEY_TOLERANCE ? 'paid' : 'open',
                 debtorId: participant.debtorId || null,
                 debtorName: participant.debtorName,
                 involvedUserIds: buildInvolvedUserIdsForPayment(participant.debtorId || null, baseReference.creditorId || null),
@@ -1468,7 +1651,7 @@ async function saveSplitGroupEdit() {
                         date: new Date(),
                         action: 'split_group_master_edited',
                         user: currentUser.displayName,
-                        info: `Gruppenmaster aktualisiert (Neu: ${assignedAmount.toFixed(2)} €, Offene Zuteilung: ${splitMasterPayload.openAllocation.toFixed(2)} €).`
+                        info: `Gruppenmaster aktualisiert (Neu: ${assignedAmount.toFixed(2)} €, Delta: ${splitMasterDeltaSigned.toFixed(2)} €, Zustand: ${splitMasterDeltaState}).`
                     }]
                 });
             } else {
@@ -1513,10 +1696,12 @@ async function saveSplitGroupEdit() {
             });
 
         // 3) Bei Überzahlung neue Ausgleichseinträge erzeugen (A/B Entscheidung).
-        if (overpaidDecision && overpaidCases.length > 0) {
+        if (overpaidCases.length > 0) {
             overpaidCases.forEach((entry) => {
                 const overpaidAmount = normalizeMoney(entry.excessAmount);
-                if (overpaidAmount <= 0.01) return;
+                if (overpaidAmount <= SPLIT_MONEY_TOLERANCE) return;
+                const overpaidDecision = overpaidDecisionsByPaymentId[entry.paymentId];
+                if (!overpaidDecision) return;
 
                 const newDocRef = doc(paymentsRef);
                 const linkOrigin = `[LINK:${entry.paymentId}:#${String(entry.paymentId).slice(-4).toUpperCase()}]`;
@@ -4763,6 +4948,12 @@ function toggleSplitMode(isActive) {
                 <option value="equal">Gleichmäßig teilen (mit Anpassung)</option>
                 <option value="manual">Komplett manuell</option>
             </select>
+
+            <div class="mt-2 grid grid-cols-[1fr_120px] gap-2 items-center">
+                <label class="text-[11px] font-bold text-indigo-700">Reserve / Zusatzkosten (€)</label>
+                <input type="number" id="split-reserve-amount" class="w-full p-1 text-xs border rounded text-right font-mono bg-gray-100" value="0.00" min="0" step="0.01" disabled>
+            </div>
+            <p class="mt-1 text-[10px] text-indigo-600">Nur positiv. Wird auf Positionssumme aufgeschlagen, wenn Positionen vorhanden sind.</p>
             
             <div id="manual-split-feedback" class="hidden mt-2 text-xs font-bold text-right">
                 Noch zu verteilen: <span id="manual-split-remaining">0.00</span> €
@@ -4810,6 +5001,7 @@ function toggleSplitMode(isActive) {
         // --- Event Listeners ---
 
         const methodSelect = document.getElementById('split-distribution-method');
+        const reserveInput = document.getElementById('split-reserve-amount');
         methodSelect.addEventListener('change', () => {
             const isManual = methodSelect.value === 'manual';
             const inputs = document.querySelectorAll('.split-amount-input');
@@ -4840,6 +5032,14 @@ function toggleSplitMode(isActive) {
             if (feedbackBox) feedbackBox.classList.toggle('hidden', !isManual);
             updateSplitPreview();
         });
+
+        if (reserveInput) {
+            reserveInput.addEventListener('input', () => {
+                const parsed = Number.parseFloat(String(reserveInput.value || '').replace(',', '.'));
+                reserveInput.value = clampPositiveMoney(Number.isFinite(parsed) ? parsed : 0).toFixed(2);
+                updateSplitPreview();
+            });
+        }
 
         document.querySelectorAll('.split-cb').forEach(cb => cb.addEventListener('change', updateSplitPreview));
         document.querySelectorAll('.split-amount-input').forEach(inp => inp.addEventListener('input', updateSplitPreview));
@@ -4932,7 +5132,29 @@ function updateSplitPreview() {
     const totalInput = document.getElementById('payment-amount');
     let valStr = totalInput ? totalInput.value : "";
     valStr = valStr.replace(',', '.');
-    const total = parseFloat(valStr) || 0;
+    const total = normalizeMoney(parseFloat(valStr) || 0);
+    const reserveInput = document.getElementById('split-reserve-amount');
+
+    const hasPositionBasedTotal = Array.from(document.querySelectorAll('.position-row')).some((row) => {
+        const name = String(row.querySelector('.pos-name')?.value || '').trim();
+        const price = Number.parseFloat(String(row.querySelector('.pos-price')?.value || '').replace(',', '.'));
+        return Boolean(name) && Number.isFinite(price);
+    });
+
+    let reserveAmount = 0;
+    if (reserveInput) {
+        const parsedReserve = Number.parseFloat(String(reserveInput.value || '').replace(',', '.'));
+        reserveAmount = hasPositionBasedTotal
+            ? clampPositiveMoney(Number.isFinite(parsedReserve) ? parsedReserve : 0)
+            : 0;
+
+        reserveInput.disabled = !hasPositionBasedTotal;
+        reserveInput.classList.toggle('bg-gray-100', !hasPositionBasedTotal);
+        reserveInput.classList.toggle('cursor-not-allowed', !hasPositionBasedTotal);
+        reserveInput.value = reserveAmount.toFixed(2);
+    }
+
+    const targetTotal = normalizeMoney(total + reserveAmount);
 
     const previewEl = document.getElementById('split-calculation-preview'); // Altes Preview Element (unten)
     const methodSelect = document.getElementById('split-distribution-method');
@@ -4969,7 +5191,7 @@ function updateSplitPreview() {
         });
         // Feedback reset & Speichern sperren
         if (feedbackBox) {
-            feedbackBox.innerHTML = `Noch zu verteilen: <span>${total.toFixed(2)}</span> €`;
+            feedbackBox.innerHTML = `Noch zu verteilen: <span>${targetTotal.toFixed(2)}</span> €`;
             feedbackBox.className = "mt-2 text-xs font-bold text-right text-red-600";
         }
         if (saveBtn) {
@@ -4984,7 +5206,7 @@ function updateSplitPreview() {
 
     if (mode === 'equal') {
         // GLEICHMÄSSIG
-        const baseShare = (total > 0) ? (total / checkedCount) : 0;
+        const baseShare = (targetTotal > 0) ? (targetTotal / checkedCount) : 0;
 
         let checkSumEqual = 0;
 
@@ -5006,7 +5228,7 @@ function updateSplitPreview() {
                     checkSumEqual += parseFloat(finalVal.toFixed(2));
 
                     // === NEU: MINUS PRÜFUNG ===
-                    if (finalVal < -0.01) {
+                    if (finalVal < -SPLIT_MONEY_TOLERANCE) {
                         negativeDetected = true;
                         // Name aus Dataset holen, "(Gast)" entfernen für saubere Anzeige
                         let cleanName = row.dataset.name.replace(" (Gast)", "");
@@ -5018,7 +5240,7 @@ function updateSplitPreview() {
                     }
                     else {
                         // Normaler Style Logik (Gefärbt wenn angepasst, sonst grau)
-                        if (Math.abs(offset) > 0.001) {
+                        if (Math.abs(offset) > SPLIT_MONEY_TOLERANCE) {
                             inp.classList.add('text-indigo-800', 'bg-indigo-50', 'font-black');
                             inp.classList.remove('text-gray-900', 'bg-gray-100', 'bg-red-100', 'text-red-600', 'border-red-500');
                         } else {
@@ -5038,13 +5260,14 @@ function updateSplitPreview() {
         });
 
         // Sicherheitsprüfung Summe
-        const diffEqual = normalizeMoney(total - checkSumEqual);
-        const isOverAssigned = diffEqual < -0.05;
+        const diffEqual = normalizeMoney(targetTotal - checkSumEqual);
+        const underAssigned = isPositiveMoneyDelta(diffEqual);
+        const overAssigned = isNegativeMoneyDelta(diffEqual);
+        const isBalanced = !hasMoneyDelta(diffEqual);
 
-        // === NEU: Button Logik inkl. Minus-Check ===
+        // === Button-Logik: Überverteilung ist erlaubt, nur negative Einzelbeträge sind verboten ===
         if (saveBtn) {
-            // Offene Zuteilung ist erlaubt, Überverteilung nicht
-            if (!isOverAssigned && total > 0 && !negativeDetected) {
+            if (targetTotal > 0 && !negativeDetected) {
                 saveBtn.disabled = false;
                 saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
                 saveBtn.title = "";
@@ -5062,24 +5285,29 @@ function updateSplitPreview() {
                 feedbackBox.className = "mt-2 text-xs font-bold text-right text-red-600";
                 feedbackBox.innerHTML = `Nicht möglich: <span class="underline">${escapeHtmlInline(nameStr)}</span> im Minus!`;
                 if (saveBtn) saveBtn.title = "Negative Beträge nicht erlaubt";
-            } else if (isOverAssigned) {
+            } else if (overAssigned) {
                 feedbackBox.className = "mt-2 text-xs font-bold text-right text-red-600";
-                feedbackBox.innerHTML = `Zu viel zugeteilt: <span>${Math.abs(diffEqual).toFixed(2)}</span> €`;
-                if (saveBtn) saveBtn.title = "Zu viel verteilt";
-            } else if (Math.abs(diffEqual) < 0.05) {
+                feedbackBox.innerHTML = `Überverteilung: <span>${Math.abs(diffEqual).toFixed(2)}</span> € (Speichern erlaubt)`;
+                if (saveBtn) saveBtn.title = "Speichern erlaubt trotz Überverteilung";
+            } else if (isBalanced) {
                 feedbackBox.className = "mt-2 text-xs font-bold text-right text-green-600";
                 feedbackBox.innerHTML = `✔ Vollständig verteilt: ${checkSumEqual.toFixed(2)} €`;
                 if (saveBtn) saveBtn.title = "";
-            } else {
+            } else if (underAssigned) {
                 feedbackBox.className = "mt-2 text-xs font-bold text-right text-orange-600";
-                feedbackBox.innerHTML = `Offene Zuteilung: <span>${diffEqual.toFixed(2)}</span> €`;
-                if (saveBtn) saveBtn.title = "Speichern möglich mit offener Zuteilung";
+                feedbackBox.innerHTML = `Unterverteilung: <span>${diffEqual.toFixed(2)}</span> € (Speichern erlaubt)`;
+                if (saveBtn) saveBtn.title = "Speichern erlaubt mit Unterverteilung";
+            } else {
+                feedbackBox.className = "mt-2 text-xs font-bold text-right text-indigo-600";
+                feedbackBox.innerHTML = `Differenz: <span>${Math.abs(diffEqual).toFixed(2)}</span> €`;
             }
         }
 
         if (previewEl) {
-            if (total > 0) {
-                previewEl.textContent = `Basis: ${baseShare.toFixed(2)} € (+/- Anpassungen)`;
+            if (targetTotal > 0) {
+                previewEl.textContent = hasPositionBasedTotal
+                    ? `Basis: ${baseShare.toFixed(2)} € • Positionen ${total.toFixed(2)} € + Reserve ${reserveAmount.toFixed(2)} €`
+                    : `Basis: ${baseShare.toFixed(2)} € (+/- Anpassungen)`;
                 previewEl.className = "text-xs text-indigo-600 font-bold mt-1";
             } else {
                 previewEl.textContent = "Bitte Gesamtbetrag eingeben.";
@@ -5099,7 +5327,7 @@ function updateSplitPreview() {
                     let vStr = inp.value.replace(',', '.');
                     let val = parseFloat(vStr);
                     if (isNaN(val)) val = 0;
-                    if (val < -0.01) hasNegativeManual = true;
+                    if (val < -SPLIT_MONEY_TOLERANCE) hasNegativeManual = true;
                     currentSum += val;
                 } else {
                     inp.value = "";
@@ -5107,11 +5335,12 @@ function updateSplitPreview() {
             }
         });
 
-        const diff = normalizeMoney(total - currentSum);
+        const diff = normalizeMoney(targetTotal - currentSum);
         if (previewEl) previewEl.textContent = "";
 
-        const isBalanced = Math.abs(diff) < 0.02;
-        const isOverAssigned = diff < -0.02;
+        const isBalanced = !hasMoneyDelta(diff);
+        const isOverAssigned = isNegativeMoneyDelta(diff);
+        const isUnderAssigned = isPositiveMoneyDelta(diff);
 
         if (feedbackBox) {
             feedbackBox.classList.remove('hidden');
@@ -5128,13 +5357,13 @@ function updateSplitPreview() {
 
             } else if (isOverAssigned) {
                 if (saveBtn) {
-                    saveBtn.disabled = true;
-                    saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
-                    saveBtn.title = "Zu viel verteilt";
+                    saveBtn.disabled = false;
+                    saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    saveBtn.title = "Speichern erlaubt trotz Überverteilung";
                 }
 
                 feedbackBox.className = "mt-2 text-xs font-bold text-right text-red-600";
-                feedbackBox.innerHTML = `Zu viel verteilt: <span>${Math.abs(diff).toFixed(2)}</span> €`;
+                feedbackBox.innerHTML = `Überverteilung: <span>${Math.abs(diff).toFixed(2)}</span> € (Speichern erlaubt)`;
 
             } else if (isBalanced) {
                 feedbackBox.className = "mt-2 text-xs font-bold text-right text-green-600";
@@ -5148,17 +5377,20 @@ function updateSplitPreview() {
 
             } else {
                 if (saveBtn) {
-                    saveBtn.disabled = false;
-                    saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                    saveBtn.title = "Speichern möglich mit offener Zuteilung";
+                    saveBtn.disabled = !(targetTotal > 0);
+                    saveBtn.classList.toggle('opacity-50', !(targetTotal > 0));
+                    saveBtn.classList.toggle('cursor-not-allowed', !(targetTotal > 0));
+                    saveBtn.title = isUnderAssigned
+                        ? "Speichern erlaubt mit Unterverteilung"
+                        : "";
                 }
 
-                if (diff > 0) {
+                if (isUnderAssigned) {
                     feedbackBox.className = "mt-2 text-xs font-bold text-right text-orange-600";
-                    feedbackBox.innerHTML = `Offene Zuteilung: <span>${diff.toFixed(2)}</span> €`;
+                    feedbackBox.innerHTML = `Unterverteilung: <span>${diff.toFixed(2)}</span> € (Speichern erlaubt)`;
                 } else {
-                    feedbackBox.className = "mt-2 text-xs font-bold text-right text-green-600";
-                    feedbackBox.innerHTML = `✔ Verteilung übernommen.`;
+                    feedbackBox.className = "mt-2 text-xs font-bold text-right text-indigo-600";
+                    feedbackBox.innerHTML = `Differenz: <span>${Math.abs(diff).toFixed(2)}</span> €`;
                 }
             }
         }
@@ -5397,7 +5629,14 @@ async function savePayment() {
 
             const methodSelect = document.getElementById('split-distribution-method');
             const isManual = methodSelect && methodSelect.value === 'manual';
-            const baseShare = (totalAmount / checkedCount);
+            const reserveInput = document.getElementById('split-reserve-amount');
+            const hasPositionBasedTotal = positions.some((entry) => entry?.name || Math.abs(normalizeMoney(entry?.price)) > SPLIT_MONEY_TOLERANCE);
+            const reserveParsed = Number.parseFloat(String(reserveInput?.value || '').replace(',', '.'));
+            const reserveAmount = hasPositionBasedTotal
+                ? clampPositiveMoney(Number.isFinite(reserveParsed) ? reserveParsed : 0)
+                : 0;
+            const targetTotalForSplit = normalizeMoney(totalAmount + reserveAmount);
+            const baseShare = (targetTotalForSplit / checkedCount);
             const splitItems = [];
             let sumCheck = 0;
 
@@ -5420,14 +5659,13 @@ async function savePayment() {
                         myShare = baseShare + offset;
                     }
                     myShare = parseFloat(myShare.toFixed(2));
-                    if (myShare < -0.01) throw new Error(`Betrag negativ.`);
+                    if (myShare < -SPLIT_MONEY_TOLERANCE) throw new Error(`Betrag negativ.`);
                     sumCheck += myShare;
                     splitItems.push({ id: pId, name: cb.dataset.name, share: myShare });
                 }
             }
 
-            const distributionDiff = normalizeMoney(totalAmount - sumCheck);
-            if (distributionDiff < -0.05) throw new Error(`Zu viel verteilt. Bitte Summen prüfen.`);
+            const distributionDiff = normalizeMoney(targetTotalForSplit - sumCheck);
 
             const splitGroupId = "GRP_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
 
@@ -5456,8 +5694,16 @@ async function savePayment() {
                 version: 1,
                 groupId: splitGroupId,
                 mode: isManual ? 'manual' : 'equal',
-                totalAmount: normalizeMoney(totalAmount),
-                openAllocation: Math.max(0, normalizeMoney(distributionDiff)),
+                totalAmount: normalizeMoney(targetTotalForSplit),
+                positionTotal: normalizeMoney(hasPositionBasedTotal ? totalAmount : 0),
+                reserveAmount,
+                targetTotal: normalizeMoney(targetTotalForSplit),
+                assignedTotal: normalizeMoney(sumCheck),
+                allocationDeltaSigned: normalizeMoney(distributionDiff),
+                hasAllocationMismatch: hasMoneyDelta(distributionDiff),
+                openAllocation: isPositiveMoneyDelta(distributionDiff)
+                    ? normalizeMoney(distributionDiff)
+                    : 0,
                 equalAdjustments: splitEqualAdjustments,
                 title,
                 startDate,
@@ -5492,12 +5738,12 @@ async function savePayment() {
                     splitMaster,
                     splitAssignedAmount: assignedShare,
                     title: `${title}`,
-                    status: (assignedShare <= 0.001) ? 'paid' : 'open',
+                    status: (assignedShare <= SPLIT_MONEY_TOLERANCE) ? 'paid' : 'open',
                     history: [{
                         date: new Date(),
                         action: 'created_split',
                         user: currentUser.displayName,
-                        info: `Erstellt (Split-Anteil: ${assignedShare.toFixed(2)} €, Offene Zuteilung: ${splitMaster.openAllocation.toFixed(2)} €)`
+                        info: `Erstellt (Split-Anteil: ${assignedShare.toFixed(2)} €, Delta: ${normalizeMoney(splitMaster.allocationDeltaSigned).toFixed(2)} €)`
                     }]
                 };
                 batch.set(item.docRef, entry);
@@ -6961,6 +7207,7 @@ function applyFilters() {
     
     // Spezial: Wenn wir explizit nach ID suchen (in den Tags), ignorieren wir den Status-Filter
     const isIdSearch = hasTags && activeSearchFilters.some(f => f.type === 'numbers' || f.type === 'id');
+    const splitMasters = collectSplitMasterMap(allPayments);
 
     let filtered = allPayments.filter(p => {
         // --- BASIS CHECKS ---
@@ -6974,8 +7221,12 @@ function applyFilters() {
 
         // Dropdown Filter (nur wenn KEINE ID-Suche)
         if (!isIdSearch) {
+            const splitMaster = p.splitGroupId ? splitMasters[p.splitGroupId] : null;
             if (statusFilter !== 'all') {
-                if (statusFilter === 'open' && p.status !== 'open') return false;
+                if (statusFilter === 'open' && p.status !== 'open') {
+                    const keepOpenViaSplitMismatch = Boolean(p.splitGroupId && splitMaster?.hasAllocationMismatch);
+                    if (!keepOpenViaSplitMismatch) return false;
+                }
                 if (statusFilter === 'pending' && p.status !== 'pending_approval') return false;
                 
                 // --- FIX: Auch 'closed' (Merge) und 'settled' (Bilanz) als erledigt anzeigen ---
@@ -7138,7 +7389,7 @@ function renderPaymentList(payments) {
         if (statusToken === 'paid' || statusToken === 'closed' || statusToken === 'settled' || statusToken === 'cancelled') {
             return true;
         }
-        return getPaymentRemainingForDisplay(payment) <= 0.009;
+        return getPaymentRemainingForDisplay(payment) <= SPLIT_MONEY_TOLERANCE;
     };
     
     if (visiblePayments.length === 0) { 
@@ -7206,7 +7457,7 @@ function renderPaymentList(payments) {
         groupEntry.categoryId = master.categoryId || groupEntry.categoryId;
         groupEntry.openAllocation = normalizeMoney(master.openAllocation);
         groupEntry.totalAmount = normalizeMoney(master.totalAmount);
-        groupEntry.totalRemaining = normalizeMoney(groupEntry.totalRemaining + groupEntry.openAllocation);
+        groupEntry.totalRemaining = normalizeMoney(master.totalRemainingOpen);
 
         if (master.deadline && master.deadline < groupEntry.earliestDeadline) {
             groupEntry.earliestDeadline = master.deadline;
@@ -7262,37 +7513,46 @@ function renderPaymentList(payments) {
         if (item.items) { 
             const g = item;
             const splitMaster = g.master || getSplitGroupMasterSnapshot(g.items);
+            const mismatchMeta = getSplitAllocationMismatchMeta(splitMaster || {});
+            const hasAllocationMismatch = mismatchMeta.hasMismatch;
             const openGroupItems = g.items.filter((entry) => !isFinishedSplitGroupItem(entry));
             const closedGroupItems = g.items.filter((entry) => isFinishedSplitGroupItem(entry));
             const closedEntriesLabel = closedGroupItems.length === 1
                 ? '1 Abgeschlossener Eintrag'
                 : `${closedGroupItems.length} Abgeschlossene Einträge`;
-            const isAllPaid = g.totalRemaining <= 0.01;
+            const isAllPaid = !hasAllocationMismatch && normalizeMoney(splitMaster?.totalRemainingAssigned) <= SPLIT_MONEY_TOLERANCE;
             const timeDiff = (new Date(g.earliestDeadline) - today) / (1000 * 60 * 60 * 24);
-            const hasOpenAllocation = normalizeMoney(splitMaster?.openAllocation) > 0.009;
+            const remainingDisplay = normalizeMoney(splitMaster?.totalRemainingOpen ?? g.totalRemaining);
+            const textColor = hasAllocationMismatch ? 'text-red-700' : (isAllPaid ? 'text-green-700' : 'text-indigo-700');
+            const mismatchChipHtml = hasAllocationMismatch
+                ? `<span class="text-[10px] font-black text-red-600 mr-1 whitespace-nowrap">${escapeHtmlInline(mismatchMeta.shortLabel)}</span>`
+                : '';
+            const mismatchBannerHtml = hasAllocationMismatch
+                ? `<div class="${isListView ? 'px-2 py-1.5 text-[11px]' : 'sm:col-span-2 px-3 py-2 text-xs'} font-bold ${mismatchMeta.isUnder ? 'text-orange-700 bg-orange-50 border-orange-200' : 'text-red-700 bg-red-50 border-red-200'} ${isListView ? 'border-b' : 'border rounded-lg'}">${escapeHtmlInline(mismatchMeta.detailText)}</div>`
+                : '';
             
             let groupStatusClass = "";
             
             if (isListView) {
-                if (isAllPaid) {
+                if (hasAllocationMismatch) {
+                    groupStatusClass = "bg-indigo-50/70 hover:bg-indigo-100 border-l-4 border-indigo-500 split-open-allocation-pulse";
+                } else if (isAllPaid) {
                     groupStatusClass = "bg-green-50/50 hover:bg-green-100 border-l-4 border-green-500";
                 } else {
                     groupStatusClass = "bg-indigo-50/50 hover:bg-indigo-100";
-                    if (hasOpenAllocation) {
-                        groupStatusClass = "bg-indigo-50/70 hover:bg-indigo-100 border-l-4 border-indigo-500 split-open-allocation-pulse";
-                    } else if (g.earliestDeadline !== '9999-12-31') {
+                    if (g.earliestDeadline !== '9999-12-31') {
                         if (timeDiff < 3) groupStatusClass = "bg-red-50/50 hover:bg-red-100 border-l-4 border-red-500 animate-pulse"; 
                         else if (timeDiff < 7) groupStatusClass = "bg-yellow-50/50 hover:bg-yellow-100 border-l-4 border-yellow-400";
                     }
                 }
             } else {
-                if (isAllPaid) {
+                if (hasAllocationMismatch) {
+                    groupStatusClass = "border-2 border-indigo-300 bg-indigo-50 split-open-allocation-pulse";
+                } else if (isAllPaid) {
                     groupStatusClass = "border-2 border-dashed border-green-200 bg-green-50";
                 } else {
                     groupStatusClass = "border-2 border-dashed border-indigo-200 bg-indigo-50";
-                    if (hasOpenAllocation) {
-                        groupStatusClass = "border-2 border-indigo-300 bg-indigo-50 split-open-allocation-pulse";
-                    } else if (g.earliestDeadline !== '9999-12-31') {
+                    if (g.earliestDeadline !== '9999-12-31') {
                         if (timeDiff < 3) groupStatusClass = "border-2 border-red-500 bg-red-50 animate-pulse"; 
                         else if (timeDiff < 7) groupStatusClass = "border-2 border-yellow-400 bg-yellow-50";
                     }
@@ -7323,19 +7583,18 @@ function renderPaymentList(payments) {
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-gray-500 arrow-icon transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
                         <span class="text-lg">📂</span>
                         <span class="text-xs font-bold text-gray-800 flex-grow truncate">${escapeHtmlInline(g.title)} (Split: ${g.items.length})</span>
-                        ${hasOpenAllocation ? `<span class="text-[10px] font-black text-red-600 mr-1 whitespace-nowrap">Offen: ${normalizeMoney(splitMaster?.openAllocation).toFixed(2)} €</span>` : ''}
-                        <span class="font-mono font-bold text-xs ${isAllPaid ? 'text-green-600' : 'text-indigo-600'} mr-2">${g.totalRemaining.toFixed(2)} €</span>
+                        ${mismatchChipHtml}
+                        <span class="font-mono font-bold text-xs ${textColor} mr-2">${remainingDisplay.toFixed(2)} €</span>
                         <button type="button" onclick="event.stopPropagation(); window.openSplitGroupView('${g.id}');" class="px-2 py-1 rounded bg-indigo-600 text-white text-[10px] font-bold hover:bg-indigo-700">Ansicht</button>
                     </div>
                     <div class="hidden pl-0 bg-white border-t border-gray-100">
-                        ${hasOpenAllocation ? `<div class="px-2 py-1.5 text-[11px] font-bold text-orange-700 bg-orange-50 border-b border-orange-100">Offene Zuteilung: ${normalizeMoney(splitMaster?.openAllocation).toFixed(2)} €</div>` : ''}
+                        ${mismatchBannerHtml}
                         ${openItemsHtml}
                         ${closedToggleHtml}
                     </div>
                 </div>`;
                 container.innerHTML += folderHtml;
             } else {
-                const textColor = isAllPaid ? 'text-green-700' : 'text-indigo-700';
                 const colSpan = "col-span-1 sm:col-span-2";
                 const openItemsHtml = openGroupItems.map((p) => createSingleCardHtml(p, today)).join('');
                 const closedItemsHtml = closedGroupItems
@@ -7365,17 +7624,17 @@ function renderPaymentList(payments) {
                             </div>
                             <div class="min-w-0">
                                 <p class="font-bold text-gray-800 text-sm truncate">${escapeHtmlInline(g.title)}</p>
-                                <p class="text-xs text-gray-600 font-medium">${g.items.length} Personen${hasOpenAllocation ? ` • Offene Zuteilung ${normalizeMoney(splitMaster?.openAllocation).toFixed(2)} €` : ''}</p>
+                                <p class="text-xs text-gray-600 font-medium">${g.items.length} Personen${hasAllocationMismatch ? ` • ${escapeHtmlInline(mismatchMeta.shortLabel)}` : ''}</p>
                             </div>
                         </div>
                         <div class="text-right flex items-center gap-2 flex-shrink-0">
-                            <span class="font-black text-base sm:text-lg ${textColor}">${g.totalRemaining.toFixed(2)} €</span>
+                            <span class="font-black text-base sm:text-lg ${textColor}">${remainingDisplay.toFixed(2)} €</span>
                             <button type="button" onclick="event.stopPropagation(); window.openSplitGroupView('${g.id}');" class="px-2 py-1 rounded bg-indigo-600 text-white text-[10px] font-bold hover:bg-indigo-700">Ansicht</button>
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 text-gray-500 transition-transform arrow-icon"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
                         </div>
                     </div>
                     <div class="hidden grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 pl-2 border-l-4 border-indigo-100">
-                        ${hasOpenAllocation ? `<div class="sm:col-span-2 px-3 py-2 text-xs font-bold text-orange-700 bg-orange-50 border border-orange-200 rounded-lg">Offene Zuteilung: ${normalizeMoney(splitMaster?.openAllocation).toFixed(2)} €</div>` : ''}
+                        ${mismatchBannerHtml}
                         ${openItemsHtml}
                         ${closedToggleHtml}
                     </div>
@@ -7583,9 +7842,7 @@ function updateCategoryDashboard() {
 
         Object.values(splitMasters).forEach((master) => {
             const openAllocation = normalizeMoney(master.openAllocation);
-            if (openAllocation <= 0.009) return;
-            const hasOpenEntry = (master.items || []).some((entry) => entry.status === 'open' || entry.status === 'pending_approval');
-            if (!hasOpenEntry) return;
+            if (openAllocation <= SPLIT_MONEY_TOLERANCE) return;
 
             if (master.startDate) {
                 const start = new Date(master.startDate);
@@ -7762,9 +8019,7 @@ function updateDashboard(payments) {
 
     Object.values(splitMasters).forEach((master) => {
         const openAllocation = normalizeMoney(master.openAllocation);
-        if (openAllocation <= 0.009) return;
-        const hasOpenEntry = (master.items || []).some((entry) => entry.status === 'open' || entry.status === 'pending_approval');
-        if (!hasOpenEntry) return;
+        if (openAllocation <= SPLIT_MONEY_TOLERANCE) return;
 
         if (master.startDate) {
             const start = new Date(master.startDate);
@@ -7843,9 +8098,7 @@ function renderFuturePaymentsList() {
 
     Object.values(splitMasters).forEach((master) => {
         const openAllocation = normalizeMoney(master.openAllocation);
-        if (openAllocation <= 0.009) return;
-        const hasOpenEntry = (master.items || []).some((entry) => entry.status === 'open' || entry.status === 'pending_approval');
-        if (!hasOpenEntry) return;
+        if (openAllocation <= SPLIT_MONEY_TOLERANCE) return;
         if (!master.startDate) return;
 
         const start = new Date(master.startDate);
@@ -7862,6 +8115,15 @@ function renderFuturePaymentsList() {
 
         if (master.creditorId === currentUser.mode) {
             totalCredit += openAllocation;
+            futurePayments.push({
+                id: `SPLIT_OPEN_${master.id}`,
+                title: String(master.title || 'Split-Gruppe'),
+                startDate: master.startDate,
+                deadline: master.deadline || null,
+                remainingAmount: openAllocation,
+                splitGroupId: master.id,
+                isSplitOpenAllocation: true
+            });
         }
     });
 
@@ -7880,10 +8142,14 @@ function renderFuturePaymentsList() {
         futurePayments.forEach(p => {
             const dateObj = new Date(p.startDate);
             const dateStr = dateObj.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric' });
-            
-            const iAmDebtor = p.debtorId === currentUser.mode;
-            const partnerName = iAmDebtor ? p.creditorName : p.debtorName;
-            const prefix = iAmDebtor ? "an" : "von"; 
+
+            const isSplitOpenAllocation = p.isSplitOpenAllocation === true;
+            const iAmDebtor = !isSplitOpenAllocation && p.debtorId === currentUser.mode;
+            const splitRef = String(p.splitGroupId || '').slice(-4).toUpperCase();
+            const partnerName = isSplitOpenAllocation
+                ? `Split #${splitRef}`
+                : (iAmDebtor ? p.creditorName : p.debtorName);
+            const prefix = iAmDebtor ? "an" : "von";
             const colorClass = iAmDebtor ? "text-red-600" : "text-green-600";
             
             // Standard BG
@@ -7933,16 +8199,16 @@ function renderFuturePaymentsList() {
                         <span class="text-[10px] font-bold bg-white px-1.5 py-0.5 rounded border border-gray-200 text-gray-500 whitespace-nowrap">
                             Start: ${dateStr}
                         </span>
-                        <span class="font-bold text-sm text-gray-800 truncate">${p.title}</span>
+                        <span class="font-bold text-sm text-gray-800 truncate">${escapeHtmlInline(p.title)}</span>
                     </div>
-                    <p class="text-xs text-gray-500 truncate">
-                        ${prefix} <strong>${partnerName}</strong>
-                    </p>
+                    ${isSplitOpenAllocation
+                        ? `<p class="text-xs text-orange-700 font-semibold truncate">Noch nicht auf Personen verteilt • <strong>${escapeHtmlInline(partnerName)}</strong></p>`
+                        : `<p class="text-xs text-gray-500 truncate">${prefix} <strong>${escapeHtmlInline(partnerName || 'Unbekannt')}</strong></p>`}
                 </div>
                 
                 <div class="flex items-center">
                     <span class="font-mono font-bold text-lg ${colorClass} whitespace-nowrap">
-                        ${parseFloat(p.remainingAmount).toFixed(2)} €
+                        ${normalizeMoney(p.remainingAmount).toFixed(2)} €
                     </span>
                     ${deadlineHtml}
                 </div>
@@ -7950,6 +8216,10 @@ function renderFuturePaymentsList() {
 
             div.onclick = () => {
                 if(modal) modal.style.display = 'none'; 
+                if (isSplitOpenAllocation && p.splitGroupId) {
+                    window.openSplitGroupView(p.splitGroupId);
+                    return;
+                }
                 openPaymentDetail(p.id); 
             };
 
@@ -12507,16 +12777,19 @@ function addPositionInput(name = '', price = '') {
 
 
 function calculateTotalFromPositions() {
-    const inputs = document.querySelectorAll('.pos-price');
+    const rows = document.querySelectorAll('.position-row');
     let total = 0;
     let hasValue = false;
 
-    inputs.forEach(input => {
-        const val = parseFloat(input.value);
-        if (!isNaN(val)) {
-            total += val;
-            hasValue = true;
+    rows.forEach((row) => {
+        const name = String(row.querySelector('.pos-name')?.value || '').trim();
+        const rawPrice = String(row.querySelector('.pos-price')?.value || '').replace(',', '.');
+        const val = Number.parseFloat(rawPrice);
+        if (!name || !Number.isFinite(val)) {
+            return;
         }
+        total += val;
+        hasValue = true;
     });
 
     const mainAmount = document.getElementById('payment-amount');
@@ -12529,7 +12802,7 @@ function calculateTotalFromPositions() {
 
     // Nur überschreiben, wenn Positionen da sind
     if (hasValue) {
-        mainAmount.value = total.toFixed(2);
+        mainAmount.value = normalizeMoney(total).toFixed(2);
         mainAmount.disabled = true; // Sperren, damit man nicht manuell die Summe manipuliert
         mainAmount.classList.add('bg-gray-100');
 
@@ -12542,8 +12815,8 @@ function calculateTotalFromPositions() {
             saveBtn.title = "";
         }
 
-    } else if (inputs.length === 0) {
-        // Keine Positionen mehr -> Freigeben
+    } else {
+        // Keine vollständig speicherbare Position -> Freigeben
         mainAmount.disabled = false;
         mainAmount.classList.remove('bg-gray-100');
     }

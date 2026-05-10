@@ -1,14 +1,34 @@
 {
-  "version": "1.22.25",
-  "buildId": "20260510-4",
+  "version": "1.22.27",
+  "buildId": "20260510-6",
   "releaseDate": "2026-05-10",
-  "releaseTime": "00:59",
+  "releaseTime": "19:32",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Wise-Zuordnungsfix: Referenzcode/Verwendungszweck wird robust normalisiert und eindeutig pro offenem Zahlungslink gematcht (inkl. Fallback über paymentTargets); doppelte Zustellungen werden als duplicate markiert, mehrdeutige Referenzen explizit geblockt.",
+  "note": "Split-Gruppen-Feinschliff: Positionssummen verwenden nur wirklich speicherbare Positionen, Zukunftsmodal zeigt Unterverteilungs-Reste konsistent in Summe und Liste, und Gruppenmaster-Historie protokolliert Unter-/Überverteilung explizit.",
   "commitId": "pending",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.27",
+      "buildId": "20260510-6",
+      "releaseDate": "2026-05-10",
+      "releaseTime": "19:32",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Split-Gruppen-Feinschliff: Positionssummen verwenden nur wirklich speicherbare Positionen, Zukunftsmodal zeigt Unterverteilungs-Reste konsistent in Summe und Liste, und Gruppenmaster-Historie protokolliert Unter-/Überverteilung explizit.",
+      "commitId": "pending",
+      "obligation": "false"
+    },
+    {
+      "version": "1.22.26",
+      "buildId": "20260510-5",
+      "releaseDate": "2026-05-10",
+      "releaseTime": "19:15",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Split-Gruppen erweitert: Reserve/Zusatzkosten erzeugt positive Zielbeträge über der Positionssumme, Unter-/Überverteilung läuft mit signierter Differenzlogik, Warn/Puls bleibt bei jeder Abweichung aktiv und Überzahlungsentscheidungen erfolgen je Person.",
+      "commitId": "pending",
+      "obligation": "false"
+    },
     {
       "version": "1.22.25",
       "buildId": "20260510-4",
