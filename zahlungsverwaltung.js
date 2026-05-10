@@ -1047,7 +1047,7 @@ function renderSplitGroupDetailModal(groupId) {
                     <span class="font-bold text-gray-800">${escapeHtmlInline(entry.debtorName)}</span>
                     <button type="button" onclick="openPaymentDetail('${entry.paymentId}'); event.stopPropagation();" class="text-[10px] px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100">#${shortId}</button>
                 </div>
-                <div class="mt-2 grid grid-cols-3 gap-2 text-[11px]">
+                <div class="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
                     <div class="rounded border border-gray-200 bg-gray-50 px-2 py-1"><span class="block text-gray-500">Gesamt</span><span class="font-bold text-gray-800">${entry.assignedAmount.toFixed(2)} €</span></div>
                     <div class="rounded border border-green-200 bg-green-50 px-2 py-1"><span class="block text-green-600">Bezahlt</span><span class="font-bold text-green-700">${entry.paidAmount.toFixed(2)} €</span></div>
                     <div class="${openBoxClass}"><span class="block ${openLabelClass}">Offen</span><span class="font-bold ${openValueClass}">${remainingAmount.toFixed(2)} €</span></div>
@@ -1065,7 +1065,7 @@ function renderSplitGroupDetailModal(groupId) {
                 <span class="font-black text-indigo-800 text-sm">Summe (alle Personen)</span>
                 <span class="text-[10px] px-2 py-0.5 rounded bg-white border border-indigo-200 text-indigo-700">${master.participants.length} Einträge</span>
             </div>
-            <div class="grid grid-cols-3 gap-2 text-[11px]">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
                 <div class="rounded border border-indigo-200 bg-white px-2 py-1"><span class="block text-gray-500">Gesamt</span><span class="font-black text-gray-800">${participantTotalAssigned.toFixed(2)} €</span></div>
                 <div class="rounded border border-green-200 bg-green-50 px-2 py-1"><span class="block text-green-600">Bezahlt</span><span class="font-black text-green-700">${participantTotalPaid.toFixed(2)} €</span></div>
                 <div class="rounded border border-orange-200 bg-orange-50 px-2 py-1"><span class="block text-orange-600">Offen</span><span class="font-black text-orange-700">${participantTotalOpen.toFixed(2)} €</span></div>
@@ -1093,7 +1093,7 @@ function renderSplitGroupDetailModal(groupId) {
             <p class="text-xs text-indigo-700 mt-1">${modeLabel}</p>
         </div>
 
-        <div class="grid grid-cols-2 gap-3 mb-4 text-xs">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 text-xs">
             <div class="rounded-lg border border-gray-200 bg-white p-3"><span class="text-gray-500 block">Zielbetrag</span><span class="text-lg font-black text-gray-800">${master.totalAmount.toFixed(2)} €</span></div>
             <div class="rounded-lg border border-gray-200 bg-white p-3"><span class="text-gray-500 block">Bereits bezahlt</span><span class="text-lg font-black text-green-700">${master.totalPaid.toFixed(2)} €</span></div>
             <div class="rounded-lg border border-gray-200 bg-white p-3"><span class="text-gray-500 block">Positionen + Reserve</span><span class="text-lg font-black text-indigo-700">${master.positionTotal.toFixed(2)} € + ${master.reserveAmount.toFixed(2)} €</span></div>
@@ -1182,7 +1182,7 @@ function renderSplitGroupEditPositions() {
     }
 
     container.innerHTML = splitGroupEditState.positions.map((position, index) => `
-        <div class="grid grid-cols-[1fr_110px_auto] gap-2 items-center" data-position-index="${index}">
+        <div class="grid grid-cols-1 sm:grid-cols-[1fr_110px_auto] gap-2 items-center" data-position-index="${index}">
             <input type="text" class="split-group-pos-name w-full p-2 border border-gray-300 rounded text-sm" value="${escapeHtmlInline(position.name || '')}" placeholder="Bezeichnung">
             <input type="number" class="split-group-pos-price w-full p-2 border border-gray-300 rounded text-sm text-right font-mono" value="${normalizeMoney(position.price).toFixed(2)}" step="0.01" placeholder="0.00">
             <button type="button" class="split-group-pos-remove px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-bold hover:bg-red-200">✕</button>
@@ -3268,13 +3268,23 @@ async function renderOnlinePaymentLinks() {
 
     try {
         const links = (await ensureOnlinePaymentLinksCacheLoaded(true)).filter((link) => String(link.status || 'open').toLowerCase() !== 'closed');
+        const expiredOverpaymentLinks = links.filter((link) => {
+            const state = getOnlineOverpaymentDecisionState(link?.pendingOverpayment || {});
+            return state.status === 'pending' && state.isExpired && state.amount > 0.001;
+        });
+        const expiredOverpaymentAmount = normalizeMoney(
+            expiredOverpaymentLinks.reduce((sum, link) => sum + normalizeMoney(link?.pendingOverpayment?.amount), 0)
+        );
+        const expiredOverpaymentBanner = expiredOverpaymentLinks.length
+            ? `<div class="mb-3 rounded-lg border border-rose-300 bg-rose-50 p-3 text-[12px] text-rose-900"><span class="font-bold">Hinweis:</span> Für ${expiredOverpaymentLinks.length} Zahlungslink(s) ist die 24h-Frist der Überzahlungsentscheidung abgelaufen (gesamt ${expiredOverpaymentAmount.toFixed(2)} €). Bitte entscheide jetzt unten pro Link als <span class="font-bold">Trinkgeld</span> oder <span class="font-bold">Guthaben</span>.</div>`
+            : '';
 
         if (!links.length) {
             container.innerHTML = `${syncHint}<p class="text-center text-gray-400 italic py-4">Noch keine Online-Zahlungslinks erzeugt.</p>`;
             return;
         }
 
-        container.innerHTML = `${syncHint}${links.map((link) => {
+        container.innerHTML = `${syncHint}${expiredOverpaymentBanner}${links.map((link) => {
             const status = String(link.status || 'open').toLowerCase();
             const expected = normalizeMoney(link.expectedAmount);
             const paid = normalizeMoney(link.paidAmount);
@@ -3298,24 +3308,24 @@ async function renderOnlinePaymentLinks() {
                 : (overpaymentState.isResolved
                     ? `<div class="mt-2 rounded border border-emerald-200 bg-emerald-50 p-2 text-[11px] text-emerald-800">Überzahlung entschieden: <span class="font-bold">${overpaymentState.amount.toFixed(2)} €</span> • ${getOnlineOverpaymentResolutionLabel(overpaymentState.resolution)}</div>`
                     : (overpaymentState.status === 'pending' && overpaymentState.isExpired
-                        ? `<div class="mt-2 rounded border border-gray-200 bg-gray-50 p-2 text-[11px] text-gray-700">Überzahlung ${overpaymentState.amount.toFixed(2)} € • 18h-Frist abgelaufen</div>`
+                        ? `<div class="mt-2 rounded border border-gray-200 bg-gray-50 p-2 text-[11px] text-gray-700">Überzahlung ${overpaymentState.amount.toFixed(2)} € • 24h-Frist abgelaufen</div>`
                         : ''));
             const ownerDecisionLine = overpaymentState.status === 'pending' && overpaymentState.isExpired
                 ? `<div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2"><button type="button" data-owner-overpayment-tip="${link.id}" class="rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-white hover:bg-amber-600">Überzahlung als Trinkgeld</button><button type="button" data-owner-overpayment-credit="${link.id}" class="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-50">Überzahlung als Guthaben</button></div>`
                 : '';
             return `
-                <div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+                <div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm overflow-hidden">
                     <div class="flex flex-wrap items-center justify-between gap-2">
                         <div class="min-w-0">
-                            <div class="text-sm font-bold text-gray-800 truncate">${link.title || 'Online-Zahlung'}</div>
-                            <div class="text-[11px] text-gray-500 truncate">${referenceLine} • Gast: ${link.guestName || link.guestId || 'Gast'}</div>
-                            <div class="text-[11px] text-gray-400 truncate">Typ: ${link.linkType === 'single' ? 'Einzel-Eintrag' : 'Adressbuch-Link'}${targetPreview ? ` • IDs: ${targetPreview}` : ''}</div>
-                            <div class="text-[11px] text-gray-400">Erstellt: ${createdAt} • Aufrufe: ${Number(link.tokenViews || 0)} • Zielbank: ${bankLabel}</div>
-                            <div class="text-[11px] text-gray-400">Webhook: ${syncLabel} • Wise-Matches: ${wiseMatchCount} • Letzter Eingang: ${lastMatchText}</div>
+                            <div class="text-sm font-bold text-gray-800 break-words">${link.title || 'Online-Zahlung'}</div>
+                            <div class="text-[11px] text-gray-500 break-all">${referenceLine} • Gast: ${link.guestName || link.guestId || 'Gast'}</div>
+                            <div class="text-[11px] text-gray-400 break-words">Typ: ${link.linkType === 'single' ? 'Einzel-Eintrag' : 'Adressbuch-Link'}${targetPreview ? ` • IDs: ${targetPreview}` : ''}</div>
+                            <div class="text-[11px] text-gray-400 break-words">Erstellt: ${createdAt} • Aufrufe: ${Number(link.tokenViews || 0)} • Zielbank: ${bankLabel}</div>
+                            <div class="text-[11px] text-gray-400 break-words">Webhook: ${syncLabel} • Wise-Matches: ${wiseMatchCount} • Letzter Eingang: ${lastMatchText}</div>
                         </div>
-                        <span class="inline-flex items-center px-2 py-1 rounded border text-[11px] font-bold ${getOnlineLinkStatusBadgeClass(status)}">${getOnlineLinkStatusLabel(status)}</span>
+                        <span class="inline-flex items-center self-start sm:self-auto px-2 py-1 rounded border text-[11px] font-bold ${getOnlineLinkStatusBadgeClass(status)}">${getOnlineLinkStatusLabel(status)}</span>
                     </div>
-                    <div class="mt-2 grid grid-cols-3 gap-2 text-[11px]">
+                    <div class="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
                         <div class="rounded bg-gray-50 p-1.5 border border-gray-200"><span class="text-gray-500 block">Soll</span><span class="font-bold text-gray-800">${expected.toFixed(2)} €</span></div>
                         <div class="rounded bg-gray-50 p-1.5 border border-gray-200"><span class="text-gray-500 block">Eingang</span><span class="font-bold text-emerald-700">${paid.toFixed(2)} €</span></div>
                         <div class="rounded bg-gray-50 p-1.5 border border-gray-200"><span class="text-gray-500 block">Offen</span><span class="font-bold text-orange-700">${remaining.toFixed(2)} €</span></div>
@@ -5126,7 +5136,7 @@ function toggleSplitMode(isActive) {
                 <option value="manual">Komplett manuell</option>
             </select>
 
-            <div class="mt-2 grid grid-cols-[1fr_120px] gap-2 items-center">
+            <div class="mt-2 grid grid-cols-1 sm:grid-cols-[1fr_120px] gap-2 items-center">
                 <label class="text-[11px] font-bold text-indigo-700">Reserve / Zusatzkosten (€)</label>
                 <input type="number" id="split-reserve-amount" class="w-full p-1 text-xs border rounded text-right font-mono bg-gray-100" value="0.00" min="0" step="0.01" disabled>
             </div>
@@ -7666,9 +7676,9 @@ function renderPaymentList(payments) {
     });
 
     if (isListView) {
-        container.className = "flex flex-col bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm pb-20";
+        container.className = "flex flex-col bg-white border border-gray-200 rounded-lg overflow-x-auto shadow-sm pb-20";
         container.innerHTML = `
-            <div class="grid grid-cols-[1.5fr_40px_55px_70px_45px] sm:grid-cols-[70px_2fr_1fr_1fr_1fr_85px_110px] gap-1 p-2 bg-gray-100 border-b border-gray-300 text-[10px] font-bold text-gray-500 uppercase tracking-wider sticky top-0 z-10">
+            <div class="min-w-[560px] grid grid-cols-[1.5fr_40px_55px_70px_45px] sm:grid-cols-[70px_2fr_1fr_1fr_1fr_85px_110px] gap-1 p-2 bg-gray-100 border-b border-gray-300 text-[10px] font-bold text-gray-500 uppercase tracking-wider sticky top-0 z-10">
                 <div class="hidden sm:block">Datum</div>
                 <div>Betreff</div>
                 <div>Kat.</div>
@@ -10758,7 +10768,7 @@ export async function initializeGuestView(guestId, options = {}) {
             const overpaymentHtml = overpaymentState.isPending
                 ? `<div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900 space-y-2">
                         <div class="font-bold text-sm">Überzahlung erkannt: ${overpaymentState.amount.toFixed(2)} €</div>
-                        <div>Deine Überweisung war höher als der offene Betrag. Bitte entscheide innerhalb von <span class="font-bold">18 Stunden</span>, was mit dem Rest passieren soll.</div>
+                        <div>Deine Überweisung war höher als der offene Betrag. Bitte entscheide innerhalb von <span class="font-bold">24 Stunden</span>, was mit dem Rest passieren soll.</div>
                         <div class="font-semibold">Frist bis: ${overpaymentState.expiresAt ? overpaymentState.expiresAt.toLocaleString('de-DE') : '—'}</div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             <button id="guest-overpayment-tip-btn" type="button" class="py-2 px-3 rounded-lg bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition">Als Trinkgeld</button>
@@ -10768,8 +10778,13 @@ export async function initializeGuestView(guestId, options = {}) {
                 : (overpaymentState.isResolved
                     ? `<div class="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-[11px] text-emerald-900">Überzahlung <span class="font-bold">${overpaymentState.amount.toFixed(2)} €</span> wurde bereits entschieden: <span class="font-bold">${getOnlineOverpaymentResolutionLabel(overpaymentState.resolution)}</span>.</div>`
                     : (overpaymentState.status === 'expired'
-                        ? `<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-[11px] text-gray-700">Die 18-Stunden-Frist für die Überzahlungsentscheidung ist abgelaufen.</div>`
-                        : ''));
+                        ? `<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-[11px] text-gray-700">Die 24-Stunden-Frist für die Überzahlungsentscheidung ist abgelaufen.</div>`
+                        : (overpaymentState.status === 'owner-warning'
+                            ? `<div class="rounded-lg border border-red-200 bg-red-50 p-3 text-[11px] text-red-900 space-y-2">
+                                <div class="font-bold text-sm">Achtung: Überzahlung abgelaufen!</div>
+                                <div>Bitte kontaktiere den Empfänger, um die Überzahlung zu klären.</div>
+                            </div>`
+                            : '')));
             const buildSepaPaymentData = (instruction) => ({
                 iban: bankInfo.iban || '',
                 bic: bankInfo.bic || '',
@@ -10789,9 +10804,9 @@ export async function initializeGuestView(guestId, options = {}) {
                 && selectedInstruction.referenceCode
             );
             const buildCopyRow = (label, value, copyValue = '') => `
-                <div class="flex items-start gap-2 rounded-lg border border-emerald-100 bg-white px-3 py-2 text-[11px] text-gray-700">
-                    <span class="w-28 shrink-0 font-bold text-gray-800">${label}:</span>
-                    <button type="button" data-guest-manual-copy="${encodeURIComponent(String(copyValue || ''))}" class="h-6 w-6 shrink-0 rounded border border-emerald-200 bg-emerald-50 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100" aria-label="${label} kopieren">📋</button>
+                <div class="flex flex-col gap-1.5 rounded-lg border border-emerald-100 bg-white px-3 py-2 text-[11px] text-gray-700 sm:flex-row sm:items-start sm:gap-2">
+                    <span class="w-full shrink-0 font-bold text-gray-800 sm:w-24 md:w-28">${label}:</span>
+                    <button type="button" data-guest-manual-copy="${encodeURIComponent(String(copyValue || ''))}" class="h-6 w-6 self-start shrink-0 rounded border border-emerald-200 bg-emerald-50 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100" aria-label="${label} kopieren">📋</button>
                     <span class="min-w-0 flex-1 break-all">${value || '—'}</span>
                 </div>
             `;
@@ -10804,17 +10819,17 @@ export async function initializeGuestView(guestId, options = {}) {
                 ` : ''}
                 <div id="guest-payment-workspace" class="${shouldShowPaymentWorkspace ? '' : 'hidden '}space-y-3">
                     <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-3">
-                        <div class="flex items-start justify-between gap-2">
+                        <div class="flex flex-wrap items-start justify-between gap-2">
                             <div class="flex items-start gap-2 min-w-0">
                                 <button id="guest-close-online-payment-btn" type="button" class="shrink-0 rounded-md border border-emerald-200 bg-white px-2 py-1 text-sm font-black text-emerald-700 hover:bg-emerald-50" aria-label="Online-Zahlung schließen">←</button>
-                                <div>
+                                <div class="min-w-0">
                                 <div class="text-sm font-bold text-emerald-900">Online-Zahlung aktiv</div>
-                                <div class="text-[11px] text-emerald-800">Status: <span class="font-bold">${statusText}</span></div>
+                                <div class="text-[11px] text-emerald-800 break-words">Status: <span class="font-bold">${statusText}</span></div>
                                 </div>
                             </div>
-                            <span class="inline-flex items-center px-2 py-1 rounded border text-[10px] font-bold ${getOnlineLinkStatusBadgeClass(paymentLinkData.status || 'open')}">${statusText}</span>
+                            <span class="inline-flex items-center self-start px-2 py-1 rounded border text-[10px] font-bold ${getOnlineLinkStatusBadgeClass(paymentLinkData.status || 'open')}">${statusText}</span>
                         </div>
-                        <div class="grid grid-cols-3 gap-2 text-[11px]">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
                             <div class="rounded bg-white/70 p-2 border border-emerald-100"><span class="text-emerald-800 block">Soll</span><span class="font-bold text-gray-800">${expectedAmount.toFixed(2)} €</span></div>
                             <div class="rounded bg-white/70 p-2 border border-emerald-100"><span class="text-emerald-800 block">Erfasst</span><span class="font-bold text-emerald-700">${paidAmount.toFixed(2)} €</span></div>
                             <div class="rounded bg-white/70 p-2 border border-emerald-100"><span class="text-emerald-800 block">Offen</span><span class="font-bold text-orange-700">${remainingAmount.toFixed(2)} €</span></div>
@@ -10845,14 +10860,14 @@ export async function initializeGuestView(guestId, options = {}) {
                             <div id="guest-online-link-panel" class="space-y-3">
                                 <div>
                                     <div class="mb-2 text-[11px] font-bold text-gray-700">Schritt 1: Bank auswählen (EU-Raum, Österreich zuerst)</div>
-                                    <div id="guest-online-bank-list" class="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto pr-1">
-                                        ${popularBanks.map((bank, index) => `<button type="button" class="guest-online-bank-btn px-2 py-1 rounded border text-[10px] font-bold ${index === 0 ? 'border-cyan-400 bg-cyan-600 text-white' : 'border-cyan-200 bg-white text-cyan-700'}" data-bank-id="${escapeHtmlInline(bank.id || '')}">${escapeHtmlInline(formatGuestBankOptionLabel(bank))}</button>`).join('')}
+                                    <div id="guest-online-bank-list" class="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto overflow-x-hidden pr-1">
+                                        ${popularBanks.map((bank, index) => `<button type="button" class="guest-online-bank-btn max-w-full break-words whitespace-normal px-2 py-1 rounded border text-left text-[10px] font-bold ${index === 0 ? 'border-cyan-400 bg-cyan-600 text-white' : 'border-cyan-200 bg-white text-cyan-700'}" data-bank-id="${escapeHtmlInline(bank.id || '')}">${escapeHtmlInline(formatGuestBankOptionLabel(bank))}</button>`).join('')}
                                     </div>
                                 </div>
                                 <div class="rounded-lg border border-cyan-100 bg-cyan-50 p-2">
                                     <div class="text-[10px] uppercase tracking-wide text-cyan-700 font-bold">Aktuelle Auswahl</div>
-                                    <div id="guest-online-selected-bank" class="text-sm font-bold text-cyan-900 mt-1">${escapeHtmlInline(formatGuestBankOptionLabel(popularBanks[0] || { name: 'Banking-App' }))}</div>
-                                    <div id="guest-online-selected-instruction" class="text-[11px] text-gray-600 mt-1">${selectedInstruction ? `${selectedInstruction.title} • ${selectedInstruction.amount.toFixed(2)} €` : 'Keine Gesamtzahlung verfügbar'}</div>
+                                    <div id="guest-online-selected-bank" class="text-sm font-bold text-cyan-900 mt-1 break-words">${escapeHtmlInline(formatGuestBankOptionLabel(popularBanks[0] || { name: 'Banking-App' }))}</div>
+                                    <div id="guest-online-selected-instruction" class="text-[11px] text-gray-600 mt-1 break-words">${selectedInstruction ? `${selectedInstruction.title} • ${selectedInstruction.amount.toFixed(2)} €` : 'Keine Gesamtzahlung verfügbar'}</div>
                                 </div>
                                 <button id="guest-online-open-bank-btn" type="button" class="w-full rounded-lg bg-cyan-600 px-3 py-2 text-xs font-bold text-white hover:bg-cyan-700 ${canStartOnlinePayment ? '' : 'opacity-50 cursor-not-allowed'}" ${canStartOnlinePayment ? '' : 'disabled'}>Schritt 2: Zur Bank-App mit vorausgefüllten Daten</button>
                                 <div class="rounded-lg border border-cyan-100 bg-white px-3 py-2 text-[10px] text-gray-600">Die SEPA-Daten werden zusätzlich in die Zwischenablage kopiert. Falls deine Bank den Direktlink nicht unterstützt, öffnet sich die Bank-Website als Fallback.</div>
@@ -14160,7 +14175,7 @@ function createSingleListRowHtml(p, today, isGroupItem = false) {
 
     return `
     ${blinkStyle}
-    <div class="payment-card-item grid grid-cols-[1.5fr_40px_55px_70px_45px] sm:grid-cols-[70px_2fr_1fr_1fr_1fr_85px_110px] gap-1 items-center border-b border-gray-200 py-1.5 ${paddingLeft} ${rowBgClass} cursor-pointer transition text-xs hover:brightness-95" data-id="${p.id}">
+    <div class="payment-card-item min-w-[560px] grid grid-cols-[1.5fr_40px_55px_70px_45px] sm:grid-cols-[70px_2fr_1fr_1fr_1fr_85px_110px] gap-1 items-center border-b border-gray-200 py-1.5 ${paddingLeft} ${rowBgClass} cursor-pointer transition text-xs hover:brightness-95" data-id="${p.id}">
         
         <div class="hidden sm:flex items-center overflow-hidden">
             ${checkboxHtml}

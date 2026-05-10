@@ -1,14 +1,34 @@
 {
-  "version": "1.22.29",
-  "buildId": "20260510-8",
+  "version": "1.22.31",
+  "buildId": "20260510-10",
   "releaseDate": "2026-05-10",
-  "releaseTime": "19:55",
+  "releaseTime": "21:53",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Split-Gruppen erweitert: Personen-Historie protokolliert Reduktionen und A/B-Ausgleich inkl. klickbarer Links, Transaktionsstorno wird bei bereits erfolgtem A/B-Ausgleich sicher blockiert (mit Sondereintrag), Schuldner-Übersicht zeigt Summenzeile und Gruppenmaster-ID nutzt #ABCD-Format.",
-  "commitId": "pending",
+  "note": "Zahlungsverwaltung wurde mobil robuster gemacht: Online-Link- und Guest-Zahlungsboxen umbrechen lange Inhalte sauber, responsive Grids verhindern Überlauf und List-View bleibt auf kleinen Screens innerhalb der Box scrollbar statt überstehend.",
+  "commitId": "213c463",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.31",
+      "buildId": "20260510-10",
+      "releaseDate": "2026-05-10",
+      "releaseTime": "21:53",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Zahlungsverwaltung wurde mobil robuster gemacht: Online-Link- und Guest-Zahlungsboxen umbrechen lange Inhalte sauber, responsive Grids verhindern Überlauf und List-View bleibt auf kleinen Screens innerhalb der Box scrollbar statt überstehend.",
+      "commitId": "213c463",
+      "obligation": "false"
+    },
+    {
+      "version": "1.22.30",
+      "buildId": "20260510-9",
+      "releaseDate": "2026-05-10",
+      "releaseTime": "21:43",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Online-Zahlungslinks nutzen jetzt strikt kollisionsfreie TOP2-Referenzcodes pro Link, verhindern aktive Link-Überschneidungen pro Eintrag, stellen Überzahlungsfristen auf 24 Stunden um und zeigen abgelaufene Owner-Entscheidungen als Warnbalken.",
+      "commitId": "213c463",
+      "obligation": "false"
+    },
     {
       "version": "1.22.29",
       "buildId": "20260510-8",
