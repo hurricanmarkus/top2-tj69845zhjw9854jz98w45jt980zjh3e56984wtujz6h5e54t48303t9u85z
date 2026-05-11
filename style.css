@@ -632,7 +632,7 @@ body.guest-link-mode #guestView {
     border: 1px solid #e5e7eb;
     background: #f8fafc;
     border-radius: 0.85rem;
-    padding: 0.6rem 0.7rem;
+    padding: 0.4rem 0.55rem;
 }
 
 .guest-payment-history-entry--latest {
@@ -649,19 +649,48 @@ body.guest-link-mode #guestView {
     animation: guestHistoryLatestPulse 1.2s ease-in-out infinite;
 }
 
-.guest-payment-history-entry-top {
+.guest-payment-history-entry-toggle {
+    width: 100%;
     display: flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
-    gap: 0.5rem;
-    margin-bottom: 0.35rem;
+    gap: 0.55rem;
+    border: none;
+    background: transparent;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+}
+
+.guest-payment-history-entry-toggle-right {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.guest-payment-history-entry-date {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #374151;
+    white-space: nowrap;
+}
+
+.guest-payment-history-entry-chevron {
+    font-size: 0.72rem;
+    color: #6b7280;
+    transition: transform 0.16s ease;
+}
+
+.guest-payment-history-entry-toggle[aria-expanded='true'] .guest-payment-history-entry-chevron {
+    transform: rotate(180deg);
 }
 
 .guest-payment-history-entry-amount {
     font-weight: 900;
     color: #065f46;
-    font-size: 1rem;
+    font-size: 0.94rem;
     line-height: 1.1;
+    white-space: nowrap;
 }
 
 .guest-payment-history-entry--cancellation .guest-payment-history-entry-amount,
@@ -670,7 +699,7 @@ body.guest-link-mode #guestView {
 }
 
 .guest-payment-history-entry--latest .guest-payment-history-entry-amount {
-    font-size: 1.12rem;
+    font-size: 1.02rem;
 }
 
 .guest-payment-history-entry-currency {
@@ -687,6 +716,13 @@ body.guest-link-mode #guestView {
     gap: 0.2rem;
     font-size: 0.72rem;
     color: #374151;
+    margin-top: 0.45rem;
+    padding-top: 0.4rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+.guest-payment-history-entry--cancellation .guest-payment-history-entry-meta {
+    border-top-color: #fecaca;
 }
 
 .guest-payment-history-overpayment {

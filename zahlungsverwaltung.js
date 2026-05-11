@@ -518,6 +518,7 @@ function resolveGuestPaymentHistoryEntryDate(entry = {}) {
 }
 
 function normalizeGuestPaymentHistoryEntries(entries = []) {
+    const seenKeys = new Set();
     return (Array.isArray(entries) ? entries : [])
         .map((entry, index) => {
             const amount = normalizeMoney(entry?.amount);
@@ -532,8 +533,10 @@ function normalizeGuestPaymentHistoryEntries(entries = []) {
                 id: String(entry?.id || `history-${index}`),
                 amount,
                 currency: String(entry?.currency || 'EUR').trim().toUpperCase() || 'EUR',
+                source: String(entry?.source || '').trim().toLowerCase(),
                 bookedAt: entry?.bookedAt || '',
                 createdAt: entry?.createdAt || '',
+                transferId: String(entry?.transferId || '').trim(),
                 dateValue,
                 dateMs,
                 isCancellation: entry?.isCancellation === true || amount < 0,
@@ -544,7 +547,34 @@ function normalizeGuestPaymentHistoryEntries(entries = []) {
                 reference: String(entry?.reference || '').trim(),
             };
         })
-        .filter((entry) => Math.abs(entry.amount) > 0.001)
+        .filter((entry) => {
+            if (!(Math.abs(entry.amount) > 0.001)) return false;
+
+            let dedupeKey = '';
+            if (entry.source === 'wise') {
+                const transferToken = String(entry.transferId || '').trim().toLowerCase();
+                if (transferToken) {
+                    dedupeKey = `wise-transfer|${transferToken}|${entry.amount.toFixed(2)}`;
+                } else {
+                    const referenceToken = String(entry.referenceCode || entry.reference || '').trim().toUpperCase();
+                    const ibanToken = String(entry.payerIbanLast4 || '').trim().toUpperCase();
+                    const timeBucket = entry.dateMs ? Math.floor(entry.dateMs / 15000) : 0;
+                    dedupeKey = `wise-fallback|${referenceToken}|${entry.amount.toFixed(2)}|${ibanToken}|${timeBucket}`;
+                }
+            } else {
+                dedupeKey = [
+                    String(entry.id || '').trim().toLowerCase(),
+                    String(entry.source || '').trim().toLowerCase(),
+                    String(entry.bookedAt || '').trim(),
+                    String(entry.referenceCode || entry.reference || '').trim().toUpperCase(),
+                    entry.amount.toFixed(2),
+                ].join('|');
+            }
+
+            if (seenKeys.has(dedupeKey)) return false;
+            seenKeys.add(dedupeKey);
+            return true;
+        })
         .sort((left, right) => {
             if (left.dateMs !== right.dateMs) return right.dateMs - left.dateMs;
             return String(right.id).localeCompare(String(left.id));
@@ -10908,6 +10938,7 @@ export async function initializeGuestView(guestId, options = {}) {
                         const isNewest = index === 0;
                         const shouldBlinkNewest = isNewest && isGuestPaymentHistoryHighlightActive(entry.dateValue);
                         const isCancellation = entry.isCancellation === true || entry.amount < 0;
+                        const rowIndex = index;
                         const entryClassName = [
                             'guest-payment-history-entry',
                             isCancellation ? 'guest-payment-history-entry--cancellation' : '',
@@ -10924,11 +10955,14 @@ export async function initializeGuestView(guestId, options = {}) {
                         const purposeLabelText = isCancellation ? 'Storno-Hinweis:' : 'Verwendungszweck:';
                         return `
                             <div class="${entryClassName}">
-                                <div class="guest-payment-history-entry-top">
+                                <button type="button" class="guest-payment-history-entry-toggle" data-history-toggle-index="${rowIndex}" aria-expanded="false">
                                     <span class="guest-payment-history-entry-amount">${amountDisplay}</span>
-                                    <span class="guest-payment-history-entry-currency">${escapeHtmlInline(entry.currency)}</span>
-                                </div>
-                                <div class="guest-payment-history-entry-meta">
+                                    <span class="guest-payment-history-entry-toggle-right">
+                                        <span class="guest-payment-history-entry-date">${escapeHtmlInline(dateLabel)}</span>
+                                        <span class="guest-payment-history-entry-chevron" aria-hidden="true">▾</span>
+                                    </span>
+                                </button>
+                                <div class="guest-payment-history-entry-meta hidden" data-history-panel-index="${rowIndex}">
                                     <div><span class="font-semibold text-gray-700">${payerLabelText}</span> ${escapeHtmlInline(payerLabel)}</div>
                                     <div><span class="font-semibold text-gray-700">Datum/Uhrzeit:</span> ${escapeHtmlInline(dateLabel)}</div>
                                     <div><span class="font-semibold text-gray-700">${purposeLabelText}</span> ${escapeHtmlInline(purposeLabel)}</div>
@@ -10968,6 +11002,22 @@ export async function initializeGuestView(guestId, options = {}) {
                         <div class="guest-payment-history-list">${historyRowsHtml}</div>
                     </div>
                 `;
+
+                const historyToggleButtons = paymentHistoryBox.querySelectorAll('[data-history-toggle-index]');
+                historyToggleButtons.forEach((button) => {
+                    button.addEventListener('click', () => {
+                        const rowIndex = String(button.getAttribute('data-history-toggle-index') || '').trim();
+                        if (!rowIndex) return;
+
+                        const panel = paymentHistoryBox.querySelector(`[data-history-panel-index="${rowIndex}"]`);
+                        if (!panel) return;
+
+                        const isExpanded = button.getAttribute('aria-expanded') === 'true';
+                        button.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
+                        panel.classList.toggle('hidden', isExpanded);
+                    });
+                });
+
                 paymentHistoryBox.classList.remove('hidden');
             }
         }

@@ -1,14 +1,24 @@
 {
-  "version": "1.22.35",
-  "buildId": "20260511-4",
+  "version": "1.22.36",
+  "buildId": "20260511-5",
   "releaseDate": "2026-05-11",
-  "releaseTime": "10:24",
+  "releaseTime": "11:48",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Stornos aktualisieren Zahlungslink/Gastlink jetzt sofort inkl. Live-Status (Offen/Teilzahlung), lange Gastaktionen sperren die UI mit Lade-Overlay, und der Zahlungsverlauf nutzt einen Fallback aus payment-wiseMatches damit eingegangene Überweisungen zuverlässig gelistet werden.",
-  "commitId": "02adada",
+  "note": "Wise-Zahlungsverlauf extrahiert IBAN-Ende robuster aus Webhook/Transferdaten, Doppelbuchungen durch unterschiedliche Wise-Eventtypen werden über stabilen Transfer-Key verhindert, und Verlaufseinträge sind als kompakte Leisten mit Aufklapp-Details (Betrag links, Datum/Uhrzeit rechts) umgesetzt.",
+  "commitId": "a4e28f2",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.36",
+      "buildId": "20260511-5",
+      "releaseDate": "2026-05-11",
+      "releaseTime": "11:48",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Wise-Zahlungsverlauf extrahiert IBAN-Ende robuster aus Webhook/Transferdaten, Doppelbuchungen durch unterschiedliche Wise-Eventtypen werden über stabilen Transfer-Key verhindert, und Verlaufseinträge sind als kompakte Leisten mit Aufklapp-Details (Betrag links, Datum/Uhrzeit rechts) umgesetzt.",
+      "commitId": "a4e28f2",
+      "obligation": "false"
+    },
     {
       "version": "1.22.35",
       "buildId": "20260511-4",
