@@ -66,6 +66,9 @@ let guestViewLiveRefreshInFlight = false;
 let guestViewLastSignature = '';
 let paymentActionUiLockActive = false;
 let guestViewTrackedAccessKeys = new Set();
+let showGuestClosedPosts = false;
+let guestHistoryBoxExpanded = true;
+let guestResolvedOverpaymentExpanded = false;
 const GUEST_LINK_TRACKING_SESSION_KEY = 'zv_guest_link_tracking_v1';
 const GUEST_LINK_TRACKING_SESSION_IDS_KEY = 'zv_guest_link_tracking_session_ids_v1';
 const GUEST_LINK_TRACKING_PENDING_MS = 30000;
@@ -517,18 +520,89 @@ function resolveGuestPaymentHistoryEntryDate(entry = {}) {
     return parseDateSafe(entry?.bookedAt) || parseDateSafe(entry?.createdAt);
 }
 
+function normalizeWiseHistoryReferenceToken(value = '') {
+    const raw = String(value || '').trim().toUpperCase();
+    if (!raw) return '';
+    const match = raw.match(/TOP2(?:-ID)?-[A-Z0-9]+(?:-[A-Z0-9]+){2,}/);
+    if (!match) return raw;
+    return String(match[0] || '').replace(/^TOP2-ID-/, 'TOP2-');
+}
+
+function resolveGuestPaymentEntryIds(payment = {}, paymentLinkData = null) {
+    const ids = new Set();
+    const addId = (value) => {
+        const token = String(value || '').trim();
+        if (!token || token.startsWith('additional-post-')) return;
+        ids.add(token);
+    };
+
+    addId(payment?.id);
+    addId(payment?.paymentId);
+    addId(payment?.sourcePaymentId);
+    addId(payment?.originPaymentId);
+    addId(payment?.onlineOverpaymentOriginPaymentId);
+    addId(payment?.splitOverpaidOriginPaymentId);
+
+    const listCandidates = [
+        payment?.paymentIds,
+        payment?.sourcePaymentIds,
+        payment?.linkedPaymentIds,
+        payment?.relatedPaymentIds,
+        payment?.targetPaymentIds,
+    ];
+    listCandidates.forEach((entry) => {
+        if (!Array.isArray(entry)) return;
+        entry.forEach((id) => addId(id));
+    });
+
+    if (!ids.size && payment?.isAdditionalPost === true && Array.isArray(paymentLinkData?.paymentIds)) {
+        paymentLinkData.paymentIds.forEach((id) => addId(id));
+    }
+
+    return Array.from(ids);
+}
+
+function buildGuestPaymentEntryIdBadgesHtml(entryIds = []) {
+    const ids = (Array.isArray(entryIds) ? entryIds : []).filter(Boolean);
+    if (!ids.length) return '';
+    return `
+        <div class="mb-1 flex flex-wrap gap-1">
+            ${ids.map((id) => `<span class="inline-flex items-center rounded bg-black px-1.5 py-0.5 text-[10px] font-black tracking-wide text-white">#${escapeHtmlInline(toShortEntryId(id))}</span>`).join('')}
+        </div>
+    `;
+}
+
+function getGuestClosedStatusLabel(payment = {}) {
+    const status = String(payment?.status || '').trim().toLowerCase();
+    if (status === 'paid' || status === 'settled') return '✅ Bezahlt';
+    if (status === 'expired') return 'Abgelaufen';
+    if (status === 'cancelled') return 'Storniert';
+    if (status === 'closed') return 'Geschlossen';
+    return 'Abgeschlossen';
+}
+
 function normalizeGuestPaymentHistoryEntries(entries = []) {
     const seenKeys = new Set();
+    const legacyWiseSeen = new Map();
     return (Array.isArray(entries) ? entries : [])
         .map((entry, index) => {
             const amount = normalizeMoney(entry?.amount);
             const dateValue = resolveGuestPaymentHistoryEntryDate(entry);
             const dateMs = dateValue ? dateValue.getTime() : 0;
-            const payerIbanLast4 = String(entry?.payerIbanLast4 || '')
+            const payerIbanLast4 = String(
+                entry?.payerIbanLast4
+                || entry?.senderIbanLast4
+                || entry?.ibanLast4
+                || entry?.senderIban
+                || entry?.payerIban
+                || entry?.iban
+                || ''
+            )
                 .replace(/[^a-zA-Z0-9]/g, '')
                 .toUpperCase()
                 .slice(-4);
             const purpose = String(entry?.purpose || entry?.referenceCode || entry?.reference || '').trim();
+            const referenceCode = normalizeWiseHistoryReferenceToken(String(entry?.referenceCode || entry?.reference || '').trim().toUpperCase());
             return {
                 id: String(entry?.id || `history-${index}`),
                 amount,
@@ -543,7 +617,7 @@ function normalizeGuestPaymentHistoryEntries(entries = []) {
                 payerName: String(entry?.payerName || '').trim(),
                 payerIbanLast4,
                 purpose,
-                referenceCode: String(entry?.referenceCode || '').trim().toUpperCase(),
+                referenceCode,
                 reference: String(entry?.reference || '').trim(),
             };
         })
@@ -556,7 +630,7 @@ function normalizeGuestPaymentHistoryEntries(entries = []) {
                 if (transferToken) {
                     dedupeKey = `wise-transfer|${transferToken}|${entry.amount.toFixed(2)}`;
                 } else {
-                    const referenceToken = String(entry.referenceCode || entry.reference || '').trim().toUpperCase();
+                    const referenceToken = normalizeWiseHistoryReferenceToken(entry.referenceCode || entry.reference);
                     const currencyToken = String(entry.currency || 'EUR').trim().toUpperCase() || 'EUR';
                     const timeBucket = entry.dateMs ? Math.floor(entry.dateMs / 60000) : 0;
                     dedupeKey = `wise-fallback|${referenceToken}|${currencyToken}|${entry.amount.toFixed(2)}|${timeBucket}`;
@@ -572,6 +646,19 @@ function normalizeGuestPaymentHistoryEntries(entries = []) {
             }
 
             if (seenKeys.has(dedupeKey)) return false;
+
+            if (entry.source === 'wise' && entry.dateMs > 0) {
+                const referenceToken = normalizeWiseHistoryReferenceToken(entry.referenceCode || entry.reference) || 'NOREF';
+                const currencyToken = String(entry.currency || 'EUR').trim().toUpperCase() || 'EUR';
+                const legacySignature = `wise-legacy|${referenceToken}|${currencyToken}|${entry.amount.toFixed(2)}`;
+                const seenTimestamps = legacyWiseSeen.get(legacySignature) || [];
+                const hasNearDuplicate = seenTimestamps.some((timestamp) => Math.abs(timestamp - entry.dateMs) <= (5 * 60 * 1000));
+                if (hasNearDuplicate) return false;
+                seenTimestamps.push(entry.dateMs);
+                if (seenTimestamps.length > 8) seenTimestamps.shift();
+                legacyWiseSeen.set(legacySignature, seenTimestamps);
+            }
+
             seenKeys.add(dedupeKey);
             return true;
         })
@@ -10617,6 +10704,8 @@ export async function initializeGuestView(guestId, options = {}) {
 
         // --- RENDERING ---
         const listContainer = document.getElementById('guest-payment-list');
+        const closedListContainer = document.getElementById('guest-closed-payment-list');
+        const closedPostsToggleBtn = document.getElementById('guest-toggle-closed-posts-btn');
         const onlineBox = document.getElementById('guest-online-payment-box');
         const positionAddBox = document.getElementById('guest-position-add-box');
         const addPositionModal = document.getElementById('guestAddPositionModal');
@@ -10626,6 +10715,15 @@ export async function initializeGuestView(guestId, options = {}) {
         document.getElementById('guest-overview-summary')?.classList.remove('hidden');
         document.getElementById('guest-open-posts-section')?.classList.remove('hidden');
         listContainer.innerHTML = '';
+        if (closedListContainer) {
+            closedListContainer.innerHTML = '';
+            closedListContainer.classList.add('hidden');
+        }
+        if (closedPostsToggleBtn) {
+            closedPostsToggleBtn.classList.add('hidden');
+            closedPostsToggleBtn.textContent = 'Geschlossene anzeigen';
+            closedPostsToggleBtn.onclick = null;
+        }
         if (onlineBox) {
             onlineBox.innerHTML = '';
             onlineBox.classList.add('hidden');
@@ -10680,15 +10778,28 @@ export async function initializeGuestView(guestId, options = {}) {
 
         // Arrays für Trennung
         const activeItems = [];
+        const closedItems = [];
         const futureItems = [];
 
         if (docsList.length > 0) {
             docsList.forEach(p => {
-                // Filter: Nur Offene (außer Einzel-Link, der zeigt auch erledigte)
                 const normalizedStatus = String(p.status || '').toLowerCase();
-                const isExpiredAdditionalPost = p.isAdditionalPost === true && normalizedStatus === 'expired';
-                const isSettledAdditionalPost = p.isAdditionalPost === true && (normalizedStatus === 'settled' || normalizedStatus === 'paid');
-                if (!isSinglePaymentMode && normalizedStatus !== 'open' && normalizedStatus !== 'pending_approval' && normalizedStatus !== 'partially_paid' && !isExpiredAdditionalPost && !isSettledAdditionalPost) return;
+                const isAdditionalPost = p.isAdditionalPost === true;
+                const isOpenStatus = normalizedStatus === 'open'
+                    || normalizedStatus === 'pending_approval'
+                    || normalizedStatus === 'partially_paid'
+                    || normalizedStatus === 'in_progress'
+                    || normalizedStatus === 'error';
+                const isClosedStatus = normalizedStatus === 'paid'
+                    || normalizedStatus === 'settled'
+                    || normalizedStatus === 'closed'
+                    || normalizedStatus === 'cancelled'
+                    || (isAdditionalPost && normalizedStatus === 'expired');
+                if (!isOpenStatus && !isClosedStatus) return;
+                if (isClosedStatus) {
+                    closedItems.push(p);
+                    return;
+                }
 
                 // Zeit-Check
                 let isFuture = false;
@@ -10706,7 +10817,6 @@ export async function initializeGuestView(guestId, options = {}) {
                 if (!isFuture) {
                     let amount = parseFloat(p.remainingAmount);
                     const safeAmount = Number.isFinite(amount) ? amount : 0;
-                    let isMyDebt = (p.isAdditionalPost === true) || (p.createdBy === p.creditorId); // Ersteller kriegt Geld -> Gast schuldet
                     // Logik Check:
                     // Wenn Ersteller = Creditor, dann schuldet Gast (Debtor) mir -> Gast hat Schuld (-)
                     // Wenn Ersteller = Debtor, dann schuldet Ersteller mir -> Gast hat Guthaben (+)
@@ -10759,37 +10869,21 @@ export async function initializeGuestView(guestId, options = {}) {
             // 1. RENDER AKTIVE ITEMS
             activeItems.forEach(p => {
                 const isUnknownAmount = p.isTBD === true;
-                const normalizedStatus = String(p.status || '').toLowerCase();
                 const isAdditionalPost = p.isAdditionalPost === true;
-                const isExpiredAdditionalPost = isAdditionalPost && normalizedStatus === 'expired';
-                const isSettledAdditionalPost = isAdditionalPost && (normalizedStatus === 'settled' || normalizedStatus === 'paid');
-                const requestedAmount = normalizeMoney(p.requestedAmount ?? p.amount);
-                const effectiveAmount = normalizeMoney(p.effectiveAmount ?? p.amount);
-                const appliedAmount = normalizeMoney(p.appliedAmount);
                 const amount = isUnknownAmount
                     ? null
-                    : (isAdditionalPost
-                        ? (isExpiredAdditionalPost
-                            ? (appliedAmount > 0.001 ? appliedAmount : requestedAmount)
-                            : (isSettledAdditionalPost
-                                ? Math.max(effectiveAmount, appliedAmount)
-                                : normalizeMoney(p.remainingAmount)))
-                        : parseFloat(p.remainingAmount));
+                    : (isAdditionalPost ? normalizeMoney(p.remainingAmount) : parseFloat(p.remainingAmount));
                 // Logik für Gast-Sicht:
                 // Wenn Ersteller (Admin) = Creditor, dann schulde ICH (Gast) das Geld. -> Rot
                 let isMyDebt = (p.isAdditionalPost === true) || (p.creditorId === p.createdBy);
                 const lifecycleMeta = isAdditionalPost ? getGuestAdditionalPostLifecycleMeta(p, now) : null;
                 const isRemovableAdditionalPost = isGuestRemovableAdditionalPostInView(p, now);
+                const entryIdBadgesHtml = buildGuestPaymentEntryIdBadgesHtml(resolveGuestPaymentEntryIds(p, paymentLinkData));
                 
                 const div = document.createElement('div');
-                div.className = (isExpiredAdditionalPost || isSettledAdditionalPost)
-                    ? "p-3 bg-gray-50 border border-gray-300 rounded shadow-sm flex justify-between items-center cursor-pointer transition mb-2 opacity-80"
-                    : "p-3 bg-white border rounded shadow-sm flex justify-between items-center cursor-pointer hover:bg-indigo-50 transition mb-2";
+                div.className = "p-3 bg-white border rounded shadow-sm flex justify-between items-center cursor-pointer hover:bg-indigo-50 transition mb-2";
                 
                 let textInfo = isMyDebt ? "Du schuldest" : "Du bekommst";
-                if(isSinglePaymentMode && p.status === 'paid') textInfo = "✅ Erledigt";
-                if (isSettledAdditionalPost) textInfo = "✅ Bezahlt";
-                if (isExpiredAdditionalPost) textInfo = appliedAmount > 0.001 ? "Abgelaufen (teilbezahlt)" : "Abgelaufen (nicht bezahlt)";
 
                 let amountHtml = '';
                 if (isUnknownAmount) {
@@ -10800,23 +10894,11 @@ export async function initializeGuestView(guestId, options = {}) {
                     `;
                 } else {
                     const safeAmount = Number.isFinite(amount) ? amount : 0;
-                    const isAdjustedAmount = isAdditionalPost
-                        && requestedAmount > (safeAmount + 0.001)
-                        && (isExpiredAdditionalPost || isSettledAdditionalPost);
-                    if (isAdjustedAmount) {
-                        amountHtml = `
-                            <div class="text-right">
-                                <span class="block text-[10px] font-mono text-gray-400 line-through">${requestedAmount.toFixed(2)} €</span>
-                                <span class="font-mono font-bold ${isExpiredAdditionalPost || isSettledAdditionalPost ? 'text-gray-600' : (isMyDebt ? 'text-red-600' : 'text-green-600')}">${safeAmount.toFixed(2)} €</span>
-                            </div>
-                        `;
-                    } else {
-                        amountHtml = `
-                            <span class="font-mono font-bold ${isExpiredAdditionalPost || isSettledAdditionalPost ? 'text-gray-500' : (isMyDebt ? 'text-red-600' : 'text-green-600')}">
-                                ${safeAmount.toFixed(2)} €
-                            </span>
-                        `;
-                    }
+                    amountHtml = `
+                        <span class="font-mono font-bold ${isMyDebt ? 'text-red-600' : 'text-green-600'}">
+                            ${safeAmount.toFixed(2)} €
+                        </span>
+                    `;
                 }
 
                 const lifecycleHtml = lifecycleMeta?.text
@@ -10829,6 +10911,7 @@ export async function initializeGuestView(guestId, options = {}) {
 
                 div.innerHTML = `
                     <div>
+                        ${entryIdBadgesHtml}
                         <p class="font-bold text-gray-800">${p.title}</p>
                         <p class="text-xs text-gray-500">${textInfo}</p>
                         ${lifecycleHtml}
@@ -10842,6 +10925,64 @@ export async function initializeGuestView(guestId, options = {}) {
                 };
                 listContainer.appendChild(div);
             });
+
+            const renderClosedItems = () => {
+                if (!closedListContainer) return;
+                closedListContainer.innerHTML = '';
+                if (!closedItems.length) {
+                    closedListContainer.classList.add('hidden');
+                    return;
+                }
+
+                const sortedClosedItems = [...closedItems].sort((left, right) => {
+                    const leftDate = parseDateSafe(left?.updatedAt)?.getTime() || parseDateSafe(left?.createdAt)?.getTime() || 0;
+                    const rightDate = parseDateSafe(right?.updatedAt)?.getTime() || parseDateSafe(right?.createdAt)?.getTime() || 0;
+                    return rightDate - leftDate;
+                });
+
+                sortedClosedItems.forEach((p) => {
+                    const isMyDebt = (p.isAdditionalPost === true) || (p.creditorId === p.createdBy);
+                    const statusLabel = getGuestClosedStatusLabel(p);
+                    const entryIdBadgesHtml = buildGuestPaymentEntryIdBadgesHtml(resolveGuestPaymentEntryIds(p, paymentLinkData));
+                    const displayAmount = normalizeMoney(p.amount ?? p.requestedAmount ?? p.effectiveAmount ?? p.remainingAmount);
+
+                    const div = document.createElement('div');
+                    div.className = 'p-3 bg-gray-50 border border-gray-300 rounded shadow-sm flex justify-between items-center cursor-pointer transition mb-2 opacity-80';
+                    div.innerHTML = `
+                        <div>
+                            ${entryIdBadgesHtml}
+                            <p class="font-bold text-gray-700">${escapeHtmlInline(String(p.title || 'Eintrag'))}</p>
+                            <p class="text-xs text-gray-500">${statusLabel} • ${isMyDebt ? 'Du schuldest' : 'Du bekommst'}</p>
+                        </div>
+                        <span class="font-mono font-bold text-gray-500">${displayAmount.toFixed(2)} €</span>
+                    `;
+                    div.onclick = () => openGuestDetailModal(p);
+                    closedListContainer.appendChild(div);
+                });
+
+                closedListContainer.classList.toggle('hidden', !showGuestClosedPosts);
+            };
+
+            if (closedPostsToggleBtn) {
+                if (closedItems.length) {
+                    closedPostsToggleBtn.classList.remove('hidden');
+                    closedPostsToggleBtn.textContent = showGuestClosedPosts ? 'Geschlossene ausblenden' : 'Geschlossene anzeigen';
+                    closedPostsToggleBtn.onclick = (event) => {
+                        event.preventDefault();
+                        showGuestClosedPosts = !showGuestClosedPosts;
+                        closedPostsToggleBtn.textContent = showGuestClosedPosts ? 'Geschlossene ausblenden' : 'Geschlossene anzeigen';
+                        if (closedListContainer) {
+                            closedListContainer.classList.toggle('hidden', !showGuestClosedPosts);
+                        }
+                    };
+                } else {
+                    showGuestClosedPosts = false;
+                    closedPostsToggleBtn.classList.add('hidden');
+                    closedPostsToggleBtn.textContent = 'Geschlossene anzeigen';
+                    closedPostsToggleBtn.onclick = null;
+                }
+            }
+            renderClosedItems();
 
             // 2. RENDER ZUKÜNFTIGE ITEMS (Separate Section)
             if (futureItems.length > 0) {
@@ -10938,6 +11079,10 @@ export async function initializeGuestView(guestId, options = {}) {
                 || paidAmountTotal > 0.001
                 || Boolean(overpaymentState?.isPending || overpaymentState?.isResolved || overpaymentState?.status === 'expired' || overpaymentState?.status === 'owner-warning');
 
+            if (!overpaymentState?.isResolved) {
+                guestResolvedOverpaymentExpanded = false;
+            }
+
             if (hasVisibleHistory) {
                 const historyRowsHtml = historyEntries.length
                     ? historyEntries.map((entry, index) => {
@@ -10992,7 +11137,18 @@ export async function initializeGuestView(guestId, options = {}) {
                             </div>
                         </div>`
                     : (overpaymentState?.isResolved
-                        ? `<div class="guest-payment-history-overpayment guest-payment-history-overpayment--resolved">Überzahlung <span class="font-bold">${overpaymentState.amount.toFixed(2)} €</span> wurde entschieden: <span class="font-bold">${getOnlineOverpaymentResolutionLabel(overpaymentState.resolution)}</span>.</div>`
+                        ? `<div class="guest-payment-history-overpayment guest-payment-history-overpayment--resolved guest-payment-history-overpayment--resolved-collapsible">
+                                <button type="button" class="guest-overpayment-resolved-toggle" data-overpayment-resolved-toggle aria-expanded="${guestResolvedOverpaymentExpanded ? 'true' : 'false'}">
+                                    <span class="guest-overpayment-resolved-summary">Überzahlung ${overpaymentState.amount.toFixed(2)} € • ${getOnlineOverpaymentResolutionLabel(overpaymentState.resolution)}</span>
+                                    <span class="guest-payment-history-entry-chevron guest-overpayment-resolved-chevron" aria-hidden="true">▾</span>
+                                </button>
+                                <div class="guest-overpayment-resolved-details ${guestResolvedOverpaymentExpanded ? '' : 'hidden'}" data-overpayment-resolved-panel>
+                                    <div class="guest-overpayment-title">Überzahlung</div>
+                                    <div class="guest-overpayment-amount">${overpaymentState.amount.toFixed(2)} €</div>
+                                    <div class="guest-overpayment-text">wurde entschieden:</div>
+                                    <div class="guest-overpayment-decision">${getOnlineOverpaymentResolutionLabel(overpaymentState.resolution)}</div>
+                                </div>
+                            </div>`
                         : (overpaymentState?.status === 'expired'
                             ? '<div class="guest-payment-history-overpayment">Die 24-Stunden-Frist für die Überzahlungsentscheidung ist abgelaufen.</div>'
                             : (overpaymentState?.status === 'owner-warning'
@@ -11002,13 +11158,36 @@ export async function initializeGuestView(guestId, options = {}) {
                 paymentHistoryBox.innerHTML = `
                     <div class="guest-payment-history-box">
                         <div class="guest-payment-history-header">
-                            <span class="guest-payment-history-title">Zahlungsverlauf</span>
+                            <button type="button" class="guest-payment-history-header-toggle" data-history-box-toggle aria-expanded="${guestHistoryBoxExpanded ? 'true' : 'false'}">
+                                <span class="guest-payment-history-title">Zahlungsverlauf</span>
+                                <span class="guest-payment-history-box-chevron" aria-hidden="true">▾</span>
+                            </button>
                             <span class="guest-payment-history-total">Bereits bezahlt: ${paidAmountTotal.toFixed(2)} €</span>
                         </div>
-                        ${overpaymentHistoryHtml}
-                        <div class="guest-payment-history-list">${historyRowsHtml}</div>
+                        <div class="${guestHistoryBoxExpanded ? '' : 'hidden'}" data-history-box-panel>
+                            ${overpaymentHistoryHtml}
+                            <div class="guest-payment-history-list">${historyRowsHtml}</div>
+                        </div>
                     </div>
                 `;
+
+                const historyBoxToggleButton = paymentHistoryBox.querySelector('[data-history-box-toggle]');
+                const historyBoxPanel = paymentHistoryBox.querySelector('[data-history-box-panel]');
+                historyBoxToggleButton?.addEventListener('click', () => {
+                    const isExpanded = historyBoxToggleButton.getAttribute('aria-expanded') === 'true';
+                    guestHistoryBoxExpanded = !isExpanded;
+                    historyBoxToggleButton.setAttribute('aria-expanded', guestHistoryBoxExpanded ? 'true' : 'false');
+                    if (historyBoxPanel) historyBoxPanel.classList.toggle('hidden', !guestHistoryBoxExpanded);
+                });
+
+                const resolvedOverpaymentToggleButton = paymentHistoryBox.querySelector('[data-overpayment-resolved-toggle]');
+                const resolvedOverpaymentPanel = paymentHistoryBox.querySelector('[data-overpayment-resolved-panel]');
+                resolvedOverpaymentToggleButton?.addEventListener('click', () => {
+                    const isExpanded = resolvedOverpaymentToggleButton.getAttribute('aria-expanded') === 'true';
+                    guestResolvedOverpaymentExpanded = !isExpanded;
+                    resolvedOverpaymentToggleButton.setAttribute('aria-expanded', guestResolvedOverpaymentExpanded ? 'true' : 'false');
+                    if (resolvedOverpaymentPanel) resolvedOverpaymentPanel.classList.toggle('hidden', !guestResolvedOverpaymentExpanded);
+                });
 
                 const historyToggleButtons = paymentHistoryBox.querySelectorAll('[data-history-toggle-index]');
                 historyToggleButtons.forEach((button) => {

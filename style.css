@@ -604,6 +604,27 @@ body.guest-link-mode #guestView {
     margin-bottom: 0.8rem;
 }
 
+.guest-payment-history-header-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border: none;
+    background: transparent;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+}
+
+.guest-payment-history-box-chevron {
+    font-size: 0.72rem;
+    color: #6b7280;
+    transition: transform 0.16s ease;
+}
+
+.guest-payment-history-header-toggle[aria-expanded='true'] .guest-payment-history-box-chevron {
+    transform: rotate(180deg);
+}
+
 .guest-payment-history-title {
     font-size: 0.8rem;
     font-weight: 900;
@@ -773,6 +794,47 @@ body.guest-link-mode #guestView {
     border-color: #a7f3d0;
     background: #ecfdf5;
     color: #065f46;
+}
+
+.guest-payment-history-overpayment--resolved-collapsible {
+    text-align: left;
+}
+
+.guest-overpayment-resolved-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    border: none;
+    background: transparent;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+}
+
+.guest-overpayment-resolved-summary {
+    font-size: 0.75rem;
+    font-weight: 900;
+    color: #065f46;
+}
+
+.guest-overpayment-resolved-toggle[aria-expanded='true'] .guest-overpayment-resolved-chevron {
+    transform: rotate(180deg);
+}
+
+.guest-overpayment-resolved-details {
+    margin-top: 0.35rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    text-align: center;
+}
+
+.guest-overpayment-decision {
+    font-size: 0.8rem;
+    font-weight: 900;
+    color: #047857;
 }
 
 .guest-overpayment-action-grid {
