@@ -1,14 +1,44 @@
 {
-  "version": "1.22.38",
-  "buildId": "20260511-7",
+  "version": "1.22.41",
+  "buildId": "20260511-10",
   "releaseDate": "2026-05-11",
-  "releaseTime": "14:02",
+  "releaseTime": "14:40",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Gastansicht unterstützt jetzt einklappbaren Zahlungsverlauf inkl. resolved-Überzahlungsbox, Offene-Posten-Ansicht mit zuschaltbaren geschlossenen Einträgen und #ID-Badges, plus robustere Wise-Dedupe-/IBAN-Aufbereitung für Verlaufseinträge.",
-  "commitId": "bc8a570",
+  "note": "Überzahlungsentscheidung 'Guthaben' speichert jetzt creditor/debtor korrekt, sodass Guthaben bei Schuldner-Überzahlung als 'Fremdes Guthaben (bei mir)' statt fälschlich als 'Mein Guthaben (bei anderen)' erscheint.",
+  "commitId": "72e838d",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.41",
+      "buildId": "20260511-10",
+      "releaseDate": "2026-05-11",
+      "releaseTime": "14:40",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Überzahlungsentscheidung 'Guthaben' speichert jetzt creditor/debtor korrekt, sodass Guthaben bei Schuldner-Überzahlung als 'Fremdes Guthaben (bei mir)' statt fälschlich als 'Mein Guthaben (bei anderen)' erscheint.",
+      "commitId": "72e838d",
+      "obligation": "false"
+    },
+    {
+      "version": "1.22.40",
+      "buildId": "20260511-9",
+      "releaseDate": "2026-05-11",
+      "releaseTime": "14:36",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Neue Admin-Reparaturfunktion für bereits betroffene Wise-Duplikate: entfernt doppelte Wise-Matches, rollt fehlerhafte Auto-Zuordnungen zurück, korrigiert offene Restbeträge sowie Pending-Überzahlung und rekalkuliert den Zahlungslink.",
+      "commitId": "72e838d",
+      "obligation": "false"
+    },
+    {
+      "version": "1.22.39",
+      "buildId": "20260511-8",
+      "releaseDate": "2026-05-11",
+      "releaseTime": "14:22",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Wise-Online-Zahlungen verbuchen denselben Eingang jetzt transaktionssicher über transferId/fallback/alias-Dedupe, sodass Teilzahlungen nicht mehr doppelt angewendet werden und keine künstliche Restzahlung plus falsche Überzahlung erzeugen.",
+      "commitId": "72e838d",
+      "obligation": "false"
+    },
     {
       "version": "1.22.38",
       "buildId": "20260511-7",

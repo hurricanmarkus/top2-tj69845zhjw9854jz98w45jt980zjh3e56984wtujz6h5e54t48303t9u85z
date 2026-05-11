@@ -9344,10 +9344,10 @@ async function resolveOverpayment(decision) {
                 status: 'open',
                 createdAt: serverTimestamp(),
                 createdBy: currentUser.mode,
-                debtorId: creditOwnerId,   
-                debtorName: creditOwnerName,
-                creditorId: creditHolderId, 
-                creditorName: creditHolderName,
+                debtorId: creditHolderId,
+                debtorName: creditHolderName,
+                creditorId: creditOwnerId,
+                creditorName: creditOwnerName,
                 involvedUserIds: [creditOwnerId, creditHolderId],
                 history: [{ date: new Date(), action: 'created_credit', user: currentUser.displayName, info: `Aus Überzahlung von ${originLink}.` }]
             });
