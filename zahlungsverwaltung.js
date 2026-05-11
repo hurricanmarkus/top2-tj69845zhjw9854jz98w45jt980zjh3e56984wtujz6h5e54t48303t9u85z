@@ -64,6 +64,7 @@ let guestViewLiveRefreshTimer = null;
 let guestViewLiveRefreshGuestId = '';
 let guestViewLiveRefreshInFlight = false;
 let guestViewLastSignature = '';
+let paymentActionUiLockActive = false;
 let guestViewTrackedAccessKeys = new Set();
 const GUEST_LINK_TRACKING_SESSION_KEY = 'zv_guest_link_tracking_v1';
 const GUEST_LINK_TRACKING_SESSION_IDS_KEY = 'zv_guest_link_tracking_session_ids_v1';
@@ -416,14 +417,84 @@ function getOnlineLinkStatusBadgeClass(status) {
     return 'bg-indigo-100 text-indigo-700 border-indigo-200';
 }
 
-function getGuestLiveStatusMeta(status, remainingAmount = 0) {
+function resolveOnlineLinkDisplayStatus(status, expectedAmount = 0, paidAmount = 0, remainingAmount = 0) {
     const token = String(status || '').trim().toLowerCase();
-    if (token === 'paid' || token === 'closed' || normalizeMoney(remainingAmount) <= 0.001) {
+    const expected = normalizeMoney(expectedAmount);
+    const paid = normalizeMoney(paidAmount);
+    const remaining = normalizeMoney(remainingAmount);
+
+    if (token === 'closed') return 'closed';
+    if (remaining <= 0.001 && (expected > 0.001 || paid > 0.001)) return 'paid';
+    if (paid > 0.001 && remaining > 0.001) return 'partially_paid';
+    if (token === 'in_progress' && remaining > 0.001 && paid <= 0.001) return 'in_progress';
+    return 'open';
+}
+
+function ensurePaymentActionLoadingOverlay() {
+    let overlay = document.getElementById('payment-action-loading-overlay');
+    if (overlay) return overlay;
+
+    overlay = document.createElement('div');
+    overlay.id = 'payment-action-loading-overlay';
+    overlay.className = 'fullscreen-loading-overlay';
+    overlay.style.display = 'none';
+    overlay.innerHTML = `
+        <div class="fullscreen-loading-box">
+            <div class="fullscreen-loading-spinner"></div>
+            <div id="payment-action-loading-overlay-text" class="fullscreen-loading-text">Vorgang wird verarbeitet...</div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    return overlay;
+}
+
+function setPaymentActionLoadingOverlay(isVisible, loadingText = 'Vorgang wird verarbeitet...') {
+    const overlay = ensurePaymentActionLoadingOverlay();
+    const textEl = overlay.querySelector('#payment-action-loading-overlay-text');
+    if (textEl) {
+        const normalizedText = String(loadingText || '').trim();
+        textEl.textContent = normalizedText || 'Vorgang wird verarbeitet...';
+    }
+    overlay.style.display = isVisible ? 'flex' : 'none';
+}
+
+async function runWithPaymentActionLock(task, options = {}) {
+    if (paymentActionUiLockActive) return false;
+
+    paymentActionUiLockActive = true;
+    setPaymentActionLoadingOverlay(true, options.loadingText || 'Vorgang wird verarbeitet...');
+    try {
+        return await task();
+    } finally {
+        setPaymentActionLoadingOverlay(false);
+        paymentActionUiLockActive = false;
+    }
+}
+
+function getGuestLiveStatusMeta(status) {
+    const token = String(status || '').trim().toLowerCase();
+    if (token === 'paid') {
         return {
             label: 'Bezahlt',
             className: 'guest-live-status-chip--paid',
             boxClassName: 'guest-live-status-box--paid',
             isStatic: true,
+        };
+    }
+    if (token === 'closed') {
+        return {
+            label: 'Beendet',
+            className: 'guest-live-status-chip--progress',
+            boxClassName: '',
+            isStatic: true,
+        };
+    }
+    if (token === 'partially_paid') {
+        return {
+            label: 'Teilzahlung',
+            className: 'guest-live-status-chip--progress',
+            boxClassName: '',
+            isStatic: false,
         };
     }
     if (token === 'in_progress') {
@@ -2050,6 +2121,23 @@ async function resolveOnlinePaymentOverpaymentByOwnerAction(linkId, resolution) 
         return;
     }
     await window.resolveOnlinePaymentOverpaymentByOwner({ linkId, resolution });
+}
+
+async function refreshOnlinePaymentLinksForPaymentsAction(paymentIds = [], options = {}) {
+    const uniquePaymentIds = [...new Set((Array.isArray(paymentIds) ? paymentIds : [])
+        .map((id) => String(id || '').trim())
+        .filter(Boolean))];
+    if (!uniquePaymentIds.length || typeof window.recalculateOnlinePaymentLinksForPayments !== 'function') return;
+
+    try {
+        await window.recalculateOnlinePaymentLinksForPayments({
+            paymentIds: uniquePaymentIds,
+            source: String(options?.source || 'manual_update').trim() || 'manual_update',
+            reason: String(options?.reason || '').trim(),
+        });
+    } catch (error) {
+        console.warn('Online-Zahlungslink-Rekalkulation fehlgeschlagen:', error);
+    }
 }
 
 function closeIssuedLinksManagementModal() {
@@ -9041,9 +9129,9 @@ async function resolveOverpayment(decision) {
     // -------------------------------------------
 
     const btnId = decision === 'credit' ? 'btn-op-credit' : 'btn-op-tip';
-    setButtonLoading(document.getElementById(btnId), true);
-
-    try {
+    await runWithPaymentActionLock(async () => {
+        setButtonLoading(document.getElementById(btnId), true);
+        try {
         const batch = writeBatch(db);
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
 
@@ -9156,8 +9244,13 @@ async function resolveOverpayment(decision) {
         closeDetailModal();
         pendingOverpaymentData = null;
 
-    } catch (e) { console.error(e); alertUser(e.message, "error"); }
-    finally { setButtonLoading(document.getElementById(btnId), false); }
+        } catch (e) { console.error(e); alertUser(e.message, "error"); }
+        finally { setButtonLoading(document.getElementById(btnId), false); }
+    }, {
+        loadingText: decision === 'credit'
+            ? 'Überzahlung wird als Guthaben gespeichert...'
+            : 'Überzahlung wird als Trinkgeld gespeichert...',
+    });
 }
 
 
@@ -9259,6 +9352,17 @@ window.deleteTransaction = async function (paymentId, txIndex) {
         }
 
         await batch.commit();
+        const touchedPaymentIds = [paymentId];
+        if (tx.type === 'credit_usage' && Array.isArray(tx.creditSources)) {
+            tx.creditSources.forEach((source) => {
+                const sourceId = String(source?.id || '').trim();
+                if (sourceId) touchedPaymentIds.push(sourceId);
+            });
+        }
+        await refreshOnlinePaymentLinksForPaymentsAction(touchedPaymentIds, {
+            source: 'manual_storno',
+            reason: 'tx_deleted',
+        });
         alertUser("Zahlung storniert und ggf. Guthaben erstattet.", "success");
         // UI Refresh via Listener (automatisch) oder manuell
         // closeDetailModal(); // Offen lassen zum sehen
@@ -10595,21 +10699,25 @@ export async function initializeGuestView(guestId, options = {}) {
                     return false;
                 }
 
-                try {
-                    await window.guestRemoveOnlinePaymentPost({
-                        linkId: paymentLinkData.id,
-                        token: urlToken,
-                        additionalPostId,
-                    });
-                    alertUser('Zusatzposition entfernt.', 'success');
-                    closeGuestDetailModal();
-                    await initializeGuestView(guestId, { skipTracking: true });
-                    return true;
-                } catch (error) {
-                    console.error(error);
-                    alertUser(getGuestAdditionalPostRemovalErrorMessage(error), 'error');
-                    return false;
-                }
+                return runWithPaymentActionLock(async () => {
+                    try {
+                        await window.guestRemoveOnlinePaymentPost({
+                            linkId: paymentLinkData.id,
+                            token: urlToken,
+                            additionalPostId,
+                        });
+                        alertUser('Zusatzposition entfernt.', 'success');
+                        closeGuestDetailModal();
+                        await initializeGuestView(guestId, { skipTracking: true });
+                        return true;
+                    } catch (error) {
+                        console.error(error);
+                        alertUser(getGuestAdditionalPostRemovalErrorMessage(error), 'error');
+                        return false;
+                    }
+                }, {
+                    loadingText: 'Position wird entfernt...',
+                });
             };
 
             // 1. RENDER AKTIVE ITEMS
@@ -10778,6 +10886,14 @@ export async function initializeGuestView(guestId, options = {}) {
         const overpaymentState = paymentLinkData
             ? getOnlineOverpaymentDecisionState(paymentLinkData.pendingOverpayment || {})
             : null;
+        const effectiveLinkStatus = paymentLinkData
+            ? resolveOnlineLinkDisplayStatus(
+                paymentLinkData.status || 'open',
+                paymentLinkData.expectedAmount,
+                paymentLinkData.paidAmount,
+                paymentLinkData.remainingAmount,
+            )
+            : 'open';
 
         if (paymentLinkData && paymentHistoryBox) {
             const paidAmountTotal = normalizeMoney(paymentLinkData.paidAmount);
@@ -10857,7 +10973,7 @@ export async function initializeGuestView(guestId, options = {}) {
         }
 
         if (paymentLinkData && liveStatusIndicator) {
-            const liveMeta = getGuestLiveStatusMeta(paymentLinkData.status || 'open', paymentLinkData.remainingAmount);
+            const liveMeta = getGuestLiveStatusMeta(effectiveLinkStatus);
             liveStatusIndicator.innerHTML = `
                 <div class="guest-live-status-box ${liveMeta.boxClassName || ''}">
                     <div class="guest-live-status-box-header">
@@ -10882,7 +10998,7 @@ export async function initializeGuestView(guestId, options = {}) {
 
         if (paymentLinkData && onlineBox) {
             const bankInfo = paymentLinkData.bankInfo || {};
-            const statusText = getOnlineLinkStatusLabel(paymentLinkData.status || 'open');
+            const statusText = getOnlineLinkStatusLabel(effectiveLinkStatus);
             const expectedAmount = normalizeMoney(paymentLinkData.expectedAmount);
             const paidAmount = normalizeMoney(paymentLinkData.paidAmount);
             const remainingAmount = normalizeMoney(paymentLinkData.remainingAmount);
@@ -10964,7 +11080,7 @@ export async function initializeGuestView(guestId, options = {}) {
                                 <div class="text-[11px] text-emerald-800 break-words">Status: <span class="font-bold">${statusText}</span></div>
                                 </div>
                             </div>
-                            <span class="inline-flex items-center self-start px-2 py-1 rounded border text-[10px] font-bold ${getOnlineLinkStatusBadgeClass(paymentLinkData.status || 'open')}">${statusText}</span>
+                            <span class="inline-flex items-center self-start px-2 py-1 rounded border text-[10px] font-bold ${getOnlineLinkStatusBadgeClass(effectiveLinkStatus)}">${statusText}</span>
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
                             <div class="rounded bg-white/70 p-2 border border-emerald-100"><span class="text-emerald-800 block">Soll</span><span class="font-bold text-gray-800">${expectedAmount.toFixed(2)} €</span></div>
@@ -11195,18 +11311,22 @@ export async function initializeGuestView(guestId, options = {}) {
                 }
 
                 const note = prompt('Optional: Notiz zur Überweisung (z.B. Bank / Uhrzeit)', '') || '';
-                try {
-                    await window.guestMarkOnlinePaymentInProgress({
-                        linkId: paymentLinkData.id,
-                        token: urlToken,
-                        note,
-                    });
-                    alertUser('Status gespeichert. Der Ersteller sieht jetzt, dass du bezahlt hast.', 'success');
-                    await initializeGuestView(guestId, { skipTracking: true });
-                } catch (error) {
-                    console.error(error);
-                    alertUser(error?.message || 'Status konnte nicht gespeichert werden.', 'error');
-                }
+                await runWithPaymentActionLock(async () => {
+                    try {
+                        await window.guestMarkOnlinePaymentInProgress({
+                            linkId: paymentLinkData.id,
+                            token: urlToken,
+                            note,
+                        });
+                        alertUser('Status gespeichert. Der Ersteller sieht jetzt, dass du bezahlt hast.', 'success');
+                        await initializeGuestView(guestId, { skipTracking: true });
+                    } catch (error) {
+                        console.error(error);
+                        alertUser(error?.message || 'Status konnte nicht gespeichert werden.', 'error');
+                    }
+                }, {
+                    loadingText: 'Status wird gespeichert...',
+                });
             });
 
             const resolveOverpayment = async (resolution) => {
@@ -11214,18 +11334,24 @@ export async function initializeGuestView(guestId, options = {}) {
                     alertUser('Überzahlungs-Funktion ist nicht verfügbar.', 'error');
                     return;
                 }
-                try {
-                    await window.guestResolveOnlinePaymentOverpayment({
-                        linkId: paymentLinkData.id,
-                        token: urlToken,
-                        resolution,
-                    });
-                    alertUser(resolution === 'tip' ? 'Überzahlung als Trinkgeld gespeichert.' : 'Überzahlung als Guthaben gespeichert.', 'success');
-                    await initializeGuestView(guestId, { skipTracking: true });
-                } catch (error) {
-                    console.error(error);
-                    alertUser(error?.message || 'Überzahlungsentscheidung konnte nicht gespeichert werden.', 'error');
-                }
+                await runWithPaymentActionLock(async () => {
+                    try {
+                        await window.guestResolveOnlinePaymentOverpayment({
+                            linkId: paymentLinkData.id,
+                            token: urlToken,
+                            resolution,
+                        });
+                        alertUser(resolution === 'tip' ? 'Überzahlung als Trinkgeld gespeichert.' : 'Überzahlung als Guthaben gespeichert.', 'success');
+                        await initializeGuestView(guestId, { skipTracking: true });
+                    } catch (error) {
+                        console.error(error);
+                        alertUser(error?.message || 'Überzahlungsentscheidung konnte nicht gespeichert werden.', 'error');
+                    }
+                }, {
+                    loadingText: resolution === 'tip'
+                        ? 'Trinkgeld wird gespeichert...'
+                        : 'Guthaben wird gespeichert...',
+                });
             };
 
             const tipDecisionBtn = paymentHistoryBox?.querySelector('#guest-overpayment-tip-btn') || onlineBox.querySelector('#guest-overpayment-tip-btn');
@@ -11262,21 +11388,25 @@ export async function initializeGuestView(guestId, options = {}) {
                 }
 
                 const purpose = group === 'GUTHABEN' ? 'Guthaben aufladen' : 'Trinkgeld';
-                try {
-                    await window.guestAddOnlinePaymentPost({
-                        linkId: paymentLinkData.id,
-                        token: urlToken,
-                        purpose,
-                        amount,
-                        group,
-                    });
-                    closeGuestAddPositionModal();
-                    alertUser('Position gespeichert.', 'success');
-                    await initializeGuestView(guestId, { skipTracking: true });
-                } catch (error) {
-                    console.error(error);
-                    alertUser(error?.message || 'Position konnte nicht gespeichert werden.', 'error');
-                }
+                await runWithPaymentActionLock(async () => {
+                    try {
+                        await window.guestAddOnlinePaymentPost({
+                            linkId: paymentLinkData.id,
+                            token: urlToken,
+                            purpose,
+                            amount,
+                            group,
+                        });
+                        closeGuestAddPositionModal();
+                        alertUser('Position gespeichert.', 'success');
+                        await initializeGuestView(guestId, { skipTracking: true });
+                    } catch (error) {
+                        console.error(error);
+                        alertUser(error?.message || 'Position konnte nicht gespeichert werden.', 'error');
+                    }
+                }, {
+                    loadingText: 'Position wird gespeichert...',
+                });
             };
         }
 

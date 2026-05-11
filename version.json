@@ -1,14 +1,24 @@
 {
-  "version": "1.22.34",
-  "buildId": "20260511-3",
+  "version": "1.22.35",
+  "buildId": "20260511-4",
   "releaseDate": "2026-05-11",
-  "releaseTime": "09:46",
+  "releaseTime": "10:24",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Überzahlungsfrist im Gastlink läuft jetzt konsistent 24h ab Erkennung (inkl. Migration älterer Pending-Fälle), und Stornos aus dem echten Schuldeneintrag erscheinen im Zahlungsverlauf als negativer Eintrag; Erfasst- und Statuswerte im Online-Zahlungsbereich werden bei Storno sauber neu berechnet.",
-  "commitId": "a6a53ec",
+  "note": "Stornos aktualisieren Zahlungslink/Gastlink jetzt sofort inkl. Live-Status (Offen/Teilzahlung), lange Gastaktionen sperren die UI mit Lade-Overlay, und der Zahlungsverlauf nutzt einen Fallback aus payment-wiseMatches damit eingegangene Überweisungen zuverlässig gelistet werden.",
+  "commitId": "02adada",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.35",
+      "buildId": "20260511-4",
+      "releaseDate": "2026-05-11",
+      "releaseTime": "10:24",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Stornos aktualisieren Zahlungslink/Gastlink jetzt sofort inkl. Live-Status (Offen/Teilzahlung), lange Gastaktionen sperren die UI mit Lade-Overlay, und der Zahlungsverlauf nutzt einen Fallback aus payment-wiseMatches damit eingegangene Überweisungen zuverlässig gelistet werden.",
+      "commitId": "02adada",
+      "obligation": "false"
+    },
     {
       "version": "1.22.34",
       "buildId": "20260511-3",

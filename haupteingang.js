@@ -1655,6 +1655,7 @@ async function initializeFirebase() {
                 window.ensureOnlinePaymentWiseWebhookSubscriptions = httpsCallable(functions, 'ensureOnlinePaymentWiseWebhookSubscriptions');
                 window.listOnlinePaymentLinks = httpsCallable(functions, 'listOnlinePaymentLinks');
                 window.closeOnlinePaymentLink = httpsCallable(functions, 'closeOnlinePaymentLink');
+                window.recalculateOnlinePaymentLinksForPayments = httpsCallable(functions, 'recalculateOnlinePaymentLinksForPayments');
                 window.guestMarkOnlinePaymentInProgress = httpsCallable(functions, 'guestMarkOnlinePaymentInProgress');
                 window.guestAddOnlinePaymentPost = httpsCallable(functions, 'guestAddOnlinePaymentPost');
                 const guestRemoveOnlinePaymentPostPrimary = httpsCallable(functions, 'guestRemoveOnlinePaymentPost');
