@@ -557,9 +557,9 @@ function normalizeGuestPaymentHistoryEntries(entries = []) {
                     dedupeKey = `wise-transfer|${transferToken}|${entry.amount.toFixed(2)}`;
                 } else {
                     const referenceToken = String(entry.referenceCode || entry.reference || '').trim().toUpperCase();
-                    const ibanToken = String(entry.payerIbanLast4 || '').trim().toUpperCase();
-                    const timeBucket = entry.dateMs ? Math.floor(entry.dateMs / 15000) : 0;
-                    dedupeKey = `wise-fallback|${referenceToken}|${entry.amount.toFixed(2)}|${ibanToken}|${timeBucket}`;
+                    const currencyToken = String(entry.currency || 'EUR').trim().toUpperCase() || 'EUR';
+                    const timeBucket = entry.dateMs ? Math.floor(entry.dateMs / 60000) : 0;
+                    dedupeKey = `wise-fallback|${referenceToken}|${currencyToken}|${entry.amount.toFixed(2)}|${timeBucket}`;
                 }
             } else {
                 dedupeKey = [
@@ -10239,6 +10239,11 @@ function openCreditDetails(group) {
         // PUNKT 4 OPTIMIERUNG: Datum + Uhrzeit für den Haupteintrag
         const dateObj = new Date(p.createdAt?.toDate ? p.createdAt.toDate() : p.createdAt);
         const dateStr = dateObj.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+        const originPaymentShortId = String(p.onlineOverpaymentOriginPaymentShortId || '').trim().toUpperCase();
+        const originReferenceCode = String(p.onlineOverpaymentOriginReference || '').trim().toUpperCase();
+        const originMetaLine = originPaymentShortId || originReferenceCode
+            ? `<p class="text-[11px] font-semibold text-indigo-700 mt-0.5">Ursprung: ${originPaymentShortId ? `#${originPaymentShortId}` : ''}${originPaymentShortId && originReferenceCode ? ' • ' : ''}${originReferenceCode ? `Ref ${escapeHtmlInline(originReferenceCode)}` : ''}</p>`
+            : '';
 
         let actionBtnHtml = '';
         if (isPaid) {
@@ -10252,6 +10257,7 @@ function openCreditDetails(group) {
                 <div>
                     <p class="text-sm font-bold text-gray-800 ${isPaid ? 'line-through text-gray-500' : ''}">${p.title}</p>
                     <p class="text-xs text-gray-500">${dateStr} • ID: #${p.id.slice(-4).toUpperCase()}</p>
+                    ${originMetaLine}
                 </div>
                 <div class="text-right">
                     <p class="font-mono font-bold ${isPaid ? 'text-gray-400' : 'text-gray-800'}">${currentAmount.toFixed(2)}€</p>
@@ -10976,9 +10982,10 @@ export async function initializeGuestView(guestId, options = {}) {
 
                 const overpaymentHistoryHtml = overpaymentState?.isPending
                     ? `<div class="guest-payment-history-overpayment guest-payment-history-overpayment--blink">
-                            <div class="text-sm font-black">Überzahlung erkannt: ${overpaymentState.amount.toFixed(2)} €</div>
-                            <div>Die Überweisung war höher als der offene Betrag. Bitte innerhalb von <span class="font-bold">24 Stunden</span> entscheiden.</div>
-                            <div class="font-semibold">Frist bis: ${overpaymentState.expiresAt ? overpaymentState.expiresAt.toLocaleString('de-DE') : '—'}</div>
+                            <div class="guest-overpayment-title">Überzahlung erkannt</div>
+                            <div class="guest-overpayment-amount">${overpaymentState.amount.toFixed(2)} €</div>
+                            <div class="guest-overpayment-text">Bitte innerhalb von <span class="font-bold">24 Stunden</span> entscheiden.</div>
+                            <div class="guest-overpayment-deadline">Frist bis: ${overpaymentState.expiresAt ? overpaymentState.expiresAt.toLocaleString('de-DE') : '—'}</div>
                             <div class="guest-overpayment-action-grid">
                                 <button id="guest-overpayment-tip-btn" type="button" class="guest-overpayment-action-btn">Als Trinkgeld</button>
                                 <button id="guest-overpayment-credit-btn" type="button" class="guest-overpayment-action-btn">Als Guthaben</button>

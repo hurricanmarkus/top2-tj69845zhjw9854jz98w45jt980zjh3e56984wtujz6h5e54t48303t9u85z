@@ -727,15 +727,42 @@ body.guest-link-mode #guestView {
 
 .guest-payment-history-overpayment {
     border: 1px solid #fcd34d;
-    background: #fef3c7;
+    background: linear-gradient(180deg, #fff8dc 0%, #fef3c7 100%);
     border-radius: 0.85rem;
-    padding: 0.65rem 0.75rem;
+    padding: 0.55rem 0.7rem;
     margin-bottom: 0.6rem;
-    font-size: 0.74rem;
+    font-size: 0.72rem;
     color: #7c2d12;
     display: flex;
     flex-direction: column;
-    gap: 0.3rem;
+    gap: 0.2rem;
+    text-align: center;
+}
+
+.guest-overpayment-title {
+    font-size: 0.7rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #92400e;
+}
+
+.guest-overpayment-amount {
+    font-size: 1.05rem;
+    font-weight: 900;
+    line-height: 1.05;
+    color: #9a3412;
+}
+
+.guest-overpayment-text {
+    font-size: 0.71rem;
+    color: #7c2d12;
+}
+
+.guest-overpayment-deadline {
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: #92400e;
 }
 
 .guest-payment-history-overpayment--blink {
@@ -751,8 +778,8 @@ body.guest-link-mode #guestView {
 .guest-overpayment-action-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.45rem;
-    margin-top: 0.25rem;
+    gap: 0.4rem;
+    margin-top: 0.18rem;
 }
 
 .guest-overpayment-action-btn {
@@ -760,8 +787,8 @@ body.guest-link-mode #guestView {
     background: #f59e0b;
     color: #ffffff;
     border-radius: 0.65rem;
-    padding: 0.45rem 0.6rem;
-    font-size: 0.74rem;
+    padding: 0.4rem 0.55rem;
+    font-size: 0.71rem;
     font-weight: 800;
     text-align: center;
     transition: transform 0.15s ease, filter 0.15s ease;

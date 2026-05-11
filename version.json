@@ -1,14 +1,24 @@
 {
-  "version": "1.22.36",
-  "buildId": "20260511-5",
+  "version": "1.22.37",
+  "buildId": "20260511-6",
   "releaseDate": "2026-05-11",
-  "releaseTime": "11:48",
+  "releaseTime": "13:34",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Wise-Zahlungsverlauf extrahiert IBAN-Ende robuster aus Webhook/Transferdaten, Doppelbuchungen durch unterschiedliche Wise-Eventtypen werden über stabilen Transfer-Key verhindert, und Verlaufseinträge sind als kompakte Leisten mit Aufklapp-Details (Betrag links, Datum/Uhrzeit rechts) umgesetzt.",
-  "commitId": "a4e28f2",
+  "note": "Wise-Dedupe wurde weiter gehärtet (kanonisierte Referenz + TransferId-first + konsistenter Fallback zwischen Webhook/Statement), die Überzahlungs-Box ist kompakter und zentriert gestaltet, und Online-Überzahlungs-Guthaben wird korrekt als Fremdguthaben beim Empfänger angelegt inkl. Ursprungstransaktion (#ID/Ref) in der Guthaben-Detailansicht.",
+  "commitId": "86ad0e6",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.37",
+      "buildId": "20260511-6",
+      "releaseDate": "2026-05-11",
+      "releaseTime": "13:34",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Wise-Dedupe wurde weiter gehärtet (kanonisierte Referenz + TransferId-first + konsistenter Fallback zwischen Webhook/Statement), die Überzahlungs-Box ist kompakter und zentriert gestaltet, und Online-Überzahlungs-Guthaben wird korrekt als Fremdguthaben beim Empfänger angelegt inkl. Ursprungstransaktion (#ID/Ref) in der Guthaben-Detailansicht.",
+      "commitId": "86ad0e6",
+      "obligation": "false"
+    },
     {
       "version": "1.22.36",
       "buildId": "20260511-5",
