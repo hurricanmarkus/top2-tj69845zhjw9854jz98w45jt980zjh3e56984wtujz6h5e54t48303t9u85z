@@ -430,6 +430,22 @@ body.guest-link-mode #guestView {
     box-shadow: 0 10px 30px rgba(239, 68, 68, 0.08);
 }
 
+.guest-live-status-box--paid {
+    border-color: #bbf7d0;
+    background: #ffffff;
+    box-shadow: 0 8px 24px rgba(5, 150, 105, 0.06);
+}
+
+.guest-live-status-box--paid .guest-live-status-box-title {
+    color: #065f46;
+}
+
+.guest-live-status-box--paid .guest-live-status-badge {
+    background: #059669;
+    animation: none;
+    box-shadow: none;
+}
+
 .guest-live-status-box-header {
     display: flex;
     align-items: center;
@@ -501,6 +517,11 @@ body.guest-link-mode #guestView {
     color: #059669;
     background: rgba(236, 253, 245, 0.95);
     box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.08);
+    animation: none;
+}
+
+.guest-live-status-chip--static {
+    animation: none;
 }
 
 .guest-live-status-dot {
@@ -520,6 +541,10 @@ body.guest-link-mode #guestView {
     position: absolute;
     inset: -0.45rem;
     pointer-events: none;
+}
+
+.guest-live-status-arrows--hidden {
+    display: none;
 }
 
 .guest-live-status-arrow {
@@ -563,6 +588,178 @@ body.guest-link-mode #guestView {
     animation-delay: 1.2s;
 }
 
+.guest-payment-history-box {
+    border: 1px solid #d1d5db;
+    background: #ffffff;
+    border-radius: 1rem;
+    padding: 0.9rem 1rem;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+}
+
+.guest-payment-history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+    margin-bottom: 0.8rem;
+}
+
+.guest-payment-history-title {
+    font-size: 0.8rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #1f2937;
+}
+
+.guest-payment-history-total {
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: #065f46;
+    background: #ecfdf5;
+    border: 1px solid #bbf7d0;
+    border-radius: 9999px;
+    padding: 0.2rem 0.6rem;
+}
+
+.guest-payment-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+.guest-payment-history-entry {
+    border: 1px solid #e5e7eb;
+    background: #f8fafc;
+    border-radius: 0.85rem;
+    padding: 0.6rem 0.7rem;
+}
+
+.guest-payment-history-entry--latest {
+    border-color: #86efac;
+    background: #ecfdf5;
+}
+
+.guest-payment-history-entry--cancellation {
+    border-color: #fecaca;
+    background: #fef2f2;
+}
+
+.guest-payment-history-entry--latest-live {
+    animation: guestHistoryLatestPulse 1.2s ease-in-out infinite;
+}
+
+.guest-payment-history-entry-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+}
+
+.guest-payment-history-entry-amount {
+    font-weight: 900;
+    color: #065f46;
+    font-size: 1rem;
+    line-height: 1.1;
+}
+
+.guest-payment-history-entry--cancellation .guest-payment-history-entry-amount,
+.guest-payment-history-entry--cancellation .guest-payment-history-entry-currency {
+    color: #b91c1c;
+}
+
+.guest-payment-history-entry--latest .guest-payment-history-entry-amount {
+    font-size: 1.12rem;
+}
+
+.guest-payment-history-entry-currency {
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #065f46;
+}
+
+.guest-payment-history-entry-meta {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+    font-size: 0.72rem;
+    color: #374151;
+}
+
+.guest-payment-history-overpayment {
+    border: 1px solid #fcd34d;
+    background: #fef3c7;
+    border-radius: 0.85rem;
+    padding: 0.65rem 0.75rem;
+    margin-bottom: 0.6rem;
+    font-size: 0.74rem;
+    color: #7c2d12;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.guest-payment-history-overpayment--blink {
+    animation: guestHistoryOverpaymentPulse 1.1s ease-in-out infinite;
+}
+
+.guest-payment-history-overpayment--resolved {
+    border-color: #a7f3d0;
+    background: #ecfdf5;
+    color: #065f46;
+}
+
+.guest-overpayment-action-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+    margin-top: 0.25rem;
+}
+
+.guest-overpayment-action-btn {
+    border: 1px solid #d97706;
+    background: #f59e0b;
+    color: #ffffff;
+    border-radius: 0.65rem;
+    padding: 0.45rem 0.6rem;
+    font-size: 0.74rem;
+    font-weight: 800;
+    text-align: center;
+    transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.guest-overpayment-action-btn:hover {
+    filter: brightness(0.95);
+    transform: translateY(-1px);
+}
+
+.guest-overpayment-action-btn:active {
+    transform: translateY(0);
+}
+
+@keyframes guestHistoryLatestPulse {
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.08);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(16, 185, 129, 0.04);
+    }
+}
+
+@keyframes guestHistoryOverpaymentPulse {
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.18);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(245, 158, 11, 0.08);
+    }
+}
+
 @keyframes guestLiveStatusPulse {
     0%,
     100% {
@@ -594,6 +791,17 @@ body.guest-link-mode #guestView {
     50% {
         transform: scale(1);
         box-shadow: 0 0 0 6px rgba(220, 38, 38, 0.08);
+    }
+}
+
+@media (max-width: 640px) {
+    .guest-payment-history-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .guest-overpayment-action-grid {
+        grid-template-columns: 1fr;
     }
 }
 

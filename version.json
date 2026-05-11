@@ -1,14 +1,34 @@
 {
-  "version": "1.22.32",
-  "buildId": "20260511-1",
+  "version": "1.22.34",
+  "buildId": "20260511-3",
   "releaseDate": "2026-05-11",
-  "releaseTime": "08:47",
+  "releaseTime": "09:46",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Wise-Webhook-Matching wurde vereinheitlicht: Legacy/ID-Referenzen werden ident erkannt, Reservierungs-Fallback ordnet Zahlungen auch bei grenzwertigen Link-Zuständen korrekt zu und Delivery-Felder sind kompatibel dokumentiert.",
-  "commitId": "4fa47d0",
+  "note": "Überzahlungsfrist im Gastlink läuft jetzt konsistent 24h ab Erkennung (inkl. Migration älterer Pending-Fälle), und Stornos aus dem echten Schuldeneintrag erscheinen im Zahlungsverlauf als negativer Eintrag; Erfasst- und Statuswerte im Online-Zahlungsbereich werden bei Storno sauber neu berechnet.",
+  "commitId": "a6a53ec",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.34",
+      "buildId": "20260511-3",
+      "releaseDate": "2026-05-11",
+      "releaseTime": "09:46",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Überzahlungsfrist im Gastlink läuft jetzt konsistent 24h ab Erkennung (inkl. Migration älterer Pending-Fälle), und Stornos aus dem echten Schuldeneintrag erscheinen im Zahlungsverlauf als negativer Eintrag; Erfasst- und Statuswerte im Online-Zahlungsbereich werden bei Storno sauber neu berechnet.",
+      "commitId": "a6a53ec",
+      "obligation": "false"
+    },
+    {
+      "version": "1.22.33",
+      "buildId": "20260511-2",
+      "releaseDate": "2026-05-11",
+      "releaseTime": "09:38",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Gast-Zahlungslink zeigt jetzt einen echten Zahlungsverlauf aus Wise-Eingängen (inkl. Überweiser, Datum/Uhrzeit, Verwendungszweck, IBAN-Ende), schließt den aktiven Online-Zahlungsbereich bei Live-Updates automatisch und beruhigt die LIVE/Bezahlt-Anzeige bei 0€ ohne rotes Hintergrundsignal; Überzahlungswarnung und Entscheidungen sind zentral im Verlauf vereinheitlicht.",
+      "commitId": "a6a53ec",
+      "obligation": "false"
+    },
     {
       "version": "1.22.32",
       "buildId": "20260511-1",
