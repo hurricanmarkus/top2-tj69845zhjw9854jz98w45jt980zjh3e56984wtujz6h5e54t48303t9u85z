@@ -1317,6 +1317,12 @@ function renderSplitGroupDetailModal(groupId) {
     const participantTotalAssigned = normalizeMoney(master.participants.reduce((sum, entry) => sum + normalizeMoney(entry.assignedAmount), 0));
     const participantTotalPaid = normalizeMoney(master.participants.reduce((sum, entry) => sum + normalizeMoney(entry.paidAmount), 0));
     const participantTotalOpen = normalizeMoney(master.participants.reduce((sum, entry) => sum + normalizeMoney(Math.max(0, entry.remainingAmount)), 0));
+    const participantSummaryHasOpenAmount = participantTotalOpen > SPLIT_MONEY_TOLERANCE;
+    const participantSummaryOpenBoxClass = participantSummaryHasOpenAmount
+        ? 'rounded border border-orange-200 bg-orange-50 px-2 py-1'
+        : 'rounded border border-gray-200 bg-gray-100 px-2 py-1';
+    const participantSummaryOpenLabelClass = participantSummaryHasOpenAmount ? 'text-orange-600' : 'text-gray-500';
+    const participantSummaryOpenValueClass = participantSummaryHasOpenAmount ? 'text-orange-700' : 'text-gray-500';
     const participantSummaryRowHtml = `
         <div class="rounded-lg border-2 border-indigo-200 bg-indigo-50 p-3">
             <div class="flex flex-wrap items-center gap-2 mb-2">
@@ -1326,7 +1332,7 @@ function renderSplitGroupDetailModal(groupId) {
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
                 <div class="rounded border border-indigo-200 bg-white px-2 py-1"><span class="block text-gray-500">Gesamt</span><span class="font-black text-gray-800">${participantTotalAssigned.toFixed(2)} €</span></div>
                 <div class="rounded border border-green-200 bg-green-50 px-2 py-1"><span class="block text-green-600">Bezahlt</span><span class="font-black text-green-700">${participantTotalPaid.toFixed(2)} €</span></div>
-                <div class="rounded border border-orange-200 bg-orange-50 px-2 py-1"><span class="block text-orange-600">Offen</span><span class="font-black text-orange-700">${participantTotalOpen.toFixed(2)} €</span></div>
+                <div class="${participantSummaryOpenBoxClass}"><span class="block ${participantSummaryOpenLabelClass}">Offen</span><span class="font-black ${participantSummaryOpenValueClass}">${participantTotalOpen.toFixed(2)} €</span></div>
             </div>
         </div>
     `;
@@ -1476,6 +1482,14 @@ function renderSplitGroupEditPositions() {
             if (!row) return;
             const index = Number(row.getAttribute('data-position-index'));
             if (!Number.isFinite(index)) return;
+            const position = splitGroupEditState.positions[index] || {};
+            const positionName = String(position?.name || '').trim();
+            const positionPrice = normalizeMoney(position?.price);
+            const positionLabel = positionName || 'Diese Position';
+            const confirmationText = Math.abs(positionPrice) > SPLIT_MONEY_TOLERANCE
+                ? `Position wirklich entfernen?\n\n${positionLabel} (${positionPrice.toFixed(2)} €) wird aus der aktuellen Gruppenbearbeitung entfernt.`
+                : `Position wirklich entfernen?\n\n${positionLabel} wird aus der aktuellen Gruppenbearbeitung entfernt.`;
+            if (!confirm(confirmationText)) return;
             splitGroupEditState.positions.splice(index, 1);
             renderSplitGroupEditPositions();
             refreshSplitGroupEditPreview();
@@ -13541,6 +13555,17 @@ function addPositionInput(name = '', price = '') {
 
     // Listener Löschen
     div.querySelector('.remove-pos-btn').onclick = () => {
+        const splitMode = document.getElementById('toggle-split-mode')?.checked === true;
+        if (splitMode) {
+            const positionName = String(nameInput?.value || '').trim();
+            const parsedPrice = Number.parseFloat(String(priceInput?.value || '').replace(',', '.'));
+            const positionPrice = Number.isFinite(parsedPrice) ? normalizeMoney(parsedPrice) : 0;
+            const positionLabel = positionName || 'Diese Position';
+            const confirmationText = Math.abs(positionPrice) > SPLIT_MONEY_TOLERANCE
+                ? `Position wirklich entfernen?\n\n${positionLabel} (${positionPrice.toFixed(2)} €) wird aus dem neuen Gruppenmaster entfernt.`
+                : `Position wirklich entfernen?\n\n${positionLabel} wird aus dem neuen Gruppenmaster entfernt.`;
+            if (!confirm(confirmationText)) return;
+        }
         div.remove();
         calculateTotalFromPositions();
         if (container.children.length === 0) container.classList.add('hidden');

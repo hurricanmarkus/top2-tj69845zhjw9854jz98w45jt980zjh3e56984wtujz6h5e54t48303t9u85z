@@ -1,14 +1,24 @@
 {
-  "version": "1.22.42",
-  "buildId": "20260512-1",
+  "version": "1.22.43",
+  "buildId": "20260512-2",
   "releaseDate": "2026-05-12",
-  "releaseTime": "15:11",
+  "releaseTime": "15:21",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Online-Zahlungslinks funktionieren jetzt auch für per Tippen erfasste nicht registrierte Schuldner; für solche Empfänger wird die Überzahlungsoption 'Guthaben' im Link-Flow nicht mehr angeboten.",
-  "commitId": "8ba98f9",
+  "note": "Gruppenmaster fragt jetzt beim Löschen von Positionen im Anlegen und Bearbeiten nach, und die Summenbox 'Offen' bei 'Summe (alle Personen)' wird nur noch bei echtem Restbetrag orange dargestellt.",
+  "commitId": "5a21df5",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.22.43",
+      "buildId": "20260512-2",
+      "releaseDate": "2026-05-12",
+      "releaseTime": "15:21",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Gruppenmaster fragt jetzt beim Löschen von Positionen im Anlegen und Bearbeiten nach, und die Summenbox 'Offen' bei 'Summe (alle Personen)' wird nur noch bei echtem Restbetrag orange dargestellt.",
+      "commitId": "5a21df5",
+      "obligation": "false"
+    },
     {
       "version": "1.22.42",
       "buildId": "20260512-1",
