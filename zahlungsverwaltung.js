@@ -224,7 +224,17 @@ function getCategoryNameById(categoryId) {
 function getPaymentRemainingForDisplay(payment) {
     const statusToken = String(payment?.status || '').toLowerCase();
     if (statusToken === 'closed' || statusToken === 'settled' || statusToken === 'paid') return 0;
-    return normalizeMoney(payment?.remainingAmount);
+    const remainingAmount = normalizeMoney(payment?.remainingAmount);
+    if (payment?.isTBD) return Math.max(0, remainingAmount);
+    const totalAmount = normalizeMoney(payment?.amount);
+    return normalizeMoney(Math.min(totalAmount, Math.max(0, remainingAmount)));
+}
+
+function normalizePaymentSnapshotForUi(payment = {}) {
+    const normalizedPayment = { ...payment };
+    normalizedPayment.amount = normalizeMoney(normalizedPayment.amount);
+    normalizedPayment.remainingAmount = getPaymentRemainingForDisplay(normalizedPayment);
+    return normalizedPayment;
 }
 
 function getPaymentPaidAmount(payment) {
@@ -4286,7 +4296,7 @@ function listenForPayments() {
         allPayments = [];
         snapshot.forEach(doc => {
             const data = doc.data();
-            const p = { id: doc.id, ...data };
+            const p = normalizePaymentSnapshotForUi({ id: doc.id, ...data });
 
             if (p.createdBy === currentUser.mode) {
                 allPayments.push(p);
@@ -5078,6 +5088,9 @@ async function executeAdjustAmount() {
         }
     }
 
+    finalTotalAmount = normalizeMoney(finalTotalAmount);
+    finalRemaining = normalizeMoney(finalRemaining);
+
     const newPositions = [];
     document.querySelectorAll('.adj-position-row').forEach(row => {
         const name = row.querySelector('.adj-pos-name').value.trim();
@@ -5172,7 +5185,7 @@ async function executeAdjustAmount() {
     let originalPositionsToSave = p.originalPositions ?? (p.positions || []);
 
     // --- FALL A: ÜBERZAHLUNG (Negativer Restbetrag) ---
-    if (finalRemaining < -0.01) {
+    if (finalRemaining < -0.001) {
         const excessAmount = Math.abs(finalRemaining);
         
         pendingOverpaymentData = {
@@ -5227,10 +5240,11 @@ async function executeAdjustAmount() {
     // --- FALL B: NORMALE KORREKTUR ---
     try {
         const paymentRef = doc(db, 'artifacts', appId, 'public', 'data', 'payments', currentAdjustId);
+        const normalizedRemainingToSave = finalRemaining <= 0.001 ? 0 : finalRemaining;
         
         const updateData = {
             ...updateBase,
-            remainingAmount: finalRemaining,
+            remainingAmount: normalizedRemainingToSave,
             amount: finalTotalAmount,
             originalAmount: originalAmountToSave,
             originalPositions: originalPositionsToSave, 
@@ -7099,11 +7113,12 @@ function renderDetailContent(p, isRefresh) {
 
     let priceDisplayHtml = '';
     let paidOrSplitText = '';
+    const displayRemainingAmount = p.isTBD ? 0 : getPaymentRemainingForDisplay(p);
 
     if (p.isTBD) {
         priceDisplayHtml = `<span class="text-3xl text-orange-600 font-bold">Betrag unbekannt</span>`;
     } else {
-        let displayAmount = parseFloat(p.remainingAmount);
+        let displayAmount = displayRemainingAmount;
         const showStrike = (p.originalAmount !== undefined && p.originalAmount !== null && Math.abs(p.originalAmount - p.amount) > 0.01);
         
         if (p.status === 'closed' || p.status === 'settled' || p.status === 'paid') {
@@ -7119,7 +7134,7 @@ function renderDetailContent(p, isRefresh) {
             priceDisplayHtml = `<span class="text-5xl font-extrabold text-gray-800">${displayAmount.toFixed(2)} €</span>`;
         }
 
-        const paidAmount = p.amount - parseFloat(p.remainingAmount); 
+        const paidAmount = normalizeMoney(normalizeMoney(p.amount) - displayRemainingAmount); 
         const hasSplit = p.history && p.history.some(h => h.action === 'split_source');
         
         if (p.status === 'closed') {
@@ -7168,7 +7183,7 @@ function renderDetailContent(p, isRefresh) {
             ${p.orderNr ? `<div><span class="font-bold text-gray-500">Bestell-Nr.:</span> <br>${p.orderNr}</div>` : ''}
         </div>
         
-        <div class="mb-4 text-center p-4 border-2 border-dashed border-gray-200 rounded-xl ${p.remainingAmount <= 0.01 && !p.isTBD ? 'bg-green-50 border-green-300' : ''}">
+        <div class="mb-4 text-center p-4 border-2 border-dashed border-gray-200 rounded-xl ${displayRemainingAmount <= 0.01 && !p.isTBD ? 'bg-green-50 border-green-300' : ''}">
             <p class="text-sm text-gray-500 uppercase font-bold tracking-wide">
                 Offener Betrag 
                 ${!p.isTBD ? `<span class="text-xs text-gray-400 font-normal ml-1 normal-case">(von gesamt ${parseFloat(p.amount).toFixed(2)} €)</span>` : ''}
@@ -7310,7 +7325,7 @@ function renderDetailContent(p, isRefresh) {
     const canAct = (iAmDebtor || iAmCreditor || iAmCreator) && (p.status === 'open' || p.status === 'pending_approval') && !isArchivedOrTrash && myRights !== 'view';
 
     if (canAct) {
-        const currentRest = p.isTBD ? 0 : parseFloat(p.remainingAmount);
+        const currentRest = p.isTBD ? 0 : getPaymentRemainingForDisplay(p);
         const btnLabel = p.isTBD ? "Vorauszahlung / Guthaben" : "Transaktion tätigen";
         
         const initialBtn = document.createElement('button');
@@ -9133,15 +9148,15 @@ async function handlePaymentAction(id, action, amount = 0, extras = null) {
     const p = allPayments.find(x => x.id === id);
     if (!p) return;
 
-    const currentRest = parseFloat(p.remainingAmount);
-    let payAmount = amount;
+    const currentRest = normalizeMoney(p.remainingAmount);
+    let payAmount = normalizeMoney(amount);
 
     if (action === 'mark_paid' && amount === 0) {
         payAmount = currentRest;
     }
 
-    if (!p.isTBD && payAmount > currentRest + 0.01) {
-        const overpayment = payAmount - currentRest;
+    const overpayment = normalizeMoney(payAmount - currentRest);
+    if (!p.isTBD && overpayment > 0.001) {
         pendingOverpaymentData = {
             paymentId: id,
             payAmount: payAmount,
@@ -9172,6 +9187,7 @@ window.handlePaymentAction = handlePaymentAction;
 
 async function executePayment(id, action, amount, extras = null) {
     const p = allPayments.find(x => x.id === id);
+    const normalizedAmount = normalizeMoney(amount);
     
     // 1. Prüfen, wer ich bin (Ersteller oder Eingeladener)
     const iAmCreator = p.createdBy === currentUser.mode;
@@ -9199,7 +9215,7 @@ async function executePayment(id, action, amount, extras = null) {
         // Basis-Transaktionsobjekt erstellen
         transaction = { 
             date: new Date(), 
-            amount: amount, 
+            amount: normalizedAmount, 
             type: 'payment', 
             user: currentUser.displayName 
         };
@@ -9251,33 +9267,38 @@ async function executePayment(id, action, amount, extras = null) {
         // --- ZWEIG B: DIREKTE BUCHUNG (Keine Genehmigung nötig) ---
         else {
             let newStatus = p.status;
-            let newRest = parseFloat(p.remainingAmount);
+            let newRest = normalizeMoney(p.remainingAmount);
 
             if (action === 'mark_paid' || action === 'confirm_payment') {
+                const overpaymentAmount = p.isTBD ? 0 : normalizeMoney(normalizedAmount - newRest);
+                if (!p.isTBD && overpaymentAmount > 0.001) {
+                    throw new Error(`Überzahlung von ${overpaymentAmount.toFixed(2)} € muss zuerst als Trinkgeld oder Guthaben entschieden werden.`);
+                }
+                transaction.amount = p.isTBD ? normalizedAmount : newRest;
                 // Alles bezahlen
                 newRest = 0;
                 newStatus = 'paid';
-                logEntry = `Zahlung (${amount.toFixed(2)} €) verbucht. Status: Bezahlt.`;
+                logEntry = `Zahlung (${transaction.amount.toFixed(2)} €) verbucht. Status: Bezahlt.`;
             } else {
                 // Teilzahlung oder TBD
-                newRest -= amount;
+                newRest = normalizeMoney(newRest - normalizedAmount);
                 
                 if (p.isTBD) {
                     // Bei TBD bleibt es immer offen, auch wenn man was zahlt
                     newStatus = 'open';
-                    logEntry = `Vorauszahlung (${amount.toFixed(2)} €) verbucht.`;
+                    logEntry = `Vorauszahlung (${normalizedAmount.toFixed(2)} €) verbucht.`;
                 } else {
                     // Bei normaler Schuld: Wenn Rest 0 ist, dann "paid"
                     if (newRest <= 0.001) { 
                         newRest = 0; 
                         newStatus = 'paid'; 
                     }
-                    logEntry = `Teilzahlung (${amount.toFixed(2)} €) verbucht.`;
+                    logEntry = `Teilzahlung (${normalizedAmount.toFixed(2)} €) verbucht.`;
                 }
             }
             
             // Daten für das Update vorbereiten
-            updateData.remainingAmount = newRest;
+            updateData.remainingAmount = normalizeMoney(newRest);
             updateData.status = newStatus;
             updateData.history = [...(p.history || []), { 
                 date: new Date(), 
@@ -9581,7 +9602,7 @@ window.deleteTransaction = async function (paymentId, txIndex) {
     if (!confirm("Diese Zahlung stornieren? Der Betrag wird wieder offen.")) return;
 
     const tx = p.transactions[txIndex];
-    const amountToAddBack = parseFloat(tx.amount);
+    const amountToAddBack = normalizeMoney(tx.amount);
 
     try {
         const batch = writeBatch(db);
@@ -9589,7 +9610,11 @@ window.deleteTransaction = async function (paymentId, txIndex) {
 
         // 1. Haupt-Eintrag zurücksetzen
         const newTransactions = p.transactions.filter((_, i) => i !== txIndex);
-        const newRemaining = parseFloat(p.remainingAmount) + amountToAddBack;
+        const currentRemaining = normalizeMoney(p.remainingAmount);
+        const maxRemaining = p.isTBD ? null : normalizeMoney(p.amount);
+        const newRemaining = maxRemaining === null
+            ? normalizeMoney(currentRemaining + amountToAddBack)
+            : normalizeMoney(Math.min(maxRemaining, currentRemaining + amountToAddBack));
         const debtRef = doc(paymentsRef, paymentId);
 
         batch.update(debtRef, {
@@ -13542,7 +13567,7 @@ async function approveTransaction(paymentId, txIndex) {
     }
 
     try {
-        const amount = parseFloat(tx.amount);
+        const amount = normalizeMoney(tx.amount);
         const newTransactions = [...p.transactions];
         newTransactions[txIndex] = {
             ...tx,
@@ -13552,8 +13577,14 @@ async function approveTransaction(paymentId, txIndex) {
             approvedAt: new Date()
         };
 
-        let currentRest = parseFloat(p.remainingAmount);
-        let newRest = currentRest - amount;
+        let currentRest = normalizeMoney(p.remainingAmount);
+        const overpaymentAmount = p.isTBD ? 0 : normalizeMoney(amount - currentRest);
+        if (!p.isTBD && overpaymentAmount > 0.001) {
+            alertUser(`Genehmigung blockiert: Zahlung würde ${overpaymentAmount.toFixed(2)} € überzahlen. Bitte Zahlung neu erfassen und Überzahlung korrekt als Trinkgeld oder Guthaben entscheiden.`, "error");
+            return;
+        }
+
+        let newRest = normalizeMoney(currentRest - amount);
         let newStatus = p.status;
 
         if (newRest <= 0.001) {

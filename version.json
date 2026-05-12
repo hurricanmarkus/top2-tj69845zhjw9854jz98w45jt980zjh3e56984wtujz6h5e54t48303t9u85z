@@ -1,14 +1,24 @@
 {
-  "version": "1.23.0",
-  "buildId": "20260512-4",
+  "version": "1.23.1",
+  "buildId": "20260512-5",
   "releaseDate": "2026-05-12",
-  "releaseTime": "15:40",
+  "releaseTime": "20:35",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Zahlungslinks unterstützen bei Überzahlung jetzt auch Rückerstattung mit automatischer Gegenbuchung, und die bekannte Overlay-Ladeanzeige erscheint nun konsistent bei relevanten Link-Erzeugungen in der Zahlungsverwaltung.",
+  "note": "1-Cent-Überzahlungen werden jetzt konsistent als Überzahlung behandelt, Stornos können den offenen Betrag nicht mehr über die Gesamtsumme hinaus anheben, und Alt-Datensätze mit inkonsistentem Restbetrag werden in der Detailansicht stabilisiert dargestellt.",
   "commitId": "1ffccd2",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.23.1",
+      "buildId": "20260512-5",
+      "releaseDate": "2026-05-12",
+      "releaseTime": "20:35",
+      "bereich": "Zahlungsverwaltung",
+      "note": "1-Cent-Überzahlungen werden jetzt konsistent als Überzahlung behandelt, Stornos können den offenen Betrag nicht mehr über die Gesamtsumme hinaus anheben, und Alt-Datensätze mit inkonsistentem Restbetrag werden in der Detailansicht stabilisiert dargestellt.",
+      "commitId": "1ffccd2",
+      "obligation": "false"
+    },
     {
       "version": "1.23.0",
       "buildId": "20260512-4",
