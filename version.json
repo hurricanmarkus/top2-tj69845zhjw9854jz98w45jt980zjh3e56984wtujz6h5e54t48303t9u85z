@@ -1,14 +1,24 @@
 {
-  "version": "1.23.4",
-  "buildId": "20260512-8",
+  "version": "1.23.5",
+  "buildId": "20260512-9",
   "releaseDate": "2026-05-12",
-  "releaseTime": "21:30",
+  "releaseTime": "21:45",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Im Gast-Zahlungslink sitzt das LIVE-Badge jetzt links oben im Kasten Offener Gesamtbetrag; bei ausgeglichenem Stand erscheint dort der Bezahlt-Statuschip statt Alles erledigt, und die separate Live-Anzeige entfällt.",
-  "commitId": "0f75c50",
+  "note": "Der Gast-Zahlungslink ist breiter und zeigt LIVE neben Offener Gesamtbetrag; außerdem blockieren alte Zahlungslink-Locks das Löschen oder Umbenennen von Kontakten nicht mehr fälschlich.",
+  "commitId": "9a9f9b1",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.23.5",
+      "buildId": "20260512-9",
+      "releaseDate": "2026-05-12",
+      "releaseTime": "21:45",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Der Gast-Zahlungslink ist breiter und zeigt LIVE neben Offener Gesamtbetrag; außerdem blockieren alte Zahlungslink-Locks das Löschen oder Umbenennen von Kontakten nicht mehr fälschlich.",
+      "commitId": "9a9f9b1",
+      "obligation": "false"
+    },
     {
       "version": "1.23.4",
       "buildId": "20260512-8",

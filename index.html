@@ -25,8 +25,8 @@
     <meta name="application-name" content="TOP 2 App">
     <meta name="apple-mobile-web-app-title" content="TOP2">
     <meta name="theme-color" content="#4f46e5" />
-    <meta name="top2-app-version" content="1.23.4" />
-    <meta name="top2-build-id" content="20260512-8" />
+    <meta name="top2-app-version" content="1.23.5" />
+    <meta name="top2-build-id" content="20260512-9" />
     <meta name="msapplication-navbutton-color" content="#4f46e5">
     <meta name="apple-mobile-app-status-bar-style" content="black-translucent">
     <style>
@@ -55,7 +55,7 @@
     <link rel="apple-touch-icon" type="image/png" sizes="192x192"
         href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
 
-    <link rel="manifest" href="manifest.json?v=20260512-8">
+    <link rel="manifest" href="manifest.json?v=20260512-9">
 
     <link rel="stylesheet" href="style.css">
     
@@ -7705,16 +7705,18 @@
 
 
         <div id="guestView" class="view bg-gray-50 min-h-screen p-4">
-            <div class="max-w-md mx-auto bg-white shadow-xl rounded-xl overflow-hidden">
+            <div class="max-w-lg mx-auto bg-white shadow-xl rounded-xl overflow-hidden">
                 <div class="bg-indigo-600 p-6 text-white text-center">
                     <h1 class="text-2xl font-bold">Hallo <span id="guest-name-display">Gast</span>!</h1>
                     <p class="text-indigo-100 text-sm mt-1">Hier ist deine aktuelle Übersicht.</p>
                 </div>
 
                 <div class="p-6 space-y-6">
-                    <div id="guest-overview-summary" class="relative text-center p-4 pt-10 bg-gray-50 rounded-lg border border-gray-200">
-                        <div id="guest-overview-live-indicator" class="hidden absolute left-3 top-3 z-10 text-left"></div>
-                        <p class="text-xs text-gray-500 uppercase font-bold mb-1">Offener Gesamtbetrag</p>
+                    <div id="guest-overview-summary" class="text-center p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <div class="mb-1 flex items-center justify-center gap-3">
+                            <div id="guest-overview-live-indicator" class="hidden shrink-0"></div>
+                            <p class="text-xs text-gray-500 uppercase font-bold">Offener Gesamtbetrag</p>
+                        </div>
                         <p class="text-4xl font-extrabold text-gray-800" id="guest-total-display">0,00 €</p>
                         <p class="text-xs text-gray-500 mt-2" id="guest-status-text">Alles ausgeglichen.</p>
                     </div>

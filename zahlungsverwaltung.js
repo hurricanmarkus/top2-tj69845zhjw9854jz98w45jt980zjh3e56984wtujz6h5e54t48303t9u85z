@@ -1024,6 +1024,11 @@ async function ensureOnlinePaymentLinksCacheLoaded(forceReload = false) {
     return onlinePaymentLinksCache;
 }
 
+function isActiveIssuedOnlineLink(link = {}) {
+    const status = String(link?.status || '').trim().toLowerCase();
+    return Boolean(link?.id) && status !== 'closed';
+}
+
 function getIssuedOnlineLinksForGuest(targetId = '') {
     const token = String(targetId || '').trim();
     if (!token) return [];
@@ -1034,7 +1039,7 @@ function getIssuedOnlineLinksForGuest(targetId = '') {
 
 function getActiveIssuedLinkCount(target = {}) {
     const overviewActive = isGuestTokenLinkActive(target.raw || {});
-    const onlineActiveCount = getIssuedOnlineLinksForGuest(target.id).filter((link) => String(link?.status || '').trim().toLowerCase() !== 'closed').length;
+    const onlineActiveCount = getIssuedOnlineLinksForGuest(target.id).filter((link) => isActiveIssuedOnlineLink(link)).length;
     return (overviewActive ? 1 : 0) + onlineActiveCount;
 }
 
@@ -9967,10 +9972,16 @@ async function addContactFromSettings() {
 }
 
 async function deleteContact(id) {
-    const hasOnlineLinkedItems = allPayments.some(p =>
-        isPaymentLockedByOnlineLink(p) &&
-        (p.debtorId === id || p.creditorId === id)
-    );
+    let hasOnlineLinkedItems = false;
+
+    try {
+        await ensureOnlinePaymentLinksCacheLoaded(true);
+        hasOnlineLinkedItems = getIssuedOnlineLinksForGuest(id).some((link) => isActiveIssuedOnlineLink(link));
+    } catch (error) {
+        console.error(error);
+        alertUser("Aktive Online-Zahlungslinks konnten gerade nicht geprüft werden. Bitte erneut versuchen.", "error_long");
+        return;
+    }
 
     if (hasOnlineLinkedItems) {
         alertUser("Löschen blockiert: Für diesen Kontakt existiert mindestens ein aktiver Online-Zahlungslink.", "error_long");
@@ -10008,10 +10019,16 @@ async function deleteContact(id) {
 
 
 async function renameContact(id) {
-    const hasOnlineLinkedItems = allPayments.some(p =>
-        isPaymentLockedByOnlineLink(p) &&
-        (p.debtorId === id || p.creditorId === id)
-    );
+    let hasOnlineLinkedItems = false;
+
+    try {
+        await ensureOnlinePaymentLinksCacheLoaded(true);
+        hasOnlineLinkedItems = getIssuedOnlineLinksForGuest(id).some((link) => isActiveIssuedOnlineLink(link));
+    } catch (error) {
+        console.error(error);
+        alertUser("Aktive Online-Zahlungslinks konnten gerade nicht geprüft werden. Bitte erneut versuchen.", "error_long");
+        return;
+    }
 
     if (hasOnlineLinkedItems) {
         alertUser("Namensänderung blockiert: Aktiver Online-Zahlungslink vorhanden.", "error_long");
