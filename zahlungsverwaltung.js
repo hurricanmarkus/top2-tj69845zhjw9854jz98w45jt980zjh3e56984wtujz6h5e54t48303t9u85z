@@ -2333,8 +2333,9 @@ function renderIssuedLinksManagementModal() {
         ? state.entries.map((entry) => {
             const valid = entry.isActive === true;
             const overpaymentState = getOnlineOverpaymentDecisionState(entry.pendingOverpayment || {});
+            const creditAllowed = entry.overpaymentCreditAllowed !== false;
             const ownerDecisionButtons = entry.kind === 'payment_link' && overpaymentState.status === 'pending' && overpaymentState.isExpired
-                ? `<div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2"><button type="button" data-issued-link-owner-tip="${entry.id}" class="rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-white hover:bg-amber-600">Überzahlung als Trinkgeld</button><button type="button" data-issued-link-owner-credit="${entry.id}" class="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-50">Überzahlung als Guthaben</button></div>`
+                ? `<div class="mt-2 grid grid-cols-1 ${creditAllowed ? 'sm:grid-cols-2' : ''} gap-2"><button type="button" data-issued-link-owner-tip="${entry.id}" class="rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-white hover:bg-amber-600">Überzahlung als Trinkgeld</button>${creditAllowed ? `<button type="button" data-issued-link-owner-credit="${entry.id}" class="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-50">Überzahlung als Guthaben</button>` : ''}</div>`
                 : '';
             return `
                 <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
@@ -2529,6 +2530,7 @@ async function openIssuedLinksManagementModal(target = {}, customDirectLinks = n
                     createdAt: link.createdAt,
                     copyUrl: buildOnlinePaymentPublicUrl(link.id, link.token || ''),
                     pendingOverpayment: link.pendingOverpayment || null,
+                    overpaymentCreditAllowed: link.overpaymentCreditAllowed !== false,
                 });
             });
     }
@@ -3128,6 +3130,33 @@ function resolveGuestIdForPaymentLink(payment) {
     return '';
 }
 
+function resolveGuestTargetForPaymentLink(payment) {
+    if (!payment || typeof payment !== 'object') {
+        return { id: '', name: '' };
+    }
+
+    const myId = String((currentUser && currentUser.mode) || '').trim();
+    const debtorId = String(payment.debtorId || '').trim();
+    const creditorId = String(payment.creditorId || '').trim();
+    const debtorName = String(payment.debtorName || '').trim();
+    const creditorName = String(payment.creditorName || '').trim();
+
+    if (debtorId && debtorId !== myId) {
+        return { id: debtorId, name: debtorName || debtorId };
+    }
+    if (creditorId && creditorId !== myId) {
+        return { id: creditorId, name: creditorName || creditorId };
+    }
+    if (creditorId === myId && debtorName) {
+        return { id: '', name: debtorName };
+    }
+    if (debtorId === myId && creditorName) {
+        return { id: '', name: creditorName };
+    }
+
+    return { id: '', name: '' };
+}
+
 function getOnlinePaymentReferenceShortId(payment) {
     if (!payment || typeof payment !== 'object') return '';
     const explicit = String(payment.paymentShortId || payment.shortId || '').trim().toUpperCase();
@@ -3150,16 +3179,24 @@ function getOnlinePaymentReferenceCode(payment) {
     return normalizeOnlinePaymentReferenceCode(payment?.onlinePaymentReferenceCode || '');
 }
 
-function isPaymentCollectableViaOnlineLink(payment, guestId = '') {
+function isPaymentCollectableViaOnlineLink(payment, guestId = '', guestName = '') {
     const targetId = String(guestId || '').trim();
-    if (!payment || !targetId) return false;
+    const targetName = String(guestName || '').trim().toLowerCase();
+    if (!payment || (!targetId && !targetName)) return false;
     const status = String(payment.status || '').toLowerCase();
     if (!['open', 'pending_approval'].includes(status)) return false;
     if (payment.isTBD === true) return false;
     if (normalizeMoney(payment.remainingAmount) <= 0.001) return false;
     if (String(payment.createdBy || '') !== currentUser.mode) return false;
     if (String(payment.creditorId || '') !== currentUser.mode) return false;
-    if (String(payment.debtorId || '') !== targetId) return false;
+    const debtorId = String(payment.debtorId || '').trim();
+    const debtorName = String(payment.debtorName || '').trim().toLowerCase();
+    if (targetId) {
+        if (debtorId !== targetId) return false;
+    } else {
+        if (debtorId) return false;
+        if (!debtorName || debtorName !== targetName) return false;
+    }
     if (isPaymentLockedByOnlineLink(payment)) return false;
     return true;
 }
@@ -3413,6 +3450,7 @@ async function executeOnlineLinkSelectionCreation() {
     try {
         const result = await window.createOnlinePaymentLink({
             guestId: state.guestId,
+            guestName: state.guestName,
             paymentIds,
             linkType,
             selectionMode: state.selectionMode,
@@ -3469,19 +3507,20 @@ async function createOnlineLinkForPayment(paymentId) {
         return;
     }
 
-    const guestId = resolveGuestIdForPaymentLink(payment);
-    if (!guestId) {
+    const guestTarget = resolveGuestTargetForPaymentLink(payment);
+    if (!guestTarget.id && !guestTarget.name) {
         alertUser('Für diesen Eintrag konnte keine Zielperson ermittelt werden.', 'error');
         return;
     }
 
-    if (!isPaymentCollectableViaOnlineLink(payment, guestId)) {
+    if (!isPaymentCollectableViaOnlineLink(payment, guestTarget.id, guestTarget.name)) {
         alertUser('Online-Zahlungslinks sind nur für offene Einträge mit festem Betrag möglich, bei denen dir die Zielperson Geld schuldet.', 'error_long');
         return;
     }
 
     const result = await window.createOnlinePaymentLink({
-        guestId,
+        guestId: guestTarget.id,
+        guestName: guestTarget.name,
         paymentIds: [paymentId],
         linkType: 'single',
         selectionMode: 'selected',
@@ -3551,7 +3590,7 @@ async function renderOnlinePaymentLinks() {
             expiredOverpaymentLinks.reduce((sum, link) => sum + normalizeMoney(link?.pendingOverpayment?.amount), 0)
         );
         const expiredOverpaymentBanner = expiredOverpaymentLinks.length
-            ? `<div class="mb-3 rounded-lg border border-rose-300 bg-rose-50 p-3 text-[12px] text-rose-900"><span class="font-bold">Hinweis:</span> Für ${expiredOverpaymentLinks.length} Zahlungslink(s) ist die 24h-Frist der Überzahlungsentscheidung abgelaufen (gesamt ${expiredOverpaymentAmount.toFixed(2)} €). Bitte entscheide jetzt unten pro Link als <span class="font-bold">Trinkgeld</span> oder <span class="font-bold">Guthaben</span>.</div>`
+            ? `<div class="mb-3 rounded-lg border border-rose-300 bg-rose-50 p-3 text-[12px] text-rose-900"><span class="font-bold">Hinweis:</span> Für ${expiredOverpaymentLinks.length} Zahlungslink(s) ist die 24h-Frist der Überzahlungsentscheidung abgelaufen (gesamt ${expiredOverpaymentAmount.toFixed(2)} €). Bitte entscheide jetzt unten pro Link.</div>`
             : '';
 
         if (!links.length) {
@@ -3572,6 +3611,7 @@ async function renderOnlinePaymentLinks() {
             const paymentCount = Number(link.paymentCount || (Array.isArray(link.paymentIds) ? link.paymentIds.length : 0));
             const selectionLabel = getOnlineLinkSelectionModeLabel(link.selectionMode || (link.linkType === 'free' ? 'none' : 'selected'));
             const overpaymentState = getOnlineOverpaymentDecisionState(link.pendingOverpayment || {});
+            const creditAllowed = link.overpaymentCreditAllowed !== false;
             const targetPreview = Array.isArray(link.paymentTargets)
                 ? link.paymentTargets.slice(0, 3).map((entry) => `#${entry.paymentShortId || ''}`).filter(Boolean).join(', ')
                 : '';
@@ -3586,7 +3626,7 @@ async function renderOnlinePaymentLinks() {
                         ? `<div class="mt-2 rounded border border-gray-200 bg-gray-50 p-2 text-[11px] text-gray-700">Überzahlung ${overpaymentState.amount.toFixed(2)} € • 24h-Frist abgelaufen</div>`
                         : ''));
             const ownerDecisionLine = overpaymentState.status === 'pending' && overpaymentState.isExpired
-                ? `<div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2"><button type="button" data-owner-overpayment-tip="${link.id}" class="rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-white hover:bg-amber-600">Überzahlung als Trinkgeld</button><button type="button" data-owner-overpayment-credit="${link.id}" class="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-50">Überzahlung als Guthaben</button></div>`
+                ? `<div class="mt-2 grid grid-cols-1 ${creditAllowed ? 'sm:grid-cols-2' : ''} gap-2"><button type="button" data-owner-overpayment-tip="${link.id}" class="rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-white hover:bg-amber-600">Überzahlung als Trinkgeld</button>${creditAllowed ? `<button type="button" data-owner-overpayment-credit="${link.id}" class="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-50">Überzahlung als Guthaben</button>` : ''}</div>`
                 : '';
             return `
                 <div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm overflow-hidden">
@@ -11125,6 +11165,7 @@ export async function initializeGuestView(guestId, options = {}) {
                     }).join('')
                     : '<div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500">Noch kein einzelner Zahlungseintrag verfügbar.</div>';
 
+                const overpaymentCreditAllowed = paymentLinkData?.overpaymentCreditAllowed !== false;
                 const overpaymentHistoryHtml = overpaymentState?.isPending
                     ? `<div class="guest-payment-history-overpayment guest-payment-history-overpayment--blink">
                             <div class="guest-overpayment-title">Überzahlung erkannt</div>
@@ -11133,7 +11174,7 @@ export async function initializeGuestView(guestId, options = {}) {
                             <div class="guest-overpayment-deadline">Frist bis: ${overpaymentState.expiresAt ? overpaymentState.expiresAt.toLocaleString('de-DE') : '—'}</div>
                             <div class="guest-overpayment-action-grid">
                                 <button id="guest-overpayment-tip-btn" type="button" class="guest-overpayment-action-btn">Als Trinkgeld</button>
-                                <button id="guest-overpayment-credit-btn" type="button" class="guest-overpayment-action-btn">Als Guthaben</button>
+                                ${overpaymentCreditAllowed ? '<button id="guest-overpayment-credit-btn" type="button" class="guest-overpayment-action-btn">Als Guthaben</button>' : ''}
                             </div>
                         </div>`
                     : (overpaymentState?.isResolved
