@@ -1,14 +1,24 @@
 {
-  "version": "1.23.5",
-  "buildId": "20260512-9",
+  "version": "1.23.6",
+  "buildId": "20260512-10",
   "releaseDate": "2026-05-12",
-  "releaseTime": "21:45",
+  "releaseTime": "21:57",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Der Gast-Zahlungslink ist breiter und zeigt LIVE neben Offener Gesamtbetrag; außerdem blockieren alte Zahlungslink-Locks das Löschen oder Umbenennen von Kontakten nicht mehr fälschlich.",
-  "commitId": "9a9f9b1",
+  "note": "Gast- und Zahlungslinks zeigen unter dem Zahlhinweis jetzt den Empfänger an; auch im Details-Fenster der angeklickten Positionen wird der Empfänger eingeblendet.",
+  "commitId": "2955dd2",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.23.6",
+      "buildId": "20260512-10",
+      "releaseDate": "2026-05-12",
+      "releaseTime": "21:57",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Gast- und Zahlungslinks zeigen unter dem Zahlhinweis jetzt den Empfänger an; auch im Details-Fenster der angeklickten Positionen wird der Empfänger eingeblendet.",
+      "commitId": "2955dd2",
+      "obligation": "false"
+    },
     {
       "version": "1.23.5",
       "buildId": "20260512-9",

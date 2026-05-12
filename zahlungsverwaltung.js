@@ -1119,6 +1119,64 @@ async function enrichIssuedLinksWithHistoryCounts(entries = []) {
     });
 }
 
+function resolvePaymentParticipantDisplayName(personId = '') {
+    const token = String(personId || '').trim();
+    if (!token) return '';
+
+    const systemUser = allSystemUsers.find((entry) => String(entry?.id || '').trim() === token) || USERS[token];
+    const systemName = String(systemUser?.realName || systemUser?.name || '').trim();
+    if (systemName) return systemName;
+
+    const contact = allContacts.find((entry) => String(entry?.id || '').trim() === token);
+    const contactName = String(contact?.name || '').trim();
+    if (contactName) return contactName;
+
+    return token;
+}
+
+function resolveGuestPaymentRecipientName(payment = {}) {
+    if (!payment || typeof payment !== 'object') return '';
+
+    const directName = String(payment?.creditorName || '').trim();
+    if (directName) return directName;
+
+    const creditorId = String(payment?.creditorId || '').trim();
+    if (creditorId) return resolvePaymentParticipantDisplayName(creditorId);
+
+    const createdBy = String(payment?.createdBy || '').trim();
+    if (createdBy) return resolvePaymentParticipantDisplayName(createdBy);
+
+    return '';
+}
+
+function resolveGuestSummaryRecipientName(payments = []) {
+    const names = [...new Set((Array.isArray(payments) ? payments : [])
+        .map((payment) => resolveGuestPaymentRecipientName(payment))
+        .filter(Boolean))];
+
+    if (!names.length) return '';
+    if (names.length === 1) return names[0];
+    if (names.length === 2) return names.join(', ');
+    return `${names.slice(0, 2).join(', ')} +${names.length - 2} weitere`;
+}
+
+function buildGuestSummaryStatusHtml(baseText, options = {}) {
+    const recipientName = String(options?.recipientName || '').trim();
+    const showRecipient = options?.showRecipient === true && Boolean(recipientName);
+    const hasUnknownActiveAmount = options?.hasUnknownActiveAmount === true;
+    const fragments = [escapeHtmlInline(baseText)];
+
+    if (showRecipient) {
+        fragments.push(`<span class="text-[11px] text-gray-500 font-semibold">Empfänger: ${escapeHtmlInline(recipientName)}</span>`);
+    }
+
+    if (hasUnknownActiveAmount) {
+        fragments.push('<span class="text-[11px] text-orange-600 font-semibold">Hinweis: Es gibt Posten mit "Betrag unbekannt". Dieser Wert kann spaeter nachgetragen werden.</span>');
+    }
+
+    return fragments.join('<br>');
+}
+
 function closeSplitGroupDetailModal() {
     const modal = document.getElementById('splitGroupDetailModal');
     if (modal) {
@@ -11273,28 +11331,34 @@ export async function initializeGuestView(guestId, options = {}) {
         const totalEl = document.getElementById('guest-total-display');
         const statusEl = document.getElementById('guest-status-text');
 
-        if (totalDebt < -0.001) {
-            totalEl.textContent = Math.abs(totalDebt).toFixed(2) + " €";
-            totalEl.className = "text-4xl font-extrabold text-red-600";
-            statusEl.textContent = "Das musst du aktuell zahlen.";
-        } else if (totalDebt > 0.001) {
-            totalEl.textContent = totalDebt.toFixed(2) + " €";
-            totalEl.className = "text-4xl font-extrabold text-emerald-600";
-            statusEl.textContent = "Das bekommst du aktuell.";
-        } else {
-            totalEl.textContent = "0,00 €";
-            totalEl.className = "text-4xl font-extrabold text-gray-400";
-            statusEl.textContent = "Alles erledigt.";
-        }
-
-        // Unbekannte Beträge klar kennzeichnen
         activeItems.forEach((p) => {
             if (p.isTBD === true) hasUnknownActiveAmount = true;
         });
 
-        if (hasUnknownActiveAmount) {
-            const baseText = statusEl.textContent;
-            statusEl.innerHTML = `${baseText}<br><span class="text-[11px] text-orange-600 font-semibold">Hinweis: Es gibt Posten mit "Betrag unbekannt". Dieser Wert kann spaeter nachgetragen werden.</span>`;
+        const payableRecipientName = resolveGuestSummaryRecipientName(
+            activeItems.filter((p) => (p.isAdditionalPost === true) || (p.creditorId === p.createdBy))
+        );
+
+        if (totalDebt < -0.001) {
+            totalEl.textContent = Math.abs(totalDebt).toFixed(2) + " €";
+            totalEl.className = "text-4xl font-extrabold text-red-600";
+            statusEl.innerHTML = buildGuestSummaryStatusHtml('Das musst du aktuell zahlen.', {
+                recipientName: payableRecipientName,
+                showRecipient: true,
+                hasUnknownActiveAmount,
+            });
+        } else if (totalDebt > 0.001) {
+            totalEl.textContent = totalDebt.toFixed(2) + " €";
+            totalEl.className = "text-4xl font-extrabold text-emerald-600";
+            statusEl.innerHTML = buildGuestSummaryStatusHtml('Das bekommst du aktuell.', {
+                hasUnknownActiveAmount,
+            });
+        } else {
+            totalEl.textContent = "0,00 €";
+            totalEl.className = "text-4xl font-extrabold text-gray-400";
+            statusEl.innerHTML = buildGuestSummaryStatusHtml('Alles erledigt.', {
+                hasUnknownActiveAmount,
+            });
         }
 
         const overpaymentState = paymentLinkData
@@ -12043,11 +12107,16 @@ function openGuestDetailModal(p, options = {}) {
         && isGuestRemovableAdditionalPostInView(p, new Date());
     const safePaymentIdToken = String(p?.id || 'post').replace(/[^a-zA-Z0-9_-]/g, '');
     const removeActionButtonId = `guest-remove-additional-post-${safePaymentIdToken}`;
+    const recipientName = resolveGuestPaymentRecipientName(p);
+    const recipientInfoHtml = recipientName
+        ? `<p class="text-xs text-emerald-700 font-semibold mt-2">Empfänger: ${escapeHtml(recipientName)}</p>`
+        : '';
 
     content.innerHTML = `
         <div class="bg-gradient-to-br from-emerald-50 to-white p-4 rounded-xl border border-emerald-100 mb-4 shadow-sm">
             <h2 class="text-xl font-bold text-gray-800 mb-1">${escapeHtml(p.title || 'Eintrag')}</h2>
             <p class="text-xs text-gray-500">ID: #${escapeHtml(String(p.id || '').slice(-4).toUpperCase())} • Erstellt: ${createdStr}</p>
+            ${recipientInfoHtml}
         </div>
 
         <div class="grid grid-cols-2 gap-3 mb-4 text-center">
