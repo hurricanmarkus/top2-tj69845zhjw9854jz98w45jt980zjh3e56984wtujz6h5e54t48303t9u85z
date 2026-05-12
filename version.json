@@ -1,14 +1,24 @@
 {
-  "version": "1.23.1",
-  "buildId": "20260512-5",
+  "version": "1.23.2",
+  "buildId": "20260512-6",
   "releaseDate": "2026-05-12",
-  "releaseTime": "20:35",
+  "releaseTime": "20:54",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "1-Cent-Überzahlungen werden jetzt konsistent als Überzahlung behandelt, Stornos können den offenen Betrag nicht mehr über die Gesamtsumme hinaus anheben, und Alt-Datensätze mit inkonsistentem Restbetrag werden in der Detailansicht stabilisiert dargestellt.",
+  "note": "Die Link-Verwaltung zählt Aufrufe bei Direkt- und Übersichtslinks jetzt wieder pro aktuellem Link-Lebenszyklus statt alte, bereits beendete Links desselben Eintrags mitzurechnen.",
   "commitId": "1ffccd2",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.23.2",
+      "buildId": "20260512-6",
+      "releaseDate": "2026-05-12",
+      "releaseTime": "20:54",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Die Link-Verwaltung zählt Aufrufe bei Direkt- und Übersichtslinks jetzt wieder pro aktuellem Link-Lebenszyklus statt alte, bereits beendete Links desselben Eintrags mitzurechnen.",
+      "commitId": "1ffccd2",
+      "obligation": "false"
+    },
     {
       "version": "1.23.1",
       "buildId": "20260512-5",

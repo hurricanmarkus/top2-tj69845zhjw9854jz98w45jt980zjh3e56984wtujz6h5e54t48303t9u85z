@@ -1044,13 +1044,20 @@ async function fetchIssuedLinkAccessHistory(entry = {}) {
     try {
         const snap = await getDocs(ref);
         const events = [];
+        const lifecycleStartDate = parseDateSafe(entry?.createdAt);
+        const lifecycleStartMs = lifecycleStartDate ? lifecycleStartDate.getTime() : 0;
         snap.forEach((docSnap) => {
             const raw = docSnap.data() || {};
             const eventType = String(raw.eventType || '').trim().toLowerCase();
             if (entry.kind === 'payment_link' && eventType && eventType !== 'guest_open') return;
+            const createdAtValue = raw.createdAt?.toDate ? raw.createdAt.toDate() : raw.createdAt;
+            const createdAtDate = parseDateSafe(createdAtValue);
+            const createdAtMs = createdAtDate ? createdAtDate.getTime() : 0;
+            const shouldApplyLifecycleFilter = entry.kind === 'overview_link' || entry.kind === 'direct_payment_link';
+            if (shouldApplyLifecycleFilter && lifecycleStartMs > 0 && createdAtMs > 0 && createdAtMs < lifecycleStartMs) return;
             events.push({
                 id: docSnap.id,
-                createdAt: raw.createdAt?.toDate ? raw.createdAt.toDate() : raw.createdAt,
+                createdAt: createdAtDate || createdAtValue,
                 eventType: raw.eventType || 'guest_open',
             });
         });
