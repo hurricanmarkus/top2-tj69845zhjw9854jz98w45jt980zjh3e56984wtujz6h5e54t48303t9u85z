@@ -1,14 +1,34 @@
 {
-  "version": "1.23.2",
-  "buildId": "20260512-6",
+  "version": "1.23.4",
+  "buildId": "20260512-8",
   "releaseDate": "2026-05-12",
-  "releaseTime": "20:54",
+  "releaseTime": "21:30",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Die Link-Verwaltung zählt Aufrufe bei Direkt- und Übersichtslinks jetzt wieder pro aktuellem Link-Lebenszyklus statt alte, bereits beendete Links desselben Eintrags mitzurechnen.",
-  "commitId": "1ffccd2",
+  "note": "Im Gast-Zahlungslink sitzt das LIVE-Badge jetzt links oben im Kasten Offener Gesamtbetrag; bei ausgeglichenem Stand erscheint dort der Bezahlt-Statuschip statt Alles erledigt, und die separate Live-Anzeige entfällt.",
+  "commitId": "0f75c50",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.23.4",
+      "buildId": "20260512-8",
+      "releaseDate": "2026-05-12",
+      "releaseTime": "21:30",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Im Gast-Zahlungslink sitzt das LIVE-Badge jetzt links oben im Kasten Offener Gesamtbetrag; bei ausgeglichenem Stand erscheint dort der Bezahlt-Statuschip statt Alles erledigt, und die separate Live-Anzeige entfällt.",
+      "commitId": "0f75c50",
+      "obligation": "false"
+    },
+    {
+      "version": "1.23.3",
+      "buildId": "20260512-7",
+      "releaseDate": "2026-05-12",
+      "releaseTime": "21:05",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Direkt aus einem Eintrag erstellte Einzel-Zahlungslinks verwenden im Verwendungszweck jetzt wieder die Eintrags-ID statt einer generierten Link-Kennung, während Adressbuch-Links unverändert bleiben.",
+      "commitId": "0f75c50",
+      "obligation": "false"
+    },
     {
       "version": "1.23.2",
       "buildId": "20260512-6",

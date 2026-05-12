@@ -478,6 +478,12 @@ body.guest-link-mode #guestView {
     animation: guestLiveBadgePulse 1.2s ease-in-out infinite;
 }
 
+.guest-live-status-badge--paid {
+    background: #059669;
+    animation: none;
+    box-shadow: none;
+}
+
 .guest-live-status-box-body {
     display: flex;
     justify-content: center;
@@ -499,6 +505,13 @@ body.guest-link-mode #guestView {
     letter-spacing: 0.04em;
     text-transform: uppercase;
     animation: guestLiveStatusPulse 1.35s ease-in-out infinite;
+}
+
+.guest-live-status-chip--summary {
+    min-width: 9.5rem;
+    min-height: 2.65rem;
+    max-width: 100%;
+    padding: 0.6rem 0.9rem;
 }
 
 .guest-live-status-chip--open {

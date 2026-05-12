@@ -568,6 +568,28 @@ function getGuestLiveStatusMeta(status) {
     };
 }
 
+function buildGuestLiveStatusBadgeHtml(status) {
+    const liveMeta = getGuestLiveStatusMeta(status);
+    return `<span class="guest-live-status-badge ${liveMeta.isStatic ? 'guest-live-status-badge--paid' : ''}">LIVE</span>`;
+}
+
+function buildGuestLiveStatusChipHtml(status, options = {}) {
+    const liveMeta = getGuestLiveStatusMeta(status);
+    const summaryClassName = options.summary === true ? 'guest-live-status-chip--summary' : '';
+    return `
+        <span class="guest-live-status-chip ${summaryClassName} ${liveMeta.className} ${liveMeta.isStatic ? 'guest-live-status-chip--static' : ''}" role="status" aria-label="${liveMeta.label}">
+            <span class="guest-live-status-dot"></span>
+            <span class="guest-live-status-label">${liveMeta.label}</span>
+            <span class="guest-live-status-arrows ${liveMeta.isStatic ? 'guest-live-status-arrows--hidden' : ''}" aria-hidden="true">
+                <span class="guest-live-status-arrow guest-live-status-arrow--top">➜</span>
+                <span class="guest-live-status-arrow guest-live-status-arrow--right">➜</span>
+                <span class="guest-live-status-arrow guest-live-status-arrow--bottom">➜</span>
+                <span class="guest-live-status-arrow guest-live-status-arrow--left">➜</span>
+            </span>
+        </span>
+    `;
+}
+
 function resolveGuestPaymentHistoryEntryDate(entry = {}) {
     return parseDateSafe(entry?.bookedAt) || parseDateSafe(entry?.createdAt);
 }
@@ -750,6 +772,7 @@ function buildGuestViewLiveSignature(resultData = {}) {
             paidAmount: normalizeMoney(resultData.paymentLink.paidAmount),
             remainingAmount: normalizeMoney(resultData.paymentLink.remainingAmount),
             referenceCode: String(resultData.paymentLink.referenceCode || ''),
+            paymentReferenceCode: String(resultData.paymentLink.paymentReferenceCode || ''),
             lastWiseReference: String(resultData.paymentLink.lastWiseReference || ''),
             lastWiseBookedAt: String(resultData.paymentLink.lastWiseBookedAt || ''),
             pendingOverpaymentStatus: String(resultData.paymentLink.pendingOverpayment?.status || ''),
@@ -3582,6 +3605,7 @@ async function executeOnlineLinkSelectionCreation() {
                 paymentIds,
                 linkType,
                 selectionMode: state.selectionMode,
+                creationContext: 'address_book',
                 title: linkTitle,
                 baseUrl: window.location.origin + window.location.pathname,
                 banking: deriveOnlinePaymentBankingInfo(),
@@ -3654,6 +3678,7 @@ async function createOnlineLinkForPayment(paymentId) {
             paymentIds: [paymentId],
             linkType: 'single',
             selectionMode: 'selected',
+            creationContext: 'payment_entry',
             title: payment.title || 'Online-Zahlung',
             baseUrl: window.location.origin + window.location.pathname,
             banking: deriveOnlinePaymentBankingInfo(),
@@ -3746,8 +3771,9 @@ async function renderOnlinePaymentLinks() {
             const targetPreview = Array.isArray(link.paymentTargets)
                 ? link.paymentTargets.slice(0, 3).map((entry) => `#${entry.paymentShortId || ''}`).filter(Boolean).join(', ')
                 : '';
-            const referenceLine = link.referenceCode
-                ? `Ref: ${link.referenceCode}`
+            const effectiveReferenceCode = normalizeOnlinePaymentReferenceCode(link.paymentReferenceCode || link.referenceCode || '');
+            const referenceLine = effectiveReferenceCode
+                ? `Ref: ${effectiveReferenceCode}`
                 : `Auswahl: ${selectionLabel} • Einträge: ${paymentCount || '0'}`;
             const overpaymentLine = overpaymentState.isPending
                 ? `<div class="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">Überzahlung offen: <span class="font-bold">${overpaymentState.amount.toFixed(2)} €</span>${overpaymentState.expiresAt ? ` • Entscheidung bis ${overpaymentState.expiresAt.toLocaleString('de-DE')}` : ''}</div>`
@@ -10881,6 +10907,7 @@ export async function initializeGuestView(guestId, options = {}) {
             ? {
                 ...resultData.paymentLink,
                 referenceCode: normalizeOnlinePaymentReferenceCode(resultData.paymentLink.referenceCode || ''),
+                paymentReferenceCode: normalizeOnlinePaymentReferenceCode(resultData.paymentLink.paymentReferenceCode || ''),
                 paymentTargets: Array.isArray(resultData.paymentLink.paymentTargets)
                     ? resultData.paymentLink.paymentTargets.map((entry) => ({
                         ...entry,
@@ -10903,7 +10930,7 @@ export async function initializeGuestView(guestId, options = {}) {
         const positionAddBox = document.getElementById('guest-position-add-box');
         const addPositionModal = document.getElementById('guestAddPositionModal');
         const addPositionAmountInput = document.getElementById('guest-add-position-amount');
-        const liveStatusIndicator = document.getElementById('guest-live-status-indicator');
+        const overviewLiveIndicator = document.getElementById('guest-overview-live-indicator');
         const paymentHistoryBox = document.getElementById('guest-payment-history-box');
         document.getElementById('guest-overview-summary')?.classList.remove('hidden');
         document.getElementById('guest-open-posts-section')?.classList.remove('hidden');
@@ -10925,9 +10952,9 @@ export async function initializeGuestView(guestId, options = {}) {
             positionAddBox.innerHTML = '';
             positionAddBox.classList.add('hidden');
         }
-        if (liveStatusIndicator) {
-            liveStatusIndicator.innerHTML = '';
-            liveStatusIndicator.classList.add('hidden');
+        if (overviewLiveIndicator) {
+            overviewLiveIndicator.innerHTML = '';
+            overviewLiveIndicator.classList.add('hidden');
         }
         if (paymentHistoryBox) {
             paymentHistoryBox.innerHTML = '';
@@ -11265,6 +11292,15 @@ export async function initializeGuestView(guestId, options = {}) {
             )
             : 'open';
 
+        if (paymentLinkData && overviewLiveIndicator) {
+            overviewLiveIndicator.innerHTML = buildGuestLiveStatusBadgeHtml(effectiveLinkStatus);
+            overviewLiveIndicator.classList.remove('hidden');
+        }
+
+        if (paymentLinkData && statusEl && Math.abs(totalDebt) <= 0.001 && !hasUnknownActiveAmount) {
+            statusEl.innerHTML = buildGuestLiveStatusChipHtml(effectiveLinkStatus, { summary: true });
+        }
+
         if (paymentLinkData && paymentHistoryBox) {
             const paidAmountTotal = normalizeMoney(paymentLinkData.paidAmount);
             const historyEntries = normalizeGuestPaymentHistoryEntries(paymentLinkData.paymentHistory || []);
@@ -11403,30 +11439,6 @@ export async function initializeGuestView(guestId, options = {}) {
             }
         }
 
-        if (paymentLinkData && liveStatusIndicator) {
-            const liveMeta = getGuestLiveStatusMeta(effectiveLinkStatus);
-            liveStatusIndicator.innerHTML = `
-                <div class="guest-live-status-box ${liveMeta.boxClassName || ''}">
-                    <div class="guest-live-status-box-header">
-                        <span class="guest-live-status-box-title"><span class="guest-live-status-badge">LIVE</span> Anzeige Zahlungseingang</span>
-                    </div>
-                    <div class="guest-live-status-box-body">
-                        <div class="guest-live-status-chip ${liveMeta.className} ${liveMeta.isStatic ? 'guest-live-status-chip--static' : ''}">
-                            <span class="guest-live-status-dot"></span>
-                            <span class="guest-live-status-label">${liveMeta.label}</span>
-                            <span class="guest-live-status-arrows ${liveMeta.isStatic ? 'guest-live-status-arrows--hidden' : ''}" aria-hidden="true">
-                                <span class="guest-live-status-arrow guest-live-status-arrow--top">➜</span>
-                                <span class="guest-live-status-arrow guest-live-status-arrow--right">➜</span>
-                                <span class="guest-live-status-arrow guest-live-status-arrow--bottom">➜</span>
-                                <span class="guest-live-status-arrow guest-live-status-arrow--left">➜</span>
-                            </span>
-                        </div>
-                    </div>
-                </div>
-            `;
-            liveStatusIndicator.classList.remove('hidden');
-        }
-
         if (paymentLinkData && onlineBox) {
             const bankInfo = paymentLinkData.bankInfo || {};
             const statusText = getOnlineLinkStatusLabel(effectiveLinkStatus);
@@ -11460,7 +11472,7 @@ export async function initializeGuestView(guestId, options = {}) {
                     shortId: getOnlinePaymentReferenceShortId(payment),
                 }));
             const payableTotal = payableItems.reduce((sum, item) => sum + normalizeMoney(item.amount), 0);
-            const aggregateReferenceCode = normalizeOnlinePaymentReferenceCode(paymentLinkData.referenceCode || payableItems[0]?.referenceCode || '');
+            const aggregateReferenceCode = normalizeOnlinePaymentReferenceCode(paymentLinkData.paymentReferenceCode || paymentLinkData.referenceCode || payableItems[0]?.referenceCode || '');
             const aggregateAmount = remainingAmount > 0.001 ? remainingAmount : payableTotal;
             let selectedInstruction = {
                 id: 'total-payment',
