@@ -1,14 +1,34 @@
 {
-  "version": "1.22.43",
-  "buildId": "20260512-2",
+  "version": "1.23.0",
+  "buildId": "20260512-4",
   "releaseDate": "2026-05-12",
-  "releaseTime": "15:21",
+  "releaseTime": "15:40",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Gruppenmaster fragt jetzt beim Löschen von Positionen im Anlegen und Bearbeiten nach, und die Summenbox 'Offen' bei 'Summe (alle Personen)' wird nur noch bei echtem Restbetrag orange dargestellt.",
-  "commitId": "5a21df5",
+  "note": "Zahlungslinks unterstützen bei Überzahlung jetzt auch Rückerstattung mit automatischer Gegenbuchung, und die bekannte Overlay-Ladeanzeige erscheint nun konsistent bei relevanten Link-Erzeugungen in der Zahlungsverwaltung.",
+  "commitId": "1ffccd2",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.23.0",
+      "buildId": "20260512-4",
+      "releaseDate": "2026-05-12",
+      "releaseTime": "15:40",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Zahlungslinks unterstützen bei Überzahlung jetzt auch Rückerstattung mit automatischer Gegenbuchung, und die bekannte Overlay-Ladeanzeige erscheint nun konsistent bei relevanten Link-Erzeugungen in der Zahlungsverwaltung.",
+      "commitId": "1ffccd2",
+      "obligation": "false"
+    },
+    {
+      "version": "1.22.44",
+      "buildId": "20260512-3",
+      "releaseDate": "2026-05-12",
+      "releaseTime": "15:30",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Im Zahlungslink-Zahlungsverlauf kommt 'IBAN (letzte 4)' jetzt aus den sender-/payer-spezifischen Firebase-Wise-Matchdaten statt aus generischen Gegenkonto-Feldern, die oft die falsche Seite geliefert haben.",
+      "commitId": "1ffccd2",
+      "obligation": "false"
+    },
     {
       "version": "1.22.43",
       "buildId": "20260512-2",

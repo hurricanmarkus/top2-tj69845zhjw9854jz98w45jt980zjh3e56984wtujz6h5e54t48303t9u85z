@@ -474,6 +474,48 @@ async function runWithPaymentActionLock(task, options = {}) {
     }
 }
 
+async function runWithLinkGenerationOverlay(task, loadingText = 'Link wird erstellt...') {
+    return runWithPaymentActionLock(task, { loadingText });
+}
+
+async function ensureOverviewGuestLinkToken(collectionName, docId, currentToken = '', currentStatus = '') {
+    let tokenToUse = String(currentToken || '').trim();
+    const tokenStatus = String(currentStatus || '').trim().toLowerCase();
+    if (tokenToUse && tokenStatus !== 'closed') return tokenToUse;
+
+    tokenToUse = generateGuestToken();
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', collectionName, docId), {
+        guestToken: tokenToUse,
+        guestTokenCreatedAt: serverTimestamp(),
+        guestTokenViews: 0,
+        guestTokenStatus: 'open',
+        guestTokenClosedAt: deleteField()
+    });
+    return tokenToUse;
+}
+
+async function ensureDirectPaymentGuestLinkToken(paymentId, currentToken = '', currentStatus = '') {
+    let tokenToUse = String(currentToken || '').trim();
+    const tokenStatus = String(currentStatus || '').trim().toLowerCase();
+    if (tokenToUse && tokenStatus !== 'closed') return tokenToUse;
+
+    tokenToUse = generateGuestToken();
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payments', paymentId), {
+        guestToken: tokenToUse,
+        guestTokenCreatedAt: serverTimestamp(),
+        guestTokenViews: 0,
+        guestTokenStatus: 'open',
+        guestTokenClosedAt: deleteField()
+    });
+    return tokenToUse;
+}
+
+function shouldCreateGuestLink(currentToken = '', currentStatus = '') {
+    const tokenToUse = String(currentToken || '').trim();
+    const tokenStatus = String(currentStatus || '').trim().toLowerCase();
+    return !tokenToUse || tokenStatus === 'closed';
+}
+
 function getGuestLiveStatusMeta(status) {
     const token = String(status || '').trim().toLowerCase();
     if (token === 'paid') {
@@ -2254,6 +2296,18 @@ async function resolveOnlinePaymentOverpaymentByOwnerAction(linkId, resolution) 
     await window.resolveOnlinePaymentOverpaymentByOwner({ linkId, resolution });
 }
 
+async function handleOnlineOverpaymentResolutionByOwner(linkId, resolution, onResolved = null) {
+    await runWithPaymentActionLock(async () => {
+        await resolveOnlinePaymentOverpaymentByOwnerAction(linkId, resolution);
+        if (typeof onResolved === 'function') {
+            await onResolved();
+        }
+        alertUser(getOnlineOverpaymentResolutionSuccessMessage(resolution), 'success');
+    }, {
+        loadingText: getOnlineOverpaymentResolutionLoadingText(resolution),
+    });
+}
+
 async function refreshOnlinePaymentLinksForPaymentsAction(paymentIds = [], options = {}) {
     const uniquePaymentIds = [...new Set((Array.isArray(paymentIds) ? paymentIds : [])
         .map((id) => String(id || '').trim())
@@ -2349,7 +2403,7 @@ function renderIssuedLinksManagementModal() {
             const overpaymentState = getOnlineOverpaymentDecisionState(entry.pendingOverpayment || {});
             const creditAllowed = entry.overpaymentCreditAllowed !== false;
             const ownerDecisionButtons = entry.kind === 'payment_link' && overpaymentState.status === 'pending' && overpaymentState.isExpired
-                ? `<div class="mt-2 grid grid-cols-1 ${creditAllowed ? 'sm:grid-cols-2' : ''} gap-2"><button type="button" data-issued-link-owner-tip="${entry.id}" class="rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-white hover:bg-amber-600">Überzahlung als Trinkgeld</button>${creditAllowed ? `<button type="button" data-issued-link-owner-credit="${entry.id}" class="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-50">Überzahlung als Guthaben</button>` : ''}</div>`
+                ? `<div class="mt-2 grid grid-cols-1 ${creditAllowed ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-2"><button type="button" data-issued-link-owner-tip="${entry.id}" class="rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-white hover:bg-amber-600">Überzahlung als Trinkgeld</button>${creditAllowed ? `<button type="button" data-issued-link-owner-credit="${entry.id}" class="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-50">Überzahlung als Guthaben</button>` : ''}<button type="button" data-issued-link-owner-refund="${entry.id}" class="rounded-lg border border-sky-300 bg-white px-3 py-2 text-xs font-bold text-sky-800 hover:bg-sky-50">Rückerstattung</button></div>`
                 : '';
             return `
                 <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
@@ -2446,18 +2500,18 @@ function renderIssuedLinksManagementModal() {
         if (tipBtn) {
             const linkId = tipBtn.getAttribute('data-issued-link-owner-tip') || '';
             try {
-                await resolveOnlinePaymentOverpaymentByOwnerAction(linkId, 'tip');
-                await ensureOnlinePaymentLinksCacheLoaded(true);
-                alertUser('Überzahlung als Trinkgeld entschieden.', 'success');
-                await renderContactList();
-                await openIssuedLinksManagementModal({
-                    id: state.targetId,
-                    targetName: state.targetName,
-                    collectionName: state.collectionName,
-                    raw: state.collectionName === 'private-contacts'
-                        ? (allContacts.find((entry) => entry.id === state.targetId) || {})
-                        : ((allSystemUsers.find((entry) => entry.id === state.targetId) || USERS[state.targetId] || {})),
-                }, state.rawCustomDirectLinks);
+                await handleOnlineOverpaymentResolutionByOwner(linkId, 'tip', async () => {
+                    await ensureOnlinePaymentLinksCacheLoaded(true);
+                    await renderContactList();
+                    await openIssuedLinksManagementModal({
+                        id: state.targetId,
+                        targetName: state.targetName,
+                        collectionName: state.collectionName,
+                        raw: state.collectionName === 'private-contacts'
+                            ? (allContacts.find((entry) => entry.id === state.targetId) || {})
+                            : ((allSystemUsers.find((entry) => entry.id === state.targetId) || USERS[state.targetId] || {})),
+                    }, state.rawCustomDirectLinks);
+                });
             } catch (error) {
                 console.error(error);
                 alertUser(error?.message || 'Überzahlung konnte nicht entschieden werden.', 'error');
@@ -2469,18 +2523,41 @@ function renderIssuedLinksManagementModal() {
         if (creditBtn) {
             const linkId = creditBtn.getAttribute('data-issued-link-owner-credit') || '';
             try {
-                await resolveOnlinePaymentOverpaymentByOwnerAction(linkId, 'credit');
-                await ensureOnlinePaymentLinksCacheLoaded(true);
-                alertUser('Überzahlung als Guthaben entschieden.', 'success');
-                await renderContactList();
-                await openIssuedLinksManagementModal({
-                    id: state.targetId,
-                    targetName: state.targetName,
-                    collectionName: state.collectionName,
-                    raw: state.collectionName === 'private-contacts'
-                        ? (allContacts.find((entry) => entry.id === state.targetId) || {})
-                        : ((allSystemUsers.find((entry) => entry.id === state.targetId) || USERS[state.targetId] || {})),
-                }, state.rawCustomDirectLinks);
+                await handleOnlineOverpaymentResolutionByOwner(linkId, 'credit', async () => {
+                    await ensureOnlinePaymentLinksCacheLoaded(true);
+                    await renderContactList();
+                    await openIssuedLinksManagementModal({
+                        id: state.targetId,
+                        targetName: state.targetName,
+                        collectionName: state.collectionName,
+                        raw: state.collectionName === 'private-contacts'
+                            ? (allContacts.find((entry) => entry.id === state.targetId) || {})
+                            : ((allSystemUsers.find((entry) => entry.id === state.targetId) || USERS[state.targetId] || {})),
+                    }, state.rawCustomDirectLinks);
+                });
+            } catch (error) {
+                console.error(error);
+                alertUser(error?.message || 'Überzahlung konnte nicht entschieden werden.', 'error');
+            }
+            return;
+        }
+
+        const refundBtn = e.target.closest('[data-issued-link-owner-refund]');
+        if (refundBtn) {
+            const linkId = refundBtn.getAttribute('data-issued-link-owner-refund') || '';
+            try {
+                await handleOnlineOverpaymentResolutionByOwner(linkId, 'refund', async () => {
+                    await ensureOnlinePaymentLinksCacheLoaded(true);
+                    await renderContactList();
+                    await openIssuedLinksManagementModal({
+                        id: state.targetId,
+                        targetName: state.targetName,
+                        collectionName: state.collectionName,
+                        raw: state.collectionName === 'private-contacts'
+                            ? (allContacts.find((entry) => entry.id === state.targetId) || {})
+                            : ((allSystemUsers.find((entry) => entry.id === state.targetId) || USERS[state.targetId] || {})),
+                    }, state.rawCustomDirectLinks);
+                });
             } catch (error) {
                 console.error(error);
                 alertUser(error?.message || 'Überzahlung konnte nicht entschieden werden.', 'error');
@@ -2638,7 +2715,26 @@ function getOnlineOverpaymentResolutionLabel(value = '') {
     const token = String(value || '').trim().toLowerCase();
     if (token === 'tip' || token === 'trinkgeld') return 'Trinkgeld';
     if (token === 'credit' || token === 'guthaben') return 'Als Guthaben';
+    if (token === 'refund' || token === 'rückerstattung' || token === 'rueckerstattung') return 'Rückerstattung';
     return 'Offen';
+}
+
+function getOnlineOverpaymentResolutionLoadingText(value = '') {
+    const token = String(value || '').trim().toLowerCase();
+    if (token === 'tip' || token === 'trinkgeld') return 'Trinkgeld wird gespeichert...';
+    if (token === 'credit' || token === 'guthaben') return 'Guthaben wird gespeichert...';
+    if (token === 'refund' || token === 'rückerstattung' || token === 'rueckerstattung') return 'Rückerstattung wird angelegt...';
+    return 'Überzahlungsentscheidung wird gespeichert...';
+}
+
+function getOnlineOverpaymentResolutionSuccessMessage(value = '') {
+    const token = String(value || '').trim().toLowerCase();
+    if (token === 'tip' || token === 'trinkgeld') return 'Überzahlung als Trinkgeld gespeichert.';
+    if (token === 'credit' || token === 'guthaben') return 'Überzahlung als Guthaben gespeichert.';
+    if (token === 'refund' || token === 'rückerstattung' || token === 'rueckerstattung') {
+        return 'Rückerstattung gespeichert. Die Rückerstattung kann bis zu 10 Tage dauern. Für Rückfragen ist immer die beteiligte Person in der Transaktion zu kontaktieren.';
+    }
+    return 'Überzahlungsentscheidung gespeichert.';
 }
 
 function normalizeOnlineTargetAccount(raw = {}) {
@@ -3462,23 +3558,25 @@ async function executeOnlineLinkSelectionCreation() {
 
     setButtonLoading(confirmBtn, true);
     try {
-        const result = await window.createOnlinePaymentLink({
-            guestId: state.guestId,
-            guestName: state.guestName,
-            paymentIds,
-            linkType,
-            selectionMode: state.selectionMode,
-            title: linkTitle,
-            baseUrl: window.location.origin + window.location.pathname,
-            banking: deriveOnlinePaymentBankingInfo(),
-        });
+        await runWithLinkGenerationOverlay(async () => {
+            const result = await window.createOnlinePaymentLink({
+                guestId: state.guestId,
+                guestName: state.guestName,
+                paymentIds,
+                linkType,
+                selectionMode: state.selectionMode,
+                title: linkTitle,
+                baseUrl: window.location.origin + window.location.pathname,
+                banking: deriveOnlinePaymentBankingInfo(),
+            });
 
-        closeOnlineLinkSelectionModal();
-        const linkUrl = result?.data?.linkUrl || buildOnlinePaymentPublicUrl(result?.data?.linkId, result?.data?.token);
-        const copied = await copyTextToClipboardSafe(linkUrl);
-        alertUser(copied ? 'Online-Zahlungslink kopiert.' : 'Online-Zahlungslink erstellt.', 'success');
-        await renderOnlinePaymentLinks();
-        await renderContactList();
+            closeOnlineLinkSelectionModal();
+            const linkUrl = result?.data?.linkUrl || buildOnlinePaymentPublicUrl(result?.data?.linkId, result?.data?.token);
+            const copied = await copyTextToClipboardSafe(linkUrl);
+            alertUser(copied ? 'Online-Zahlungslink kopiert.' : 'Online-Zahlungslink erstellt.', 'success');
+            await renderOnlinePaymentLinks();
+            await renderContactList();
+        }, 'Zahlungslink wird erstellt...');
     } catch (error) {
         console.error(error);
         alertUser(error?.message || 'Online-Zahlungslink konnte nicht erstellt werden.', 'error');
@@ -3532,22 +3630,24 @@ async function createOnlineLinkForPayment(paymentId) {
         return;
     }
 
-    const result = await window.createOnlinePaymentLink({
-        guestId: guestTarget.id,
-        guestName: guestTarget.name,
-        paymentIds: [paymentId],
-        linkType: 'single',
-        selectionMode: 'selected',
-        title: payment.title || 'Online-Zahlung',
-        baseUrl: window.location.origin + window.location.pathname,
-        banking: deriveOnlinePaymentBankingInfo(),
-    });
+    await runWithLinkGenerationOverlay(async () => {
+        const result = await window.createOnlinePaymentLink({
+            guestId: guestTarget.id,
+            guestName: guestTarget.name,
+            paymentIds: [paymentId],
+            linkType: 'single',
+            selectionMode: 'selected',
+            title: payment.title || 'Online-Zahlung',
+            baseUrl: window.location.origin + window.location.pathname,
+            banking: deriveOnlinePaymentBankingInfo(),
+        });
 
-    const linkUrl = result?.data?.linkUrl || buildOnlinePaymentPublicUrl(result?.data?.linkId, result?.data?.token);
-    const copied = await copyTextToClipboardSafe(linkUrl);
-    alertUser(copied ? 'Online-Zahlungslink kopiert.' : 'Online-Zahlungslink erstellt.', 'success');
-    await renderOnlinePaymentLinks();
-    await renderContactList();
+        const linkUrl = result?.data?.linkUrl || buildOnlinePaymentPublicUrl(result?.data?.linkId, result?.data?.token);
+        const copied = await copyTextToClipboardSafe(linkUrl);
+        alertUser(copied ? 'Online-Zahlungslink kopiert.' : 'Online-Zahlungslink erstellt.', 'success');
+        await renderOnlinePaymentLinks();
+        await renderContactList();
+    }, 'Zahlungslink wird erstellt...');
 }
 
 async function createOnlineLinkForGuestContact(guestId, guestName = '') {
@@ -3640,7 +3740,7 @@ async function renderOnlinePaymentLinks() {
                         ? `<div class="mt-2 rounded border border-gray-200 bg-gray-50 p-2 text-[11px] text-gray-700">Überzahlung ${overpaymentState.amount.toFixed(2)} € • 24h-Frist abgelaufen</div>`
                         : ''));
             const ownerDecisionLine = overpaymentState.status === 'pending' && overpaymentState.isExpired
-                ? `<div class="mt-2 grid grid-cols-1 ${creditAllowed ? 'sm:grid-cols-2' : ''} gap-2"><button type="button" data-owner-overpayment-tip="${link.id}" class="rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-white hover:bg-amber-600">Überzahlung als Trinkgeld</button>${creditAllowed ? `<button type="button" data-owner-overpayment-credit="${link.id}" class="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-50">Überzahlung als Guthaben</button>` : ''}</div>`
+                ? `<div class="mt-2 grid grid-cols-1 ${creditAllowed ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-2"><button type="button" data-owner-overpayment-tip="${link.id}" class="rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-white hover:bg-amber-600">Überzahlung als Trinkgeld</button>${creditAllowed ? `<button type="button" data-owner-overpayment-credit="${link.id}" class="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-50">Überzahlung als Guthaben</button>` : ''}<button type="button" data-owner-overpayment-refund="${link.id}" class="rounded-lg border border-sky-300 bg-white px-3 py-2 text-xs font-bold text-sky-800 hover:bg-sky-50">Rückerstattung</button></div>`
                 : '';
             return `
                 <div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm overflow-hidden">
@@ -3702,9 +3802,9 @@ async function renderOnlinePaymentLinks() {
             button.addEventListener('click', async () => {
                 const linkId = button.getAttribute('data-owner-overpayment-tip') || '';
                 try {
-                    await resolveOnlinePaymentOverpaymentByOwnerAction(linkId, 'tip');
-                    await renderOnlinePaymentLinks();
-                    alertUser('Überzahlung als Trinkgeld entschieden.', 'success');
+                    await handleOnlineOverpaymentResolutionByOwner(linkId, 'tip', async () => {
+                        await renderOnlinePaymentLinks();
+                    });
                 } catch (error) {
                     console.error(error);
                     alertUser(error?.message || 'Überzahlung konnte nicht entschieden werden.', 'error');
@@ -3716,9 +3816,23 @@ async function renderOnlinePaymentLinks() {
             button.addEventListener('click', async () => {
                 const linkId = button.getAttribute('data-owner-overpayment-credit') || '';
                 try {
-                    await resolveOnlinePaymentOverpaymentByOwnerAction(linkId, 'credit');
-                    await renderOnlinePaymentLinks();
-                    alertUser('Überzahlung als Guthaben entschieden.', 'success');
+                    await handleOnlineOverpaymentResolutionByOwner(linkId, 'credit', async () => {
+                        await renderOnlinePaymentLinks();
+                    });
+                } catch (error) {
+                    console.error(error);
+                    alertUser(error?.message || 'Überzahlung konnte nicht entschieden werden.', 'error');
+                }
+            });
+        });
+
+        container.querySelectorAll('[data-owner-overpayment-refund]').forEach((button) => {
+            button.addEventListener('click', async () => {
+                const linkId = button.getAttribute('data-owner-overpayment-refund') || '';
+                try {
+                    await handleOnlineOverpaymentResolutionByOwner(linkId, 'refund', async () => {
+                        await renderOnlinePaymentLinks();
+                    });
                 } catch (error) {
                     console.error(error);
                     alertUser(error?.message || 'Überzahlung konnte nicht entschieden werden.', 'error');
@@ -9902,35 +10016,30 @@ async function renderContactList() {
 
     // Helper: Link kopieren (FÜR ALLE ERLAUBT)
     const handleCopyLink = async (collectionName, docId, currentToken, currentStatus = '') => {
-        let tokenToUse = currentToken;
-
-        if (!tokenToUse || String(currentStatus || '').trim().toLowerCase() === 'closed') {
+        const copyAction = async () => {
             try {
-                tokenToUse = generateGuestToken();
-                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', collectionName, docId), {
-                    guestToken: tokenToUse,
-                    guestTokenCreatedAt: serverTimestamp(),
-                    guestTokenViews: 0,
-                    guestTokenStatus: 'open',
-                    guestTokenClosedAt: deleteField()
-                });
+                const tokenToUse = await ensureOverviewGuestLinkToken(collectionName, docId, currentToken, currentStatus);
+                const link = buildOverviewGuestUrl(docId, tokenToUse);
+                const copied = await copyTextToClipboardSafe(link);
+                if (copied) {
+                    alertUser('Sicherer Gast-Link kopiert!', 'success');
+                }
             } catch (e) {
                 console.error(e);
                 if (e.code === 'permission-denied') {
-                    alertUser("Fehler: Du hast keine Berechtigung, einen Link für diesen Benutzer zu erstellen.", "error");
+                    alertUser('Fehler: Du hast keine Berechtigung, einen Link für diesen Benutzer zu erstellen.', 'error');
                 } else {
-                    alertUser("Fehler beim Erstellen des Links.", "error");
+                    alertUser('Fehler beim Erstellen des Links.', 'error');
                 }
-                return;
             }
+        };
+
+        if (shouldCreateGuestLink(currentToken, currentStatus)) {
+            await runWithLinkGenerationOverlay(copyAction, 'Gastlink wird erstellt...');
+            return;
         }
 
-        const baseUrl = window.location.origin + window.location.pathname;
-        const link = `${baseUrl}?guest_id=${docId}&token=${tokenToUse}`;
-        
-        navigator.clipboard.writeText(link).then(() => {
-            alertUser("Sicherer Gast-Link kopiert!", "success");
-        }).catch(() => prompt("Link kopieren:", link));
+        await copyAction();
     };
 
 
@@ -10621,38 +10730,36 @@ async function shareContactLink(contactId) {
     // Sicherheit: Da es nur Read-Only ist und man die ID erraten müsste (was bei Firestore IDs schwer ist),
     // ist das für diesen Zweck ("geheimer Link") ausreichend.
 
-    const baseUrl = window.location.origin + window.location.pathname;
-    let tokenToUse = null;
+    let currentToken = '';
+    let currentStatus = '';
 
     try {
         const ref = doc(db, 'artifacts', appId, 'public', 'data', 'private-contacts', contactId);
         const snap = await getDoc(ref);
         if (snap.exists()) {
-            const d = snap.data();
-            tokenToUse = d.guestToken || null;
+            const d = snap.data() || {};
+            currentToken = String(d.guestToken || '').trim();
+            currentStatus = String(d.guestTokenStatus || '').trim();
         }
 
-        if (!tokenToUse) {
-            tokenToUse = generateGuestToken();
-            await updateDoc(ref, {
-                guestToken: tokenToUse,
-                guestTokenCreatedAt: serverTimestamp(),
-                guestTokenViews: 0
-            });
+        const copyAction = async () => {
+            const tokenToUse = await ensureOverviewGuestLinkToken('private-contacts', contactId, currentToken, currentStatus);
+            const link = buildOverviewGuestUrl(contactId, tokenToUse);
+            const copied = await copyTextToClipboardSafe(link);
+            if (copied) {
+                alertUser('Geheimer Link kopiert! 📋\nSende ihn an deinen Freund.', 'success');
+            }
+        };
+
+        if (shouldCreateGuestLink(currentToken, currentStatus)) {
+            await runWithLinkGenerationOverlay(copyAction, 'Gastlink wird erstellt...');
+            return;
         }
+
+        await copyAction();
     } catch (e) {
         console.error(e);
-    }
-
-    const link = tokenToUse
-        ? `${baseUrl}?guest_id=${contactId}&token=${tokenToUse}`
-        : `${baseUrl}?guest_id=${contactId}`;
-
-    try {
-        await navigator.clipboard.writeText(link);
-        alertUser("Geheimer Link kopiert! 📋\nSende ihn an deinen Freund.", "success");
-    } catch (err) {
-        prompt("Link kopieren:", link);
+        alertUser('Geheimer Link konnte nicht erstellt werden.', 'error');
     }
 }
 
@@ -11186,9 +11293,10 @@ export async function initializeGuestView(guestId, options = {}) {
                             <div class="guest-overpayment-amount">${overpaymentState.amount.toFixed(2)} €</div>
                             <div class="guest-overpayment-text">Bitte innerhalb von <span class="font-bold">24 Stunden</span> entscheiden.</div>
                             <div class="guest-overpayment-deadline">Frist bis: ${overpaymentState.expiresAt ? overpaymentState.expiresAt.toLocaleString('de-DE') : '—'}</div>
-                            <div class="guest-overpayment-action-grid">
+                            <div class="guest-overpayment-action-grid ${overpaymentCreditAllowed ? 'guest-overpayment-action-grid--triple' : ''}">
                                 <button id="guest-overpayment-tip-btn" type="button" class="guest-overpayment-action-btn">Als Trinkgeld</button>
-                                ${overpaymentCreditAllowed ? '<button id="guest-overpayment-credit-btn" type="button" class="guest-overpayment-action-btn">Als Guthaben</button>' : ''}
+                                ${overpaymentCreditAllowed ? '<button id="guest-overpayment-credit-btn" type="button" class="guest-overpayment-action-btn guest-overpayment-action-btn--secondary">Als Guthaben</button>' : ''}
+                                <button id="guest-overpayment-refund-btn" type="button" class="guest-overpayment-action-btn guest-overpayment-action-btn--refund">Rückerstattung</button>
                             </div>
                         </div>`
                     : (overpaymentState?.isResolved
@@ -11632,23 +11740,23 @@ export async function initializeGuestView(guestId, options = {}) {
                             token: urlToken,
                             resolution,
                         });
-                        alertUser(resolution === 'tip' ? 'Überzahlung als Trinkgeld gespeichert.' : 'Überzahlung als Guthaben gespeichert.', 'success');
+                        alertUser(getOnlineOverpaymentResolutionSuccessMessage(resolution), 'success');
                         await initializeGuestView(guestId, { skipTracking: true });
                     } catch (error) {
                         console.error(error);
                         alertUser(error?.message || 'Überzahlungsentscheidung konnte nicht gespeichert werden.', 'error');
                     }
                 }, {
-                    loadingText: resolution === 'tip'
-                        ? 'Trinkgeld wird gespeichert...'
-                        : 'Guthaben wird gespeichert...',
+                    loadingText: getOnlineOverpaymentResolutionLoadingText(resolution),
                 });
             };
 
             const tipDecisionBtn = paymentHistoryBox?.querySelector('#guest-overpayment-tip-btn') || onlineBox.querySelector('#guest-overpayment-tip-btn');
             const creditDecisionBtn = paymentHistoryBox?.querySelector('#guest-overpayment-credit-btn') || onlineBox.querySelector('#guest-overpayment-credit-btn');
+            const refundDecisionBtn = paymentHistoryBox?.querySelector('#guest-overpayment-refund-btn') || onlineBox.querySelector('#guest-overpayment-refund-btn');
             tipDecisionBtn?.addEventListener('click', async () => resolveOverpayment('tip'));
             creditDecisionBtn?.addEventListener('click', async () => resolveOverpayment('credit'));
+            refundDecisionBtn?.addEventListener('click', async () => resolveOverpayment('refund'));
         }
 
         if (paymentLinkData && positionAddBox) {
@@ -12888,38 +12996,30 @@ function openShareModal(id) {
     // Link kopieren Logik (BUG 2 FIX & Einzel-Link Logik)
     btnLink.onclick = () => {
         // Wir prüfen kurz, ob es ein "echter" registrierter App-User ist (kein Kontakt)
-        const baseUrl = window.location.origin + window.location.pathname;
-
         (async () => {
-            let tokenToUse = p.guestToken || null;
-            const tokenStatus = String(p.guestTokenStatus || '').trim().toLowerCase();
-
-            if (!tokenToUse || tokenStatus === 'closed') {
+            const copyAction = async () => {
                 try {
-                    tokenToUse = generateGuestToken();
-                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payments', id), {
-                        guestToken: tokenToUse,
-                        guestTokenCreatedAt: serverTimestamp(),
-                        guestTokenViews: 0,
-                        guestTokenStatus: 'open',
-                        guestTokenClosedAt: deleteField()
-                    });
+                    const tokenToUse = await ensureDirectPaymentGuestLinkToken(id, p.guestToken || '', p.guestTokenStatus || '');
                     p.guestToken = tokenToUse;
                     p.guestTokenStatus = 'open';
+
+                    const link = buildDirectPaymentGuestUrl(id, tokenToUse);
+                    const copied = await copyTextToClipboardSafe(link);
+                    if (copied) {
+                        alertUser('Link für DIESE EINE Zahlung kopiert!', 'success');
+                    }
                 } catch (e) {
                     console.error(e);
+                    alertUser('Link konnte nicht erstellt werden.', 'error');
                 }
+            };
+
+            if (shouldCreateGuestLink(p.guestToken || '', p.guestTokenStatus || '')) {
+                await runWithLinkGenerationOverlay(copyAction, 'Gastlink wird erstellt...');
+                return;
             }
 
-            const link = tokenToUse
-                ? `${baseUrl}?guest_id=PAYMENT:${id}&token=${tokenToUse}`
-                : `${baseUrl}?guest_id=PAYMENT:${id}`;
-
-            navigator.clipboard.writeText(link).then(() => { 
-                alertUser("Link für DIESE EINE Zahlung kopiert!", "success"); 
-            }).catch(() => {
-                prompt("Link kopieren:", link);
-            });
+            await copyAction();
         })();
     };
 
