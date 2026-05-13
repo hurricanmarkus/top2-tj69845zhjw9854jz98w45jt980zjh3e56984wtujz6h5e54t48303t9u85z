@@ -1419,7 +1419,6 @@ async function checkAndPromptForAppUpdate(registration) {
             if (!hasUpdate) {
                 setDeferredUpdateVersion('');
                 setMandatoryContentLock(false);
-                closeVersionInfoModal();
                 startMainAppInitializationIfAllowed();
                 return;
             }
