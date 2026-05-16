@@ -67,6 +67,18 @@ body {
     }
 }
 
+@keyframes guestPaymentNoticePulse {
+    0%,
+    100% {
+        color: #1e40af;
+        text-shadow: 0 0 0 rgba(30, 64, 175, 0.12);
+    }
+    50% {
+        color: #1d4ed8;
+        text-shadow: 0 0 9px rgba(59, 130, 246, 0.2);
+    }
+}
+
 .fullscreen-loading-overlay {
     position: fixed;
     top: 0;
@@ -894,6 +906,170 @@ body.guest-link-mode #guestView {
     color: #075985;
 }
 
+.guest-payment-notice-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.guest-payment-notice-modal.hidden {
+    display: none;
+}
+
+.guest-payment-notice-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(1px);
+}
+
+.guest-payment-notice-panel {
+    position: relative;
+    width: min(100%, 35rem);
+    max-height: calc(100vh - 2rem);
+    overflow: auto;
+}
+
+.guest-payment-notice-card {
+    border: 2px solid #2563eb;
+    border-radius: 1rem;
+    padding: 0.95rem;
+    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.28);
+}
+
+.guest-payment-notice-card--partial {
+    background: #dbeafe;
+}
+
+.guest-payment-notice-card--full {
+    background: #dcfce7;
+}
+
+.guest-payment-notice-card--overpayment {
+    background: #fef3c7;
+}
+
+.guest-payment-notice-title {
+    font-size: 1rem;
+    font-weight: 900;
+    color: #1e3a8a;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.guest-payment-notice-row {
+    margin-top: 0.55rem;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    font-size: 0.84rem;
+    color: #1f2937;
+}
+
+.guest-payment-notice-row strong {
+    font-size: 1.02rem;
+    font-weight: 900;
+    color: #111827;
+    white-space: nowrap;
+}
+
+.guest-payment-notice-row--result strong {
+    color: #1e3a8a;
+}
+
+.guest-payment-notice-sub {
+    margin-top: 0.18rem;
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: #334155;
+}
+
+.guest-payment-notice-sub--warning {
+    color: #7c2d12;
+}
+
+.guest-payment-notice-divider {
+    margin-top: 0.55rem;
+    border-top: 1px solid rgba(30, 58, 138, 0.28);
+}
+
+.guest-payment-notice-security {
+    margin-top: 0.62rem;
+    border: 1px solid #93c5fd;
+    background: rgba(255, 255, 255, 0.72);
+    border-radius: 0.72rem;
+    padding: 0.5rem 0.62rem;
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: #1e3a8a;
+    line-height: 1.35;
+}
+
+.guest-payment-notice-actions {
+    margin-top: 0.75rem;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.45rem;
+}
+
+.guest-payment-notice-actions--triple {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.guest-payment-notice-btn {
+    border: 1px solid #1d4ed8;
+    border-radius: 0.72rem;
+    padding: 0.6rem 0.52rem;
+    font-size: 0.75rem;
+    font-weight: 900;
+    text-align: center;
+    transition: transform 0.14s ease, filter 0.14s ease;
+}
+
+.guest-payment-notice-btn:hover {
+    transform: translateY(-1px);
+    filter: brightness(0.98);
+}
+
+.guest-payment-notice-btn:active {
+    transform: translateY(0);
+}
+
+.guest-payment-notice-btn--primary {
+    background: #2563eb;
+    color: #ffffff;
+}
+
+.guest-payment-notice-btn--secondary {
+    background: #ffffff;
+    color: #1e3a8a;
+}
+
+.guest-payment-notice-btn--refund {
+    background: #e0f2fe;
+    color: #075985;
+    border-color: #0284c7;
+}
+
+.guest-payment-notice-btn--disabled,
+.guest-payment-notice-btn--disabled:hover {
+    background: #e5e7eb;
+    color: #9ca3af;
+    border-color: #cbd5e1;
+    cursor: not-allowed;
+    transform: none;
+    filter: none;
+}
+
+.guest-payment-notice-amount--pulse {
+    animation: guestPaymentNoticePulse 1.05s ease-in-out infinite;
+}
+
 @keyframes guestHistoryLatestPulse {
     0%,
     100% {
@@ -955,6 +1131,10 @@ body.guest-link-mode #guestView {
     }
 
     .guest-overpayment-action-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .guest-payment-notice-actions--triple {
         grid-template-columns: 1fr;
     }
 }

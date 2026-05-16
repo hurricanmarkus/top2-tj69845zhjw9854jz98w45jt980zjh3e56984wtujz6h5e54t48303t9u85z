@@ -1,14 +1,24 @@
 {
-  "version": "1.23.9",
-  "buildId": "20260516-2",
+  "version": "1.24.1",
+  "buildId": "20260516-3",
   "releaseDate": "2026-05-16",
-  "releaseTime": "13:02",
+  "releaseTime": "13:31",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Zahlungslinks nutzen im Gastflow jetzt konsequent die Eintrags-Referenz TOP2-ID-XXXX-YYYY-YYYY; die IBAN-Anzeige im Zahlungsverlauf priorisiert den echten Senderwert (payer/sender) statt falscher Fallback-Felder.",
-  "commitId": "4bbe8a2",
+  "note": "Zahlungseingänge im Gast-Zahlungslink erscheinen jetzt als persistentes Pflicht-Modal (Teilzahlung/Vollzahlung/Überzahlung) mit Sicherheits-Hinweis; die alte Überzahlungs-Auswahl wurde aus der Verlaufsliste entfernt und Entscheidungen/Bestätigung werden serverseitig bis zur Aktion gespeichert.",
+  "commitId": "8fab79d",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.24.1",
+      "buildId": "20260516-3",
+      "releaseDate": "2026-05-16",
+      "releaseTime": "13:31",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Zahlungseingänge im Gast-Zahlungslink erscheinen jetzt als persistentes Pflicht-Modal (Teilzahlung/Vollzahlung/Überzahlung) mit Sicherheits-Hinweis; die alte Überzahlungs-Auswahl wurde aus der Verlaufsliste entfernt und Entscheidungen/Bestätigung werden serverseitig bis zur Aktion gespeichert.",
+      "commitId": "8fab79d",
+      "obligation": "false"
+    },
     {
       "version": "1.23.9",
       "buildId": "20260516-2",

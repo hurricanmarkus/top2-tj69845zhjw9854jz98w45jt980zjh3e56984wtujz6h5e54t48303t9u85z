@@ -1674,6 +1674,7 @@ async function initializeFirebase() {
                     }
                 };
                 window.guestResolveOnlinePaymentOverpayment = httpsCallable(functions, 'guestResolveOnlinePaymentOverpayment');
+                window.guestAcknowledgeOnlinePaymentNotice = httpsCallable(functions, 'guestAcknowledgeOnlinePaymentNotice');
                 window.resolveOnlinePaymentOverpaymentByOwner = httpsCallable(functions, 'resolveOnlinePaymentOverpaymentByOwner');
 
                 window.firebaseFunctionsInitialised = true;

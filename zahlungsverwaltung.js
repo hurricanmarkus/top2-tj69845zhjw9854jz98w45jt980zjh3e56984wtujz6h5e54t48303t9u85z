@@ -68,7 +68,6 @@ let paymentActionUiLockActive = false;
 let guestViewTrackedAccessKeys = new Set();
 let showGuestClosedPosts = false;
 let guestHistoryBoxExpanded = true;
-let guestResolvedOverpaymentExpanded = false;
 const GUEST_LINK_TRACKING_SESSION_KEY = 'zv_guest_link_tracking_v1';
 const GUEST_LINK_TRACKING_SESSION_IDS_KEY = 'zv_guest_link_tracking_session_ids_v1';
 const GUEST_LINK_TRACKING_PENDING_MS = 30000;
@@ -793,6 +792,13 @@ function buildGuestViewLiveSignature(resultData = {}) {
             lastWiseBookedAt: String(resultData.paymentLink.lastWiseBookedAt || ''),
             pendingOverpaymentStatus: String(resultData.paymentLink.pendingOverpayment?.status || ''),
             pendingOverpaymentAmount: normalizeMoney(resultData.paymentLink.pendingOverpayment?.amount),
+            pendingPaymentNoticeStatus: String(resultData.paymentLink.pendingPaymentNotice?.status || ''),
+            pendingPaymentNoticeType: String(resultData.paymentLink.pendingPaymentNotice?.noticeType || ''),
+            pendingPaymentNoticeAmountReceived: normalizeMoney(resultData.paymentLink.pendingPaymentNotice?.amountReceived),
+            pendingPaymentNoticeAmountOpenBefore: normalizeMoney(resultData.paymentLink.pendingPaymentNotice?.amountOpenBefore),
+            pendingPaymentNoticeAmountOpenAfter: normalizeMoney(resultData.paymentLink.pendingPaymentNotice?.amountOpenAfter),
+            pendingPaymentNoticeAmountOverpaid: normalizeMoney(resultData.paymentLink.pendingPaymentNotice?.amountOverpaid),
+            pendingPaymentNoticeBookedAt: String(resultData.paymentLink.pendingPaymentNotice?.bookedAt || ''),
         }
         : null;
     const paymentHistory = normalizeGuestPaymentHistoryEntries(resultData?.paymentLink?.paymentHistory || [])
@@ -2858,6 +2864,142 @@ function getOnlineOverpaymentResolutionSuccessMessage(value = '') {
         return 'Rückerstattung gespeichert. Die Rückerstattung kann bis zu 10 Tage dauern. Für Rückfragen ist immer die beteiligte Person in der Transaktion zu kontaktieren.';
     }
     return 'Überzahlungsentscheidung gespeichert.';
+}
+
+function normalizeGuestPendingPaymentNoticeState(raw = {}) {
+    const status = String(raw?.status || '').trim().toLowerCase();
+    const noticeType = String(raw?.noticeType || '').trim().toLowerCase();
+    const amountReceived = normalizeMoney(raw?.amountReceived);
+    const amountOpenBefore = normalizeMoney(raw?.amountOpenBefore);
+    const amountOpenAfter = normalizeMoney(raw?.amountOpenAfter);
+    const amountOverpaid = normalizeMoney(raw?.amountOverpaid);
+    return {
+        status,
+        noticeType,
+        isPending: status === 'pending' && ['partial_payment', 'full_payment', 'overpayment'].includes(noticeType),
+        amountReceived,
+        amountOpenBefore,
+        amountOpenAfter,
+        amountOverpaid,
+        currency: String(raw?.currency || 'EUR').trim().toUpperCase() || 'EUR',
+        bookedAt: String(raw?.bookedAt || '').trim(),
+        reference: String(raw?.reference || '').trim(),
+    };
+}
+
+function getGuestPendingPaymentNoticeTitle(noticeType = '') {
+    const token = String(noticeType || '').trim().toLowerCase();
+    if (token === 'partial_payment') return 'Teilzahlung eingegangen';
+    if (token === 'full_payment') return 'Vollständige Zahlung eingegangen';
+    if (token === 'overpayment') return 'Überzahlung erkannt';
+    return 'Zahlung eingegangen';
+}
+
+function ensureGuestPaymentEntryNoticeModalHost() {
+    let modal = document.getElementById('guest-payment-entry-notice-modal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.id = 'guest-payment-entry-notice-modal';
+    modal.className = 'guest-payment-notice-modal hidden';
+    modal.innerHTML = '<div class="guest-payment-notice-backdrop"></div><div class="guest-payment-notice-panel" role="dialog" aria-modal="true"></div>';
+    document.body.appendChild(modal);
+    return modal;
+}
+
+function renderGuestPaymentEntryNoticeModal(options = {}) {
+    const modal = ensureGuestPaymentEntryNoticeModalHost();
+    const panel = modal.querySelector('.guest-payment-notice-panel');
+    if (!panel) return;
+
+    const noticeState = options?.noticeState && typeof options.noticeState === 'object'
+        ? options.noticeState
+        : null;
+
+    if (!noticeState?.isPending) {
+        panel.innerHTML = '';
+        modal.classList.add('hidden');
+        return;
+    }
+
+    const historyEntries = Array.isArray(options?.historyEntries) ? options.historyEntries : [];
+    const latestPositiveEntry = historyEntries.find((entry) => entry && entry.isCancellation !== true && normalizeMoney(entry.amount) > 0.001) || null;
+    const sourceDate = parseDateSafe(noticeState.bookedAt) || latestPositiveEntry?.dateValue || null;
+    const dateLabel = sourceDate ? formatLinkDateTime(sourceDate) : '—';
+    const senderName = stripSelfNameMarker(latestPositiveEntry?.payerName || 'Unbekannt') || 'Unbekannt';
+    const senderIbanLast4 = String(latestPositiveEntry?.payerIbanLast4 || '').trim().toUpperCase();
+    const senderLabel = senderIbanLast4 ? `${senderName} (••••${senderIbanLast4})` : senderName;
+
+    const fallbackReceived = normalizeMoney(latestPositiveEntry?.amount);
+    const amountReceived = noticeState.amountReceived > 0.001 ? noticeState.amountReceived : fallbackReceived;
+    const fallbackRemaining = Math.max(0, normalizeMoney(options?.remainingAmount));
+    const amountOpenAfter = Math.max(0, noticeState.amountOpenAfter > 0.001 ? noticeState.amountOpenAfter : fallbackRemaining);
+    const amountOverpaid = Math.max(0, noticeState.amountOverpaid);
+    const amountOpenBefore = Math.max(0, noticeState.amountOpenBefore > 0.001
+        ? noticeState.amountOpenBefore
+        : Number((amountReceived - amountOverpaid + amountOpenAfter).toFixed(2)));
+
+    const noticeType = String(noticeState.noticeType || '').trim().toLowerCase();
+    const isPartial = noticeType === 'partial_payment';
+    const isOverpayment = noticeType === 'overpayment';
+    const overpaymentCreditAllowed = options?.overpaymentCreditAllowed !== false;
+    const creditorName = stripSelfNameMarker(options?.creditorName || 'Unbekannt') || 'Unbekannt';
+
+    const rowLabel = isOverpayment ? 'Zu viel überwiesen' : 'Noch offen';
+    const rowValue = isOverpayment ? amountOverpaid : amountOpenAfter;
+    const amountPulseClass = isPartial ? 'guest-payment-notice-amount--pulse' : '';
+    const toneClass = isOverpayment
+        ? 'guest-payment-notice-card--overpayment'
+        : (isPartial ? 'guest-payment-notice-card--partial' : 'guest-payment-notice-card--full');
+
+    panel.innerHTML = `
+        <div class="guest-payment-notice-card ${toneClass}">
+            <div class="guest-payment-notice-title">${escapeHtmlInline(getGuestPendingPaymentNoticeTitle(noticeType))}</div>
+            <div class="guest-payment-notice-row">
+                <span>Überwiesen</span>
+                <strong>${amountReceived.toFixed(2)} €</strong>
+            </div>
+            <div class="guest-payment-notice-sub">Eingang: ${escapeHtmlInline(dateLabel)}</div>
+            <div class="guest-payment-notice-sub">Senderkonto: ${escapeHtmlInline(senderLabel)}</div>
+            <div class="guest-payment-notice-row">
+                <span>Offen davor</span>
+                <strong>${amountOpenBefore.toFixed(2)} €</strong>
+            </div>
+            <div class="guest-payment-notice-divider"></div>
+            <div class="guest-payment-notice-row guest-payment-notice-row--result">
+                <span>${rowLabel}</span>
+                <strong class="${amountPulseClass}">${rowValue.toFixed(2)} €</strong>
+            </div>
+            <div class="guest-payment-notice-security">
+                Falls es Probleme/Fehler bei der Zahlung gibt, ist die Person ${escapeHtmlInline(creditorName)} über die bekannten Kommunikationsmöglichkeiten zu kontaktieren.
+            </div>
+            ${isOverpayment
+                ? `<div class="guest-payment-notice-actions guest-payment-notice-actions--triple">
+                        <button type="button" data-guest-payment-notice-action="tip" class="guest-payment-notice-btn guest-payment-notice-btn--primary">Trinkgeld / Tip</button>
+                        <button type="button" data-guest-payment-notice-action="credit" class="guest-payment-notice-btn guest-payment-notice-btn--secondary ${overpaymentCreditAllowed ? '' : 'guest-payment-notice-btn--disabled'}" ${overpaymentCreditAllowed ? '' : 'disabled'}>Als Guthaben aufbuchen</button>
+                        <button type="button" data-guest-payment-notice-action="refund" class="guest-payment-notice-btn guest-payment-notice-btn--refund">Rückerstattung beantragen</button>
+                    </div>
+                    ${overpaymentCreditAllowed ? '' : '<div class="guest-payment-notice-sub guest-payment-notice-sub--warning">Als Guthaben aufbuchen ist für diesen Empfänger nicht verfügbar.</div>'}`
+                : '<div class="guest-payment-notice-actions"><button type="button" data-guest-payment-notice-action="ack" class="guest-payment-notice-btn guest-payment-notice-btn--primary">Verstanden</button></div>'}
+        </div>
+    `;
+
+    const onAcknowledge = typeof options?.onAcknowledge === 'function' ? options.onAcknowledge : null;
+    const onResolveOverpayment = typeof options?.onResolveOverpayment === 'function' ? options.onResolveOverpayment : null;
+    panel.querySelector('[data-guest-payment-notice-action="ack"]')?.addEventListener('click', () => {
+        if (onAcknowledge) onAcknowledge();
+    });
+    panel.querySelector('[data-guest-payment-notice-action="tip"]')?.addEventListener('click', () => {
+        if (onResolveOverpayment) onResolveOverpayment('tip');
+    });
+    panel.querySelector('[data-guest-payment-notice-action="credit"]')?.addEventListener('click', () => {
+        if (!overpaymentCreditAllowed) return;
+        if (onResolveOverpayment) onResolveOverpayment('credit');
+    });
+    panel.querySelector('[data-guest-payment-notice-action="refund"]')?.addEventListener('click', () => {
+        if (onResolveOverpayment) onResolveOverpayment('refund');
+    });
+
+    modal.classList.remove('hidden');
 }
 
 function normalizeOnlineTargetAccount(raw = {}) {
@@ -11385,9 +11527,12 @@ export async function initializeGuestView(guestId, options = {}) {
             });
         }
 
-        const overpaymentState = paymentLinkData
-            ? getOnlineOverpaymentDecisionState(paymentLinkData.pendingOverpayment || {})
-            : null;
+        const pendingPaymentNoticeState = paymentLinkData
+            ? normalizeGuestPendingPaymentNoticeState(paymentLinkData.pendingPaymentNotice || {})
+            : normalizeGuestPendingPaymentNoticeState({});
+        const historyEntries = paymentLinkData
+            ? normalizeGuestPaymentHistoryEntries(paymentLinkData.paymentHistory || [])
+            : [];
         const effectiveLinkStatus = paymentLinkData
             ? resolveOnlineLinkDisplayStatus(
                 paymentLinkData.status || 'open',
@@ -11396,6 +11541,8 @@ export async function initializeGuestView(guestId, options = {}) {
                 paymentLinkData.remainingAmount,
             )
             : 'open';
+
+        renderGuestPaymentEntryNoticeModal({ noticeState: null });
 
         if (paymentLinkData && overviewLiveIndicator) {
             overviewLiveIndicator.innerHTML = buildGuestLiveStatusBadgeHtml(effectiveLinkStatus);
@@ -11408,14 +11555,9 @@ export async function initializeGuestView(guestId, options = {}) {
 
         if (paymentLinkData && paymentHistoryBox) {
             const paidAmountTotal = normalizeMoney(paymentLinkData.paidAmount);
-            const historyEntries = normalizeGuestPaymentHistoryEntries(paymentLinkData.paymentHistory || []);
             const hasVisibleHistory = historyEntries.length > 0
                 || paidAmountTotal > 0.001
-                || Boolean(overpaymentState?.isPending || overpaymentState?.isResolved || overpaymentState?.status === 'expired' || overpaymentState?.status === 'owner-warning');
-
-            if (!overpaymentState?.isResolved) {
-                guestResolvedOverpaymentExpanded = false;
-            }
+                || pendingPaymentNoticeState.isPending;
 
             if (hasVisibleHistory) {
                 const historyRowsHtml = historyEntries.length
@@ -11459,38 +11601,6 @@ export async function initializeGuestView(guestId, options = {}) {
                     }).join('')
                     : '<div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500">Noch kein einzelner Zahlungseintrag verfügbar.</div>';
 
-                const overpaymentCreditAllowed = paymentLinkData?.overpaymentCreditAllowed !== false;
-                const overpaymentHistoryHtml = overpaymentState?.isPending
-                    ? `<div class="guest-payment-history-overpayment guest-payment-history-overpayment--blink">
-                            <div class="guest-overpayment-title">Überzahlung erkannt</div>
-                            <div class="guest-overpayment-amount">${overpaymentState.amount.toFixed(2)} €</div>
-                            <div class="guest-overpayment-text">Bitte innerhalb von <span class="font-bold">24 Stunden</span> entscheiden.</div>
-                            <div class="guest-overpayment-deadline">Frist bis: ${overpaymentState.expiresAt ? overpaymentState.expiresAt.toLocaleString('de-DE') : '—'}</div>
-                            <div class="guest-overpayment-action-grid ${overpaymentCreditAllowed ? 'guest-overpayment-action-grid--triple' : ''}">
-                                <button id="guest-overpayment-tip-btn" type="button" class="guest-overpayment-action-btn">Als Trinkgeld</button>
-                                ${overpaymentCreditAllowed ? '<button id="guest-overpayment-credit-btn" type="button" class="guest-overpayment-action-btn guest-overpayment-action-btn--secondary">Als Guthaben</button>' : ''}
-                                <button id="guest-overpayment-refund-btn" type="button" class="guest-overpayment-action-btn guest-overpayment-action-btn--refund">Rückerstattung</button>
-                            </div>
-                        </div>`
-                    : (overpaymentState?.isResolved
-                        ? `<div class="guest-payment-history-overpayment guest-payment-history-overpayment--resolved guest-payment-history-overpayment--resolved-collapsible">
-                                <button type="button" class="guest-overpayment-resolved-toggle" data-overpayment-resolved-toggle aria-expanded="${guestResolvedOverpaymentExpanded ? 'true' : 'false'}">
-                                    <span class="guest-overpayment-resolved-summary">Überzahlung ${overpaymentState.amount.toFixed(2)} € • ${getOnlineOverpaymentResolutionLabel(overpaymentState.resolution)}</span>
-                                    <span class="guest-payment-history-entry-chevron guest-overpayment-resolved-chevron" aria-hidden="true">▾</span>
-                                </button>
-                                <div class="guest-overpayment-resolved-details ${guestResolvedOverpaymentExpanded ? '' : 'hidden'}" data-overpayment-resolved-panel>
-                                    <div class="guest-overpayment-title">Überzahlung</div>
-                                    <div class="guest-overpayment-amount">${overpaymentState.amount.toFixed(2)} €</div>
-                                    <div class="guest-overpayment-text">wurde entschieden:</div>
-                                    <div class="guest-overpayment-decision">${getOnlineOverpaymentResolutionLabel(overpaymentState.resolution)}</div>
-                                </div>
-                            </div>`
-                        : (overpaymentState?.status === 'expired'
-                            ? '<div class="guest-payment-history-overpayment">Die 24-Stunden-Frist für die Überzahlungsentscheidung ist abgelaufen.</div>'
-                            : (overpaymentState?.status === 'owner-warning'
-                                ? '<div class="guest-payment-history-overpayment">Überzahlung ist zur Entscheidung an den Link-Ersteller übergeben.</div>'
-                                : '')));
-
                 paymentHistoryBox.innerHTML = `
                     <div class="guest-payment-history-box">
                         <div class="guest-payment-history-header">
@@ -11501,7 +11611,6 @@ export async function initializeGuestView(guestId, options = {}) {
                             <span class="guest-payment-history-total">Bereits bezahlt: ${paidAmountTotal.toFixed(2)} €</span>
                         </div>
                         <div class="${guestHistoryBoxExpanded ? '' : 'hidden'}" data-history-box-panel>
-                            ${overpaymentHistoryHtml}
                             <div class="guest-payment-history-list">${historyRowsHtml}</div>
                         </div>
                     </div>
@@ -11514,15 +11623,6 @@ export async function initializeGuestView(guestId, options = {}) {
                     guestHistoryBoxExpanded = !isExpanded;
                     historyBoxToggleButton.setAttribute('aria-expanded', guestHistoryBoxExpanded ? 'true' : 'false');
                     if (historyBoxPanel) historyBoxPanel.classList.toggle('hidden', !guestHistoryBoxExpanded);
-                });
-
-                const resolvedOverpaymentToggleButton = paymentHistoryBox.querySelector('[data-overpayment-resolved-toggle]');
-                const resolvedOverpaymentPanel = paymentHistoryBox.querySelector('[data-overpayment-resolved-panel]');
-                resolvedOverpaymentToggleButton?.addEventListener('click', () => {
-                    const isExpanded = resolvedOverpaymentToggleButton.getAttribute('aria-expanded') === 'true';
-                    guestResolvedOverpaymentExpanded = !isExpanded;
-                    resolvedOverpaymentToggleButton.setAttribute('aria-expanded', guestResolvedOverpaymentExpanded ? 'true' : 'false');
-                    if (resolvedOverpaymentPanel) resolvedOverpaymentPanel.classList.toggle('hidden', !guestResolvedOverpaymentExpanded);
                 });
 
                 const historyToggleButtons = paymentHistoryBox.querySelectorAll('[data-history-toggle-index]');
@@ -11550,6 +11650,7 @@ export async function initializeGuestView(guestId, options = {}) {
             const expectedAmount = normalizeMoney(paymentLinkData.expectedAmount);
             const paidAmount = normalizeMoney(paymentLinkData.paidAmount);
             const remainingAmount = normalizeMoney(paymentLinkData.remainingAmount);
+            const overpaymentCreditAllowed = paymentLinkData?.overpaymentCreditAllowed !== false;
             const popularBanks = getPopularEuBankEntries();
             const paymentTargetsById = new Map(
                 (Array.isArray(paymentLinkData.paymentTargets) ? paymentLinkData.paymentTargets : []).map((entry) => [String(entry?.paymentId || ''), entry || {}])
@@ -11909,12 +12010,44 @@ export async function initializeGuestView(guestId, options = {}) {
                 });
             };
 
-            const tipDecisionBtn = paymentHistoryBox?.querySelector('#guest-overpayment-tip-btn') || onlineBox.querySelector('#guest-overpayment-tip-btn');
-            const creditDecisionBtn = paymentHistoryBox?.querySelector('#guest-overpayment-credit-btn') || onlineBox.querySelector('#guest-overpayment-credit-btn');
-            const refundDecisionBtn = paymentHistoryBox?.querySelector('#guest-overpayment-refund-btn') || onlineBox.querySelector('#guest-overpayment-refund-btn');
-            tipDecisionBtn?.addEventListener('click', async () => resolveOverpayment('tip'));
-            creditDecisionBtn?.addEventListener('click', async () => resolveOverpayment('credit'));
-            refundDecisionBtn?.addEventListener('click', async () => resolveOverpayment('refund'));
+            const acknowledgePaymentNotice = async () => {
+                if (!window.guestAcknowledgeOnlinePaymentNotice) {
+                    alertUser('Bestätigungs-Funktion ist nicht verfügbar.', 'error');
+                    return;
+                }
+                await runWithPaymentActionLock(async () => {
+                    try {
+                        await window.guestAcknowledgeOnlinePaymentNotice({
+                            linkId: paymentLinkData.id,
+                            token: urlToken,
+                        });
+                        alertUser('Hinweis bestätigt.', 'success');
+                        await initializeGuestView(guestId, { skipTracking: true });
+                    } catch (error) {
+                        console.error(error);
+                        alertUser(error?.message || 'Hinweis konnte nicht bestätigt werden.', 'error');
+                    }
+                }, {
+                    loadingText: 'Bestätigung wird gespeichert...',
+                });
+            };
+
+            const creditorContactName = stripSelfNameMarker(
+                paymentLinkData.createdByName
+                || payableRecipientName
+                || bankInfo.accountHolder
+                || 'Unbekannt'
+            );
+
+            renderGuestPaymentEntryNoticeModal({
+                noticeState: pendingPaymentNoticeState,
+                historyEntries,
+                remainingAmount,
+                creditorName: creditorContactName,
+                overpaymentCreditAllowed,
+                onAcknowledge: acknowledgePaymentNotice,
+                onResolveOverpayment: resolveOverpayment,
+            });
         }
 
         if (paymentLinkData && positionAddBox) {
