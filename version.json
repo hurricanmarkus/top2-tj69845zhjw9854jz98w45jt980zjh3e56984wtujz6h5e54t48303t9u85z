@@ -1,14 +1,24 @@
 {
-  "version": "1.23.8",
-  "buildId": "20260516-1",
+  "version": "1.23.9",
+  "buildId": "20260516-2",
   "releaseDate": "2026-05-16",
-  "releaseTime": "12:52",
+  "releaseTime": "13:02",
   "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Gast-/Zahlungslinks zeigen den Marker '(Ich)' bei Personen nicht mehr in der Empfänger- und Verlaufsanzeige; neue Einträge speichern Namen ohne diesen Zusatz.",
-  "commitId": "70e6fe3",
+  "note": "Zahlungslinks nutzen im Gastflow jetzt konsequent die Eintrags-Referenz TOP2-ID-XXXX-YYYY-YYYY; die IBAN-Anzeige im Zahlungsverlauf priorisiert den echten Senderwert (payer/sender) statt falscher Fallback-Felder.",
+  "commitId": "4bbe8a2",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.23.9",
+      "buildId": "20260516-2",
+      "releaseDate": "2026-05-16",
+      "releaseTime": "13:02",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Zahlungslinks nutzen im Gastflow jetzt konsequent die Eintrags-Referenz TOP2-ID-XXXX-YYYY-YYYY; die IBAN-Anzeige im Zahlungsverlauf priorisiert den echten Senderwert (payer/sender) statt falscher Fallback-Felder.",
+      "commitId": "4bbe8a2",
+      "obligation": "false"
+    },
     {
       "version": "1.23.8",
       "buildId": "20260516-1",

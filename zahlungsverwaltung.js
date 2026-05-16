@@ -597,9 +597,36 @@ function resolveGuestPaymentHistoryEntryDate(entry = {}) {
 function normalizeWiseHistoryReferenceToken(value = '') {
     const raw = String(value || '').trim().toUpperCase();
     if (!raw) return '';
-    const match = raw.match(/TOP2(?:-ID)?-[A-Z0-9]+(?:-[A-Z0-9]+){2,}/);
+    const match = raw.match(/TOP2(?:-ID)?-([A-Z0-9]{4})-([A-Z0-9]{4})-([A-Z0-9]{4})/);
     if (!match) return raw;
-    return String(match[0] || '').replace(/^TOP2-ID-/, 'TOP2-');
+    return `TOP2-ID-${match[1]}-${match[2]}-${match[3]}`;
+}
+
+function resolveGuestPaymentHistoryPayerIbanLast4(entry = {}) {
+    const normalizeLast4 = (value = '') => String(value || '')
+        .replace(/[^a-zA-Z0-9]/g, '')
+        .toUpperCase()
+        .slice(-4);
+
+    const directLast4 = normalizeLast4(
+        entry?.payerIbanLast4
+        || entry?.raw?.payerIbanLast4
+        || entry?.raw?.raw?.payerIbanLast4
+        || entry?.senderIbanLast4
+        || entry?.raw?.senderIbanLast4
+        || entry?.raw?.raw?.senderIbanLast4
+    );
+    if (directLast4) return directLast4;
+
+    return normalizeLast4(
+        entry?.senderIban
+        || entry?.payerIban
+        || entry?.raw?.senderIban
+        || entry?.raw?.payerIban
+        || entry?.raw?.raw?.senderIban
+        || entry?.raw?.raw?.payerIban
+        || ''
+    );
 }
 
 function resolveGuestPaymentEntryIds(payment = {}, paymentLinkData = null) {
@@ -663,18 +690,7 @@ function normalizeGuestPaymentHistoryEntries(entries = []) {
             const amount = normalizeMoney(entry?.amount);
             const dateValue = resolveGuestPaymentHistoryEntryDate(entry);
             const dateMs = dateValue ? dateValue.getTime() : 0;
-            const payerIbanLast4 = String(
-                entry?.payerIbanLast4
-                || entry?.senderIbanLast4
-                || entry?.ibanLast4
-                || entry?.senderIban
-                || entry?.payerIban
-                || entry?.iban
-                || ''
-            )
-                .replace(/[^a-zA-Z0-9]/g, '')
-                .toUpperCase()
-                .slice(-4);
+            const payerIbanLast4 = resolveGuestPaymentHistoryPayerIbanLast4(entry);
             const purpose = String(entry?.purpose || entry?.referenceCode || entry?.reference || '').trim();
             const referenceCode = normalizeWiseHistoryReferenceToken(String(entry?.referenceCode || entry?.reference || '').trim().toUpperCase());
             return {
@@ -11542,10 +11558,10 @@ export async function initializeGuestView(guestId, options = {}) {
                 const directCode = getOnlinePaymentReferenceCode(payment);
                 if (directCode) return directCode;
 
-                const targetCode = String(paymentTargetsById.get(String(payment?.id || ''))?.referenceCode || '').trim().toUpperCase();
+                const targetCode = normalizeOnlinePaymentReferenceCode(paymentTargetsById.get(String(payment?.id || ''))?.referenceCode || '');
                 if (targetCode) return targetCode;
 
-                const linkCode = String(paymentLinkData.referenceCode || '').trim().toUpperCase();
+                const linkCode = normalizeOnlinePaymentReferenceCode(paymentLinkData.referenceCode || '');
                 if (linkCode) return linkCode;
                 return '';
             };
@@ -11561,7 +11577,16 @@ export async function initializeGuestView(guestId, options = {}) {
                     shortId: getOnlinePaymentReferenceShortId(payment),
                 }));
             const payableTotal = payableItems.reduce((sum, item) => sum + normalizeMoney(item.amount), 0);
-            const aggregateReferenceCode = normalizeOnlinePaymentReferenceCode(paymentLinkData.paymentReferenceCode || paymentLinkData.referenceCode || payableItems[0]?.referenceCode || '');
+            const singleEntryReferenceCode = payableItems.length === 1
+                ? normalizeOnlinePaymentReferenceCode(payableItems[0]?.referenceCode || '')
+                : '';
+            const aggregateReferenceCode = normalizeOnlinePaymentReferenceCode(
+                paymentLinkData.paymentReferenceCode
+                || singleEntryReferenceCode
+                || paymentLinkData.referenceCode
+                || payableItems[0]?.referenceCode
+                || ''
+            );
             const aggregateAmount = remainingAmount > 0.001 ? remainingAmount : payableTotal;
             let selectedInstruction = {
                 id: 'total-payment',
