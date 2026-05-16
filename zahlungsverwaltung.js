@@ -1134,17 +1134,21 @@ function resolvePaymentParticipantDisplayName(personId = '') {
     return token;
 }
 
+function stripSelfNameMarker(name = '') {
+    return String(name || '').replace(/\s*\(Ich\)\s*$/i, '').trim();
+}
+
 function resolveGuestPaymentRecipientName(payment = {}) {
     if (!payment || typeof payment !== 'object') return '';
 
-    const directName = String(payment?.creditorName || '').trim();
+    const directName = stripSelfNameMarker(payment?.creditorName || '');
     if (directName) return directName;
 
     const creditorId = String(payment?.creditorId || '').trim();
-    if (creditorId) return resolvePaymentParticipantDisplayName(creditorId);
+    if (creditorId) return stripSelfNameMarker(resolvePaymentParticipantDisplayName(creditorId));
 
     const createdBy = String(payment?.createdBy || '').trim();
-    if (createdBy) return resolvePaymentParticipantDisplayName(createdBy);
+    if (createdBy) return stripSelfNameMarker(resolvePaymentParticipantDisplayName(createdBy));
 
     return '';
 }
@@ -1161,7 +1165,7 @@ function resolveGuestSummaryRecipientName(payments = []) {
 }
 
 function buildGuestSummaryStatusHtml(baseText, options = {}) {
-    const recipientName = String(options?.recipientName || '').trim();
+    const recipientName = stripSelfNameMarker(options?.recipientName || '');
     const showRecipient = options?.showRecipient === true && Boolean(recipientName);
     const hasUnknownActiveAmount = options?.hasUnknownActiveAmount === true;
     const fragments = [escapeHtmlInline(baseText)];
@@ -6288,7 +6292,9 @@ async function savePayment() {
             if (!val) throw new Error("Bitte einen Empfänger (Gläubiger) auswählen.");
             const parts = val.split(':');
             creditorId = parts[1];
-            creditorName = document.getElementById('payment-creditor-select').options[document.getElementById('payment-creditor-select').selectedIndex].text;
+            creditorName = stripSelfNameMarker(
+                document.getElementById('payment-creditor-select').options[document.getElementById('payment-creditor-select').selectedIndex].text
+            );
         }
 
         // 2. SCHULDNER
@@ -6330,7 +6336,9 @@ async function savePayment() {
                 if (!val) throw new Error("Bitte einen Schuldner auswählen.");
                 const parts = val.split(':');
                 debtorId = parts[1];
-                debtorName = document.getElementById('payment-debtor-select').options[document.getElementById('payment-debtor-select').selectedIndex].text;
+                debtorName = stripSelfNameMarker(
+                    document.getElementById('payment-debtor-select').options[document.getElementById('payment-debtor-select').selectedIndex].text
+                );
             }
 
             let logText = isTBD ? "Erstellt (Betrag unbekannt)" : `Erstellt (${totalAmount.toFixed(2)} €)`;
@@ -6401,7 +6409,7 @@ async function savePayment() {
                     myShare = parseFloat(myShare.toFixed(2));
                     if (myShare < -SPLIT_MONEY_TOLERANCE) throw new Error(`Betrag negativ.`);
                     sumCheck += myShare;
-                    splitItems.push({ id: pId, name: cb.dataset.name, share: myShare });
+                    splitItems.push({ id: pId, name: stripSelfNameMarker(cb.dataset.name), share: myShare });
                 }
             }
 
@@ -10977,7 +10985,7 @@ export async function initializeGuestView(guestId, options = {}) {
 
         docsList = resultData.payments || [];
         isSinglePaymentMode = !!resultData.isSinglePaymentMode;
-        guestRealName = resultData.guestRealName || "Gast";
+        guestRealName = stripSelfNameMarker(resultData.guestRealName || "Gast");
         paymentLinkData = resultData.paymentLink
             ? {
                 ...resultData.paymentLink,
@@ -11406,7 +11414,7 @@ export async function initializeGuestView(guestId, options = {}) {
                             isNewest ? 'guest-payment-history-entry--latest' : '',
                             shouldBlinkNewest ? 'guest-payment-history-entry--latest-live' : '',
                         ].filter(Boolean).join(' ');
-                        const payerLabel = entry.payerName || (isCancellation ? 'Ersteller' : 'Unbekannt');
+                        const payerLabel = stripSelfNameMarker(entry.payerName || (isCancellation ? 'Ersteller' : 'Unbekannt'));
                         const dateLabel = entry.dateValue ? formatLinkDateTime(entry.dateValue) : '—';
                         const purposeLabel = entry.purpose || '—';
                         const referenceLabel = entry.referenceCode || entry.reference || '—';
@@ -12061,7 +12069,7 @@ function openGuestDetailModal(p, options = {}) {
         transactionsHtml = sortedTransactions.map((tx) => {
             const txAmount = Number.parseFloat(tx?.amount);
             const amountText = Number.isFinite(txAmount) ? `+ ${txAmount.toFixed(2)} €` : '+ 0,00 €';
-            const txUser = escapeHtml(tx?.user || 'Unbekannt');
+            const txUser = escapeHtml(stripSelfNameMarker(tx?.user || 'Unbekannt'));
             const txDate = formatDate(tx?.date, true);
             const txInfo = tx?.info ? `<div class="text-[11px] text-gray-500 mt-0.5">${parseInfoText(tx.info)}</div>` : '';
             return `

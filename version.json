@@ -1,14 +1,24 @@
 {
-  "version": "1.23.7",
-  "buildId": "20260513-1",
-  "releaseDate": "2026-05-13",
-  "releaseTime": "14:47",
-  "bereich": "Versionssystem",
+  "version": "1.23.8",
+  "buildId": "20260516-1",
+  "releaseDate": "2026-05-16",
+  "releaseTime": "12:52",
+  "bereich": "Zahlungsverwaltung",
   "timezone": "Europe/Vienna",
-  "note": "Das Fenster 'Versionsinformationen' bleibt nach Kopieren eines Restorecodes auch bei Fenster- oder Tabwechsel offen, bis es bewusst geschlossen oder das Update gestartet wird.",
-  "commitId": "5318cf4",
+  "note": "Gast-/Zahlungslinks zeigen den Marker '(Ich)' bei Personen nicht mehr in der Empfänger- und Verlaufsanzeige; neue Einträge speichern Namen ohne diesen Zusatz.",
+  "commitId": "70e6fe3",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.23.8",
+      "buildId": "20260516-1",
+      "releaseDate": "2026-05-16",
+      "releaseTime": "12:52",
+      "bereich": "Zahlungsverwaltung",
+      "note": "Gast-/Zahlungslinks zeigen den Marker '(Ich)' bei Personen nicht mehr in der Empfänger- und Verlaufsanzeige; neue Einträge speichern Namen ohne diesen Zusatz.",
+      "commitId": "70e6fe3",
+      "obligation": "false"
+    },
     {
       "version": "1.23.7",
       "buildId": "20260513-1",
